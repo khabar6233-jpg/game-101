@@ -162,7 +162,8 @@
   <div class="dialog">
     <h2>101</h2>
     <p>Ходите в масть или в значение. Нет карты — берите из колоды.<br>
-       Туз — пропуск хода, дама — заказ масти, шестёрка — соседу 2 карты.<br>
+       Туз — пропуск хода, шестёрка — соседу 2 карты и пропуск хода.<br>
+       Дама кладётся на любую карту и заказывает масть.<br>
        Шестёркой и тузом закончить нельзя.<br>
        102 очка — проигрыш, ровно 101 — счёт обнуляется.</p>
     <h3>С ботами</h3>
@@ -240,7 +241,7 @@
   const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   const active = () => players.filter(p => !p.out);
   const top = () => pile[pile.length - 1];
-  const canPlay = c => c.s === suit || c.r === top().r;
+  const canPlay = c => c.r === 12 || c.s === suit || c.r === top().r;   // a queen goes on any card
   const label = c => RANK_NAME[c.r] + c.s;
   const isSpecialEnd = c => c.r === 6 || c.r === 14;
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
