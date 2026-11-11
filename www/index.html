@@ -54,6 +54,8 @@
   }
   .opp.turn { border-color: var(--gold); }
   .opp.out { opacity: .4; }
+  .opp .lost { color: #ffb37a; font-weight: 700; }
+  .opp .swap { margin-top: 4px; background: rgba(255,255,255,.14); color: var(--text); border: 0; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-family: inherit; }
   .opp .name { color: var(--text); font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .opp .minis { display: flex; justify-content: center; height: 34px; margin-top: 4px; }
   .mini { width: 22px; height: 32px; border-radius: 4px; margin-left: -14px; flex: none;
@@ -246,7 +248,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 16;                 // keep in sync with www/version.txt
+  const VERSION = 17;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
@@ -528,7 +530,7 @@
       tail: pile.slice(-PILE_SHOWN).map(c => ({ s: c.s, r: c.r, id: c.id })),
       deckCount: deck.length, pileCount: pile.length,
       canDraw: deck.length > 0 || pile.length > 1,
-      players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length })),
+      players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length, lost: !!p.lost, remote: !!p.conn })),
       hand: players[seat].hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })),
       log: log.map(f => f(seat)),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
@@ -589,7 +591,18 @@
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
       d.innerHTML = `<div class="name">${esc(p.name)}</div><div>${p.out ? 'выбыл' : 'очки: ' + p.score}</div>` +
         `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, 7))}</div>` +
-        `<div>карт: <span class="cnt">${p.count}</span></div>`;
+        `<div>карт: <span class="cnt">${p.count}</span></div>` +
+        (p.lost ? '<div class="lost">нет связи</div>' : '');
+      if (mode === 'host' && p.remote) {
+        const b = document.createElement('button');
+        b.className = 'swap';
+        b.textContent = 'заменить ботом';
+        b.onclick = e => {
+          e.stopPropagation();
+          if (confirm(`Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`)) replaceWithBot(i);
+        };
+        d.appendChild(b);
+      }
       o.appendChild(d);
     }
 
@@ -839,7 +852,7 @@
   // guests send their moves and receive only their own view.
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
   const TOPIC = 'cardgame101/v1/';
-  const PING_MS = 3000, LOST_MS = 20000;
+  const PING_MS = 3000, LOST_MS = 60000;
   let netTimer = null;
   const pause = ms => new Promise(r => setTimeout(r, ms));
   const netMsg = t => { $('netMsg').textContent = t || ''; };
@@ -977,8 +990,9 @@
       if (mode !== 'host' || roomCode !== code) return;
       let conn = conns.get(from);
       if (!conn) { conn = { id: from, open: true, last: 0, send: x => n.send(toGuest(from), x) }; conns.set(from, conn); }
+      if (conn.left) return;                                // left or was replaced by a bot
       conn.last = Date.now();
-      if (d.t === 'bye') { conns.delete(from); conn.open = false; onGuestGone(conn); return; }
+      if (d.t === 'bye') { conn.left = true; conn.open = false; onGuestGone(conn); return; }
       if (d.t === 'ping') { resync(conn); return; }
       onHostData(conn, d);
     });
@@ -999,12 +1013,16 @@
     lobby = [{ name: myName(), conn: null, isBot: false }];
     netMsg('');
     drawLobby();
-    netTimer = setInterval(() => {                          // guests that went silent are replaced by a bot
-      if (peer !== n) return;
+    netTimer = setInterval(() => {                          // mark guests that have been silent for a minute
+      if (peer !== n || !started) return;
       const now = Date.now();
-      conns.forEach((c, id) => {
-        if (c.open && c.last && now - c.last > LOST_MS) { c.open = false; conns.delete(id); onGuestGone(c); }
+      let changed = false;
+      conns.forEach(c => {
+        const p = players.find(x => x.conn === c);
+        const silent = c.left || (c.last > 0 && now - c.last > LOST_MS);
+        if (p && !!p.lost !== !!silent) { p.lost = !!silent; changed = true; }
       });
+      if (changed) render();
     }, PING_MS);
   }
 
@@ -1036,17 +1054,25 @@
     if (seat > 0) act(seat, d);
   }
 
+  // a guest pressed "Выйти": in the lobby they just disappear, in a game they are marked as gone
   function onGuestGone(conn) {
     if (!started) {
       if (!lobby) return;
-      lobby = lobby.filter(s => s.conn !== conn);
+      lobby = lobby.filter(x => x.conn !== conn);
       drawLobby();
       return;
     }
-    const i = players.findIndex(p => p.conn === conn);
-    if (i < 0) return;
+    const p = players.find(x => x.conn === conn);
+    if (p) { p.lost = true; render(); }
+  }
+
+  // only the room owner can hand a player's seat to a bot
+  function replaceWithBot(i) {
     const p = players[i];
-    p.conn = null; p.isBot = true; p.name += ' (бот)';   // a bot finishes for whoever left
+    if (mode !== 'host' || !started || !p || !p.conn) return;
+    try { p.conn.send({ t: 'kicked' }); } catch {}
+    p.conn.left = true; p.conn.open = false;
+    p.conn = null; p.isBot = true; p.lost = false; p.name += ' (бот)';
     if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
       suit = botSuit(p); phase = 'play';
       const q = pendingQueen; pendingQueen = null;
@@ -1089,6 +1115,7 @@
         view = d.v;
         draw(view);
       } else if (d.t === 'full') fail('Комната заполнена или игра уже идёт');
+      else if (d.t === 'kicked') fail('Хозяин комнаты заменил вас ботом');
     });
     peer = n;
     if (!(await n.ready(8000))) { fail('Нет связи с игровым сервером. Проверьте интернет.'); return; }
@@ -1103,7 +1130,8 @@
         if (Date.now() - t0 > 12000) { fail('Комната с таким кодом не найдена'); return; }
         hostConn.send({ t: 'join', name, ver: VERSION });      // repeated until the room answers
       } else {
-        if (Date.now() - lastHeard > LOST_MS) { fail('Связь с комнатой потеряна'); return; }
+        // keep trying: when the room answers again, the game simply continues
+        if (Date.now() - lastHeard > LOST_MS) $('warn').textContent = 'Нет связи с комнатой больше минуты. Пробуем восстановить…';
         hostConn.send({ t: 'ping' });
       }
     };
@@ -1133,7 +1161,7 @@
   $('app').addEventListener('click', e => {
     if (suppressClick || !e.target.isConnected) return;
     if (e.target.closest('#status .more')) { if (view) $('history').classList.add('show'); return; }   // move history
-    if (e.target.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, #deck')) return;
+    if (e.target.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, #deck, .opp .swap')) return;
     const v = view;
     if (v && v.phase === 'play' && v.turn === v.seat && !v.busy && !v.drew) action({ t: 'draw' });
   });
