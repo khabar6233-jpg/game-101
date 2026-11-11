@@ -71,6 +71,11 @@
 
   .status { text-align: center; min-height: 44px; font-size: 15px; line-height: 22px; }
   .status .old { color: var(--muted); font-size: 13px; }
+  .status { cursor: pointer; }
+  .status .more { color: var(--muted); font-size: 12px; line-height: 18px; text-decoration: underline; }
+  .hist { list-style: none; padding: 0; margin: 0 0 16px; text-align: left; font-size: 15px; }
+  .hist li { padding: 7px 4px; border-bottom: 1px solid #eee; }
+  .hist li:first-child { font-weight: 700; }
   .actions { display: flex; justify-content: center; gap: 10px; min-height: 46px; }
   .btn {
     background: var(--gold); color: #2a1d00; border: 0; border-radius: 12px;
@@ -217,6 +222,14 @@
   </div>
 </div>
 
+<div class="overlay" id="history">
+  <div class="dialog">
+    <h2>Последние ходы</h2>
+    <ul class="hist" id="histList"></ul>
+    <button class="btn" id="histClose">Закрыть</button>
+  </div>
+</div>
+
 <div class="overlay" id="result">
   <div class="dialog">
     <h2 id="resTitle"></h2>
@@ -233,8 +246,9 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 11;                  // keep in sync with www/version.txt
+  const VERSION = 12;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
+  const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
   const PEER_LIB = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
@@ -269,7 +283,7 @@
     do { n = (n + 1) % players.length; } while (players[n].out);
     return n;
   }
-  function say(f) { log.push(typeof f === 'function' ? f : () => f); if (log.length > 2) log.shift(); }
+  function say(f) { log.push(typeof f === 'function' ? f : () => f); if (log.length > HISTORY) log.shift(); }
   function shuffle(a) {
     for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -279,7 +293,7 @@
   }
   function sortHand(h) { h.sort((a, b) => SUITS.indexOf(a.s) - SUITS.indexOf(b.s) || a.r - b.r); }
   function showOnly(id) {
-    ['setup', 'lobby', 'suitPick', 'result'].forEach(o => $(o).classList.toggle('show', o === id));
+    ['setup', 'lobby', 'suitPick', 'result', 'history'].forEach(o => $(o).classList.toggle('show', o === id));
   }
 
   // ================= ENGINE =================
@@ -584,7 +598,11 @@
     sn.textContent = v.suit || '';
     sn.className = 'suit-now' + (RED.has(v.suit) ? ' red' : '');
 
-    $('status').innerHTML = v.log.map((l, i) => `<div class="${i < v.log.length - 1 ? 'old' : ''}">${esc(l)}</div>`).join('');
+    const recent = v.log.slice(-2);
+    $('status').innerHTML = recent.map((l, i) => `<div class="${i < recent.length - 1 ? 'old' : ''}">${esc(l)}</div>`).join('') +
+      '<div class="more">история ходов ›</div>';
+    // newest move first
+    $('histList').innerHTML = v.log.slice().reverse().map(l => `<li>${esc(l)}</li>`).join('') || '<li>Ходов пока нет</li>';
 
     const mb = $('meBar');
     const hint = me.out ? ' · вы выбыли' : !myTurn ? '' : hasMove ? ' · ваш ход' : v.drew ? '' : ' · нет карты — нажмите на стол, чтобы взять';
@@ -838,9 +856,12 @@
     };
     $('suitBtns').appendChild(b);
   });
-  $('suitCancel').onclick = () => { localQueen = null; if (view) draw(view); };
+  $('histClose').onclick = () => $('history').classList.remove('show');
+  $('history').onclick = e => { if (e.target === $('history')) $('history').classList.remove('show'); };
+  $('suitCancel').onclick =() => { localQueen = null; if (view) draw(view); };
   // tapping anywhere on the table (everything above "Ваши очки") draws a card
   $('app').addEventListener('click', e => {
+    if (e.target.closest('#status')) { if (view) $('history').classList.add('show'); return; }   // move history
     if (e.target.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, #deck')) return;
     const v = view;
     if (v && v.phase === 'play' && v.turn === v.seat && !v.busy && !v.drew) action({ t: 'draw' });
