@@ -7,6 +7,9 @@ import android.os.Bundle;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -14,6 +17,8 @@ import android.widget.FrameLayout;
 
 /** Shows the game page bundled in assets/index.html full screen. */
 public class MainActivity extends Activity {
+    private static final String SITE = "https://khabar6233-jpg.github.io/game-101/";
+    private static final String BUNDLED = "file:///android_asset/index.html";
     private WebView web;
 
     @Override
@@ -43,12 +48,31 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        web.setWebViewClient(new WebViewClient());
+        // Load the newest game from the site; without internet fall back to the copy inside the APK.
+        web.setWebViewClient(new WebViewClient() {
+            private boolean usedBundled;
+
+            private void useBundled(WebView v) {
+                if (usedBundled) return;
+                usedBundled = true;
+                v.loadUrl(BUNDLED);
+            }
+
+            @Override
+            public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError err) {
+                if (req.isForMainFrame()) useBundled(v);
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView v, WebResourceRequest req, WebResourceResponse resp) {
+                if (req.isForMainFrame()) useBundled(v);
+            }
+        });
         web.setWebChromeClient(new WebChromeClient());
         root.addView(web, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
-        web.loadUrl("file:///android_asset/index.html");
+        web.loadUrl(SITE);
     }
 
     @Override

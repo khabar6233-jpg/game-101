@@ -16,7 +16,7 @@ Copy-Item "$root\www\index.html" "$out\assets\index.html"
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed" } }
 
 & "$bt\aapt2.exe" link -o "$out\base.apk" -I $jar --manifest "$root\android\AndroidManifest.xml" -A "$out\assets" `
-    --min-sdk-version 24 --target-sdk-version 35 --version-code 1 --version-name 1.0
+    --min-sdk-version 24 --target-sdk-version 35 --version-code 2 --version-name 2.0
 Check 'aapt2'
 
 & "$jbr\bin\javac.exe" -source 11 -target 11 -nowarn -classpath $jar -d "$out\classes" "$root\android\src\com\game101\app\MainActivity.java"
