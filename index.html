@@ -81,6 +81,8 @@
   .btn:disabled { background: #ddd; color: #888; box-shadow: none; }
   .btn.plain { background: #eee; color: #333; box-shadow: 0 3px 0 #ccc; }
 
+  /* everything above this line is the "tap to draw a card" zone */
+  .zone-line { height: 0; border-top: 1px solid rgba(255,255,255,.28); margin: 0 -16px; }
   .me-bar { text-align: center; font-size: 14px; color: var(--muted); border-radius: 8px; padding: 2px; border: 2px solid transparent; }
   .me-bar.turn { border-color: var(--gold); color: var(--text); }
   .hand-me {
@@ -160,6 +162,7 @@
 
   <div class="status" id="status"></div>
   <div class="actions" id="actions"></div>
+  <div class="zone-line"></div>
   <div class="me-bar" id="meBar"></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
@@ -230,7 +233,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 10;                   // keep in sync with www/version.txt
+  const VERSION = 11;                  // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
@@ -838,7 +841,7 @@
   $('suitCancel').onclick = () => { localQueen = null; if (view) draw(view); };
   // tapping anywhere on the table (everything above "Ваши очки") draws a card
   $('app').addEventListener('click', e => {
-    if (e.target.closest('.hand-me, .me-bar, .actions, .bar, #deck')) return;
+    if (e.target.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, #deck')) return;
     const v = view;
     if (v && v.phase === 'play' && v.turn === v.seat && !v.busy && !v.drew) action({ t: 'draw' });
   });
