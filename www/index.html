@@ -256,7 +256,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 20;                 // keep in sync with www/version.txt
+  const VERSION = 21;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -278,6 +278,7 @@
   let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
   let dropFrom = null, suppressClick = false, pendingPlay = null;
+  let prevDeckCount = 0, prevPileCount = 0;
   const flying = new Set();
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '', hostVer = 0;
 
@@ -344,13 +345,19 @@
     playCard(starter, opened, true);
   }
 
+  // The deck ran out: the top card stays on the table, the rest is shuffled into a new deck.
+  function reshuffleIfEmpty() {
+    if (deck.length || pile.length <= 1) return;
+    const t = pile.pop();
+    deck = shuffle(pile);
+    pile = [t];
+    say('Колода закончилась: сброс перетасован в новую колоду');
+  }
   function drawOne() {
-    if (!deck.length && pile.length > 1) {
-      const t = pile.pop();
-      deck = shuffle(pile);
-      pile = [t];
-    }
-    return deck.pop() || null;
+    reshuffleIfEmpty();
+    const c = deck.pop() || null;
+    reshuffleIfEmpty();          // do it right away, not when the next card is needed
+    return c;
   }
   function give(p, k) {
     let n = 0;
@@ -710,6 +717,14 @@
         if (box) for (let k = 0; k < 3; k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 110, s1: 0.4 });
       });
     } else if (fresh.length) flyFromDeck(fresh, v, true, 180);
+
+    if (!roundChanged && prevPileCount > 1 && v.pileCount === 1 && v.deckCount > prevDeckCount) {
+      // the discard pile was shuffled into a new deck
+      const r = pl.getBoundingClientRect();
+      for (let k = 0; k < 6; k++) fly(backEl(), { left: r.left, top: r.top }, deckRect, { delay: k * 80, dur: 420 });
+    }
+    prevDeckCount = v.deckCount;
+    prevPileCount = v.pileCount;
 
     if (ev && ev.type === 'play' && v.top) {
       // the played card flies to the pile from my hand or from the opponent's panel
