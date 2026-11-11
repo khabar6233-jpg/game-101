@@ -99,6 +99,13 @@
     position: relative; font-weight: 700; flex: none;
   }
   .card.red { color: var(--red); }
+  /* a card just taken from the deck */
+  .card.new, .hand-me .card.new { box-shadow: 0 0 0 3px var(--gold), 0 0 14px 4px rgba(242,193,78,.85); filter: none; z-index: 1; }
+  .card.new::after {
+    content: 'новая'; position: absolute; left: 0; right: 0; bottom: 0;
+    background: var(--gold); color: #2a1d00; font-size: 11px; line-height: 16px; text-align: center;
+    border-radius: 0 0 8px 8px;
+  }
   .card .tl { position: absolute; left: 5px; top: 3px; font-size: calc(var(--cw) * .27); line-height: 1; text-align: center; }
   .card .tl small { display: block; font-size: calc(var(--cw) * .25); }
   .card .mid { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .55); }
@@ -224,7 +231,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 7;                      // keep in sync with www/version.txt
+  const VERSION = 8;                     // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
@@ -239,6 +246,8 @@
   // ----- session state -----
   let mode = 'solo';            // 'solo' | 'host' | 'guest'
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
+  let prevHand = null, prevRound = 0, newIds = new Set();
+  const flying = new Set();
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '';
 
   const $ = id => document.getElementById(id);
@@ -576,9 +585,12 @@
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
     const mh = $('myHand'); mh.innerHTML = '';
+    const fresh = trackNewCards(v);
     v.hand.forEach(c => {
       const ok = myTurn && c.ok;
-      const el = cardEl(c, ok ? 'ok' : 'no');
+      const el = cardEl(c, (ok ? 'ok' : 'no') + (newIds.has(c.id) ? ' new' : ''));
+      el.dataset.id = c.id;
+      if (flying.has(c.id)) el.style.opacity = '0';
       if (ok) el.onclick = () => {
         // a queen asks for the suit first, so the move can still be cancelled
         if (c.r === 12 && v.hand.length > 1) { localQueen = c.id; draw(v); }
@@ -587,6 +599,7 @@
       if (c.id === localQueen) el.style.transform = 'translateY(-26px)';
       mh.appendChild(el);
     });
+    if (fresh.length) flyFromDeck(fresh, v);
 
     const a = $('actions'); a.innerHTML = '';
     if (myTurn && v.drew && hasMove) {
@@ -599,6 +612,54 @@
     $('suitPick').classList.toggle('show', v.choose || localQueen !== null);
     $('suitCancel').style.display = localQueen !== null ? '' : 'none';
     drawResult(v);
+  }
+
+  // Which cards in my hand were just taken from the deck. They stay marked until I make a move.
+  function trackNewCards(v) {
+    const ids = v.hand.map(c => c.id);
+    let fresh = [];
+    if (!prevHand || v.roundNo !== prevRound) newIds = new Set();
+    else {
+      const added = ids.filter(id => !prevHand.has(id));
+      const removed = [...prevHand].some(id => !ids.includes(id));
+      if (removed) newIds = new Set();
+      if (added.length && added.length < ids.length) { newIds = new Set(added); fresh = added; }
+    }
+    prevHand = new Set(ids);
+    prevRound = v.roundNo;
+    return fresh;
+  }
+
+  // A copy of each new card flies from the deck to its place in the hand.
+  function flyFromDeck(fresh, v) {
+    const mh = $('myHand');
+    const first = mh.querySelector(`[data-id="${fresh[0]}"]`);
+    if (first && first.scrollIntoView) first.scrollIntoView({ inline: 'center', block: 'nearest' });
+    const from = $('deck').getBoundingClientRect();
+    fresh.forEach((id, i) => {
+      const el = mh.querySelector(`[data-id="${id}"]`);
+      const c = v.hand.find(x => x.id === id);
+      if (!el || !c) return;
+      const to = el.getBoundingClientRect();
+      const ghost = cardEl(c, 'new');
+      ghost.style.cssText = `position:fixed;left:${from.left}px;top:${from.top}px;margin:0;z-index:5;pointer-events:none`;
+      const done = () => {
+        ghost.remove();
+        flying.delete(id);
+        const cur = $('myHand').querySelector(`[data-id="${id}"]`);
+        if (cur) cur.style.opacity = '';
+      };
+      if (!ghost.animate) return;
+      document.body.appendChild(ghost);
+      flying.add(id);
+      el.style.opacity = '0';
+      const anim = ghost.animate(
+        [{ transform: 'translate(0,0) scale(1.15)' }, { transform: `translate(${to.left - from.left}px,${to.top - from.top}px) scale(1)` }],
+        { duration: 550, delay: i * 180, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' });
+      anim.onfinish = done;
+      anim.oncancel = done;
+      setTimeout(done, 550 + i * 180 + 250);   // safety net if the animation is paused (hidden tab)
+    });
   }
 
   function drawResult(v) {
