@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f4d2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="101">
+<title>101</title>
+<style>
+  :root {
+    --felt: #13603a;
+    --felt-dark: #0b3f25;
+    --card: #fdfdf8;
+    --ink: #1b1b1b;
+    --red: #c8232c;
+    --gold: #f2c14e;
+    --text: #eaf5ee;
+    --muted: #a9cbb6;
+    --cw: 62px;
+    --ch: 88px;
+  }
+  @media (min-width: 600px) { :root { --cw: 76px; --ch: 108px; } }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(ellipse at center, var(--felt) 0%, var(--felt-dark) 100%);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    overflow: hidden;
+  }
+  #app {
+    height: 100%; height: 100dvh;
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: max(10px, env(safe-area-inset-top)) 16px max(10px, env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+  .bar { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--muted); }
+  .bar b { color: var(--text); font-size: 18px; }
+  .btn-small { background: rgba(255,255,255,.12); border: 0; color: var(--text); padding: 6px 12px; border-radius: 8px; font-size: 14px; }
+
+  .opps { display: flex; gap: 8px; justify-content: center; }
+  .opp {
+    flex: 1; max-width: 200px; min-width: 0;
+    background: rgba(0,0,0,.18); border-radius: 12px; padding: 8px 4px;
+    border: 2px solid transparent; text-align: center; font-size: 13px; color: var(--muted);
+  }
+  .opp.turn { border-color: var(--gold); }
+  .opp.out { opacity: .4; }
+  .opp .name { color: var(--text); font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .opp .minis { display: flex; justify-content: center; height: 34px; margin-top: 4px; }
+  .mini { width: 22px; height: 32px; border-radius: 4px; margin-left: -14px; flex: none;
+    background: repeating-linear-gradient(45deg, #7a1f2b 0 4px, #942836 4px 8px); border: 2px solid #fff; }
+  .mini:first-child { margin-left: 0; }
+
+  .middle { flex: 1; display: flex; align-items: center; justify-content: center; gap: 22px; min-height: 0; }
+  .slot { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .deck.can { box-shadow: 0 0 0 3px var(--gold), 0 2px 6px rgba(0,0,0,.35); cursor: pointer; }
+  .suit-now { font-size: 44px; line-height: 1; width: 56px; text-align: center; }
+  .suit-now.red { color: #ff6b72; }
+
+  .status { text-align: center; min-height: 44px; font-size: 15px; line-height: 22px; }
+  .status .old { color: var(--muted); font-size: 13px; }
+  .actions { display: flex; justify-content: center; gap: 10px; min-height: 46px; }
+  .btn {
+    background: var(--gold); color: #2a1d00; border: 0; border-radius: 12px;
+    padding: 0 22px; min-height: 46px; font-size: 17px; font-weight: 700;
+    box-shadow: 0 3px 0 #b88a1f; font-family: inherit;
+  }
+  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #b88a1f; }
+  .btn:disabled { background: #ddd; color: #888; box-shadow: none; }
+  .btn.plain { background: #eee; color: #333; box-shadow: 0 3px 0 #ccc; }
+
+  .me-bar { text-align: center; font-size: 14px; color: var(--muted); border-radius: 8px; padding: 2px; border: 2px solid transparent; }
+  .me-bar.turn { border-color: var(--gold); color: var(--text); }
+  .hand-me {
+    display: flex; overflow-x: auto; padding: 18px 4px 6px;
+    min-height: calc(var(--ch) + 26px); scrollbar-width: none;
+  }
+  .hand-me::-webkit-scrollbar { display: none; }
+  .hand-me .inner { display: flex; margin: 0 auto; padding-right: 4px; }
+  .hand-me .card { margin-left: calc(var(--cw) * -0.38); transition: transform .15s; }
+  .hand-me .card:first-child { margin-left: 0; }
+  .hand-me .card.ok { transform: translateY(-14px); cursor: pointer; }
+  .hand-me .card.no { filter: brightness(.72); }
+
+  .card {
+    width: var(--cw); height: var(--ch);
+    background: var(--card); color: var(--ink);
+    border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    position: relative; font-weight: 700; flex: none;
+  }
+  .card.red { color: var(--red); }
+  .card .tl { position: absolute; left: 5px; top: 3px; font-size: calc(var(--cw) * .27); line-height: 1; text-align: center; }
+  .card .tl small { display: block; font-size: calc(var(--cw) * .25); }
+  .card .mid { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .55); }
+  .back { background: repeating-linear-gradient(45deg, #7a1f2b 0 6px, #942836 6px 12px); border: 3px solid #fff; }
+  .empty-slot { width: var(--cw); height: var(--ch); border: 2px dashed rgba(255,255,255,.25); border-radius: 8px; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .dialog { background: #fff; color: #222; border-radius: 16px; padding: 20px; text-align: center; max-width: 340px; width: 100%; max-height: 100%; overflow-y: auto; }
+  .dialog h2 { margin: 0 0 8px; }
+  .dialog h3 { margin: 14px 0 8px; font-size: 15px; color: #444; }
+  .dialog p { margin: 0 0 10px; color: #555; font-size: 14px; line-height: 1.4; }
+  .dialog .col { display: flex; flex-direction: column; gap: 10px; }
+  .dialog .row { display: flex; gap: 8px; }
+  .dialog .row > * { flex: 1; min-width: 0; }
+  .dialog input {
+    height: 46px; border-radius: 12px; border: 2px solid #ccc; padding: 0 12px;
+    font-size: 17px; text-align: center; font-family: inherit; width: 100%;
+    user-select: text; -webkit-user-select: text;
+  }
+  .dialog table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 15px; }
+  .dialog td { padding: 6px 4px; border-bottom: 1px solid #eee; text-align: right; }
+  .dialog td:first-child { text-align: left; font-weight: 700; }
+  .dialog .note { display: block; font-size: 12px; color: #b3261e; font-weight: 400; }
+  .dialog .msg { color: #b3261e; font-size: 14px; min-height: 20px; }
+  .code { font-size: 44px; font-weight: 800; letter-spacing: 6px; color: #13603a; user-select: text; -webkit-user-select: text; }
+  .plist { list-style: none; padding: 0; margin: 10px 0 14px; }
+  .plist li { padding: 8px; border-bottom: 1px solid #eee; font-weight: 700; }
+  .suits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .suits button { font-size: 40px; height: 76px; border-radius: 12px; border: 2px solid #ddd; background: #fafafa; color: #1b1b1b; }
+  .suits button.red { color: var(--red); }
+
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .pop { animation: pop .18s ease-out; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar">
+    <span><b>101</b> · раунд <span id="roundNo">1</span><span id="roomTag"></span></span>
+    <button class="btn-small" id="newBtn">Выйти</button>
+  </div>
+  <div class="opps" id="opps"></div>
+
+  <div class="middle">
+    <div class="slot"><div id="deck"></div><span>Колода: <span id="deckCount">0</span></span></div>
+    <div class="slot"><div id="pile"></div><span>Сброс: <span id="pileCount">0</span></span></div>
+    <div class="slot"><div class="suit-now" id="suitNow"></div><span>Масть</span></div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="actions" id="actions"></div>
+  <div class="me-bar" id="meBar"></div>
+  <div class="hand-me"><div class="inner" id="myHand"></div></div>
+</div>
+
+<div class="overlay show" id="setup">
+  <div class="dialog">
+    <h2>101</h2>
+    <p>Ходите в масть или в значение. Нет карты — берите из колоды.<br>
+       Туз — пропуск хода, дама — заказ масти, шестёрка — соседу 2 карты.<br>
+       102 очка — проигрыш, ровно 101 — счёт обнуляется.</p>
+    <h3>С ботами</h3>
+    <div class="row">
+      <button class="btn" data-bots="1">2 игрока</button>
+      <button class="btn" data-bots="2">3</button>
+      <button class="btn" data-bots="3">4</button>
+    </div>
+    <h3>По сети с друзьями</h3>
+    <div class="col">
+      <input id="nick" maxlength="12" placeholder="Ваше имя" autocomplete="off">
+      <button class="btn" id="hostBtn">Создать комнату</button>
+      <div class="row">
+        <input id="codeIn" maxlength="4" inputmode="numeric" placeholder="Код" autocomplete="off">
+        <button class="btn" id="joinBtn">Войти</button>
+      </div>
+      <div class="msg" id="netMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="lobby">
+  <div class="dialog">
+    <p>Код комнаты</p>
+    <div class="code" id="lobCode"></div>
+    <p id="lobHint"></p>
+    <ul class="plist" id="lobList"></ul>
+    <div class="col">
+      <button class="btn plain" id="addBotBtn">+ бот</button>
+      <button class="btn" id="startBtn">Начать игру</button>
+      <button class="btn plain" id="leaveBtn">Выйти</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="suitPick">
+  <div class="dialog">
+    <h2>Закажите масть</h2>
+    <div class="suits" id="suitBtns"></div>
+  </div>
+</div>
+
+<div class="overlay" id="result">
+  <div class="dialog">
+    <h2 id="resTitle"></h2>
+    <p id="resText"></p>
+    <table id="resTable"></table>
+    <button class="btn" id="resBtn"></button>
+  </div>
+</div>
+
+<script>
+(() => {
+  // U+FE0E asks phones to draw suits as plain text symbols, not emoji
+  const SUITS = ['♠', '♣', '♦', '♥'].map(s => s + '︎');
+  const RED = new Set([SUITS[2], SUITS[3]]);
+  const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
+  const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
+  const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
+  const PEER_LIB = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+  const ROOM_PREFIX = 'cardgame101-room-';
+
+  // ----- engine state (lives on the solo device or on the room host) -----
+  let players = [], deck = [], pile = [], suit = null, turn = 0, drew = false;
+  let sixRun = 0, passStreak = 0, starter = 0, roundNo = 0, phase = 'setup';
+  let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
+
+  // ----- session state -----
+  let mode = 'solo';            // 'solo' | 'host' | 'guest'
+  let mySeat = 0, view = null, lastTopId = -1;
+  let peer = null, hostConn = null, lobby = null, started = false, roomCode = '';
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const active = () => players.filter(p => !p.out);
+  const top = () => pile[pile.length - 1];
+  const canPlay = c => c.s === suit || c.r === top().r;
+  const label = c => RANK_NAME[c.r] + c.s;
+  const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
+  const handPoints = p => p.hand.reduce((n, c) => n + POINTS(c.r), 0);
+  // log lines are built per viewer: "Вы кладёте…" for me, "Имя кладёт…" for others
+  const who = (pi, you, they) => me => (pi === me ? 'Вы ' + you : players[pi].name + ' ' + they);
+
+  function nextIdx(i) {
+    let n = i;
+    do { n = (n + 1) % players.length; } while (players[n].out);
+    return n;
+  }
+  function say(f) { log.push(typeof f === 'function' ? f : () => f); if (log.length > 2) log.shift(); }
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  function sortHand(h) { h.sort((a, b) => SUITS.indexOf(a.s) - SUITS.indexOf(b.s) || a.r - b.r); }
+  function showOnly(id) {
+    ['setup', 'lobby', 'suitPick', 'result'].forEach(o => $(o).classList.toggle('show', o === id));
+  }
+
+  // ================= ENGINE =================
+  function startMatch(seats) {
+    gameId++;
+    players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, hand: [], score: 0, out: false }));
+    starter = Math.floor(Math.random() * players.length);
+    roundNo = 0; log = []; result = null;
+    showOnly(null);
+    startRound();
+  }
+
+  function startRound() {
+    roundNo++;
+    deck = [];
+    let id = 0;
+    for (const s of SUITS) for (let r = 6; r <= 14; r++) deck.push({ s, r, id: id++ });
+    shuffle(deck);
+    pile = []; sixRun = 0; passStreak = 0; drew = false; busy = false; pendingQueen = null; result = null;
+    players.forEach(p => { p.hand = []; });
+    for (let k = 0; k < HAND_SIZE; k++) active().forEach(p => p.hand.push(deck.pop()));
+    phase = 'play';
+    turn = starter;
+    // the starter keeps 4 cards; the 5th is opened as their move
+    const st = players[starter];
+    const opened = st.hand.splice(Math.floor(Math.random() * st.hand.length), 1)[0];
+    players.forEach(p => sortHand(p.hand));
+    playCard(starter, opened, true);
+  }
+
+  function drawOne() {
+    if (!deck.length && pile.length > 1) {
+      const t = pile.pop();
+      deck = shuffle(pile);
+      pile = [t];
+    }
+    return deck.pop() || null;
+  }
+  function give(p, k) {
+    let n = 0;
+    while (k-- > 0) { const c = drawOne(); if (!c) break; p.hand.push(c); n++; }
+    sortHand(p.hand);
+    return n;
+  }
+
+  function playCard(pi, card, opened) {
+    const p = players[pi];
+    const i = p.hand.indexOf(card);
+    if (i >= 0) p.hand.splice(i, 1);
+    pile.push(card);
+    suit = card.s;
+    passStreak = 0;
+    sixRun = card.r === 6 ? sixRun + 1 : 0;
+    if (opened) say(me => `Открыта карта ${label(card)} — это ${pi === me ? 'ваш ход' : 'ход: ' + p.name}`);
+    else say(who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card)));
+
+    if (p.hand.length === 0) { endRound(pi); return; }
+
+    if (card.r === 12) {                       // queen: choose a suit
+      if (p.isBot) {
+        suit = botSuit(p);
+        say(`${p.name} заказывает ${suit}`);
+      } else {
+        phase = 'choose';
+        pendingQueen = { pi, card };
+        render();
+        return;
+      }
+    }
+    afterPlay(pi, card);
+  }
+
+  function afterPlay(pi, card) {
+    let n = nextIdx(pi);
+    if (card.r === 14) {                       // ace: next player skips
+      say(who(n, 'пропускаете ход', 'пропускает ход'));
+      n = nextIdx(n);
+    } else if (card.r === 6) {                 // six: next player draws and skips
+      const k = active().length === 2 && sixRun >= 2 ? 4 : 2;
+      const got = give(players[n], k);
+      say(who(n, `берёте ${got} ${cardsWord(got)} и пропускаете ход`, `берёт ${got} ${cardsWord(got)} и пропускает ход`));
+      n = nextIdx(n);
+    }
+    turn = n;
+    drew = false;
+    step();
+  }
+
+  function pass() {
+    passStreak++;
+    say(who(turn, 'пасуете', 'пасует'));
+    if (passStreak >= active().length && !deck.length && pile.length <= 1) { endRound(-1); return; }
+    turn = nextIdx(turn);
+    drew = false;
+    step();
+  }
+
+  function step() {
+    render();
+    if (phase !== 'play') return;
+    const p = players[turn];
+    if (p.isBot) later(botTurn);
+    else if (drew && !p.hand.some(canPlay)) later(pass);
+  }
+
+  function later(fn) {
+    busy = true;
+    render();
+    const g = gameId;
+    setTimeout(() => {
+      if (g !== gameId) return;                // a new game started meanwhile
+      busy = false;
+      if (phase === 'play') fn();
+    }, DELAY);
+  }
+
+  // one entry point for every human move, local or remote
+  function act(seat, a) {
+    if (!a || typeof a !== 'object') return;
+    if (a.t === 'suit') {
+      if (phase !== 'choose' || !pendingQueen || pendingQueen.pi !== seat || !SUITS.includes(a.s)) return;
+      suit = a.s;
+      say(who(seat, 'заказываете ' + a.s, 'заказывает ' + a.s));
+      phase = 'play';
+      const q = pendingQueen; pendingQueen = null;
+      afterPlay(q.pi, q.card);
+      return;
+    }
+    if (phase !== 'play' || turn !== seat || busy) return;
+    const p = players[seat];
+    if (a.t === 'play') {
+      const c = p.hand.find(x => x.id === a.id);
+      if (c && canPlay(c)) playCard(seat, c);
+    } else if (a.t === 'draw') {
+      if (drew) return;
+      drew = true;
+      const c = drawOne();
+      if (c) {
+        p.hand.push(c); sortHand(p.hand);
+        say(me => (me === seat ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
+      } else say(who(seat, 'не можете взять карту', 'не может взять карту'));
+      step();
+    } else if (a.t === 'pass') {
+      if (drew) pass();
+    }
+  }
+
+  // ----- bot -----
+  function botSuit(p) {
+    const n = {};
+    p.hand.forEach(c => { n[c.s] = (n[c.s] || 0) + (c.r === 12 ? 0.5 : 1); });
+    return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || top().s;
+  }
+  function botTurn() {
+    const p = players[turn];
+    const opts = p.hand.filter(canPlay);
+    if (!opts.length) {
+      if (drew) { pass(); return; }
+      drew = true;
+      const c = drawOne();
+      if (!c) { pass(); return; }
+      p.hand.push(c);
+      say(`${p.name} берёт карту`);
+      later(botTurn);
+      return;
+    }
+    // drop expensive cards first, attack with sixes, keep queens for later
+    const w = c => POINTS(c.r) + (c.r === 6 ? 6 : 0) + (c.r === 14 ? 3 : 0) - (c.r === 12 && p.hand.length > 2 ? 12 : 0);
+    opts.sort((a, b) => w(b) - w(a));
+    playCard(turn, opts[0]);
+  }
+
+  // ----- scoring -----
+  function endRound(w) {
+    phase = 'roundEnd';
+    const rows = [];
+    players.forEach((p, i) => {
+      if (p.out) return;
+      const add = i === w ? 0 : handPoints(p);
+      p.score += add;
+      let note = '';
+      if (p.score === RESET_AT) { p.score = 0; note = 'ровно 101 — счёт обнулён'; }
+      else if (p.score >= LOSE_AT) { p.out = true; note = 'перебор — выбывает'; }
+      rows.push({ pi: i, add, score: p.score, note, win: i === w });
+    });
+    const left = active();
+    const humansLeft = left.filter(p => !p.isBot).length;
+    const gameOver = left.length <= 1 || humansLeft === 0;
+    if (!gameOver) {
+      if (w >= 0) starter = w;
+      if (players[starter].out) starter = nextIdx(starter);
+    }
+    result = { w, rows, gameOver, champion: left.length === 1 ? players.indexOf(left[0]) : -1 };
+    render();
+  }
+
+  function afterResult() {
+    if (!result) return;
+    if (!result.gameOver) { startRound(); return; }
+    if (mode === 'solo') { leave(); return; }
+    // same room, fresh match
+    players.forEach(p => { p.score = 0; p.out = false; });
+    starter = Math.floor(Math.random() * players.length);
+    roundNo = 0; log = [];
+    startRound();
+  }
+
+  // ----- what one seat is allowed to see -----
+  function viewFor(seat) {
+    const t = top();
+    return {
+      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode,
+      top: t ? { s: t.s, r: t.r, id: t.id } : null,
+      deckCount: deck.length, pileCount: pile.length,
+      canDraw: deck.length > 0 || pile.length > 1,
+      players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length })),
+      hand: players[seat].hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })),
+      log: log.map(f => f(seat)),
+      choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
+      result, canControl: seat === 0
+    };
+  }
+
+  function render() {
+    if (!players.length) return;
+    view = viewFor(mySeat);
+    draw(view);
+    if (mode === 'host') players.forEach((p, i) => { if (p.conn && p.conn.open) p.conn.send({ t: 'view', v: viewFor(i) }); });
+  }
+
+  // ================= UI (works only from a view) =================
+  function action(a) {
+    if (mode === 'guest') { if (hostConn && hostConn.open) hostConn.send(a); }
+    else act(mySeat, a);
+  }
+
+  function cardEl(c, extra = '') {
+    const el = document.createElement('div');
+    el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
+    el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}<small>${c.s}</small></div><div class="mid">${c.s}</div>`;
+    return el;
+  }
+
+  function draw(v) {
+    const me = v.players[v.seat];
+    const myTurn = v.phase === 'play' && v.turn === v.seat && !v.busy;
+    const hasMove = v.hand.some(c => c.ok);
+    $('roundNo').textContent = v.roundNo;
+    $('roomTag').textContent = v.room ? ' · комната ' + v.room : '';
+
+    const o = $('opps'); o.innerHTML = '';
+    for (let k = 1; k < v.players.length; k++) {
+      const i = (v.seat + k) % v.players.length, p = v.players[i];
+      const d = document.createElement('div');
+      d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
+      d.innerHTML = `<div class="name">${esc(p.name)}</div><div>${p.out ? 'выбыл' : 'очки: ' + p.score}</div>` +
+        `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, 7))}</div>` +
+        `<div>карт: <span class="cnt">${p.count}</span></div>`;
+      o.appendChild(d);
+    }
+
+    const dk = $('deck');
+    dk.className = (v.canDraw ? 'card back deck' : 'empty-slot') + (myTurn && !v.drew ? ' can' : '');
+    dk.onclick = () => { if (myTurn && !v.drew) action({ t: 'draw' }); };
+    $('deckCount').textContent = v.deckCount;
+
+    const pl = $('pile'); pl.innerHTML = '';
+    if (v.top) {
+      pl.appendChild(cardEl(v.top, v.top.id !== lastTopId ? 'pop' : ''));
+      lastTopId = v.top.id;
+    }
+    $('pileCount').textContent = v.pileCount;
+
+    const sn = $('suitNow');
+    sn.textContent = v.suit || '';
+    sn.className = 'suit-now' + (RED.has(v.suit) ? ' red' : '');
+
+    $('status').innerHTML = v.log.map((l, i) => `<div class="${i < v.log.length - 1 ? 'old' : ''}">${esc(l)}</div>`).join('');
+
+    const mb = $('meBar');
+    const hint = me.out ? ' · вы выбыли' : !myTurn ? '' : hasMove ? ' · ваш ход' : v.drew ? '' : ' · нет карты — берите из колоды';
+    mb.textContent = `Ваши очки: ${me.score}${hint}`;
+    mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
+
+    const mh = $('myHand'); mh.innerHTML = '';
+    v.hand.forEach(c => {
+      const ok = myTurn && c.ok;
+      const el = cardEl(c, ok ? 'ok' : 'no');
+      if (ok) el.onclick = () => action({ t: 'play', id: c.id });
+      mh.appendChild(el);
+    });
+
+    const a = $('actions'); a.innerHTML = '';
+    if (myTurn && v.drew && hasMove) {
+      const b = document.createElement('button');
+      b.className = 'btn'; b.textContent = 'Пас';
+      b.onclick = () => action({ t: 'pass' });
+      a.appendChild(b);
+    }
+
+    $('suitPick').classList.toggle('show', v.choose);
+    drawResult(v);
+  }
+
+  function drawResult(v) {
+    const r = v.result;
+    const show = !!r && v.phase === 'roundEnd';
+    $('result').classList.toggle('show', show);
+    if (!show) return;
+    const name = i => (i === v.seat ? 'Вы' : esc(v.players[i].name));
+    let title, text;
+    if (r.gameOver) {
+      if (r.champion === v.seat) { title = 'Вы выиграли игру!'; text = 'Все соперники набрали перебор.'; }
+      else if (v.players[v.seat].out) { title = 'Вы проиграли'; text = 'У вас больше 101 очка.'; }
+      else { title = 'Игра окончена'; text = 'Победитель: ' + name(r.champion); }
+    } else {
+      title = r.w === v.seat ? 'Раунд за вами!' : r.w >= 0 ? 'Раунд выиграл: ' + name(r.w) : 'Ходов нет';
+      text = r.w >= 0 ? 'Остальные считают карты на руках.' : 'Никто не может походить — все считают карты.';
+    }
+    $('resTitle').innerHTML = title;
+    $('resText').innerHTML = text;
+    $('resTable').innerHTML = r.rows.map(x =>
+      `<tr><td>${name(x.pi)}${x.note ? `<span class="note">${x.note}</span>` : ''}</td><td>${x.win ? '—' : '+' + x.add}</td><td><b>${x.score}</b></td></tr>`).join('');
+    const b = $('resBtn');
+    b.disabled = !v.canControl;
+    b.textContent = !v.canControl ? 'Ждём хозяина комнаты…' : r.gameOver ? 'Новая игра' : 'Следующий раунд';
+    b.onclick = v.canControl ? afterResult : null;
+  }
+
+  // ================= NETWORK (PeerJS, host keeps the game) =================
+  const netMsg = t => { $('netMsg').textContent = t || ''; };
+  function myName() {
+    const n = $('nick').value.trim().slice(0, 12) || 'Игрок';
+    try { localStorage.setItem('g101-name', n); } catch {}
+    return n;
+  }
+  function loadPeerLib() {
+    return new Promise((res, rej) => {
+      if (window.Peer) return res();
+      const s = document.createElement('script');
+      s.src = PEER_LIB;
+      s.onload = () => res();
+      s.onerror = () => rej(new Error('lib'));
+      document.head.appendChild(s);
+    });
+  }
+
+  function leave() {
+    gameId++;
+    phase = 'setup';
+    if (peer) { try { peer.destroy(); } catch {} }
+    peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
+    mode = 'solo'; mySeat = 0; players = [];
+    showOnly('setup');
+  }
+
+  // ----- host -----
+  async function createRoom(attempt = 0) {
+    netMsg('Создаём комнату…');
+    try { await loadPeerLib(); } catch { netMsg('Нет интернета'); return; }
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const p = new Peer(ROOM_PREFIX + code);
+    peer = p;
+    p.on('open', () => {
+      mode = 'host'; mySeat = 0; started = false; roomCode = code;
+      lobby = [{ name: myName(), conn: null, isBot: false }];
+      netMsg('');
+      drawLobby();
+    });
+    p.on('connection', conn => {
+      conn.on('data', d => onHostData(conn, d));
+      conn.on('close', () => onGuestGone(conn));
+    });
+    p.on('error', e => {
+      if (peer !== p) return;
+      if (e.type === 'unavailable-id' && attempt < 5) { p.destroy(); createRoom(attempt + 1); return; }
+      if (!lobby) { netMsg('Не удалось создать комнату'); peer = null; }
+    });
+  }
+
+  function onHostData(conn, d) {
+    if (!d || typeof d !== 'object') return;
+    if (d.t === 'join') {
+      if (started || !lobby || lobby.length >= MAX_PLAYERS || lobby.some(s => s.conn === conn)) {
+        if (!lobby || !lobby.some(s => s.conn === conn)) { conn.send({ t: 'full' }); }
+        return;
+      }
+      lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false });
+      drawLobby();
+      return;
+    }
+    if (!started) return;
+    const seat = players.findIndex(p => p.conn === conn);
+    if (seat > 0) act(seat, d);
+  }
+
+  function onGuestGone(conn) {
+    if (!started) {
+      if (!lobby) return;
+      lobby = lobby.filter(s => s.conn !== conn);
+      drawLobby();
+      return;
+    }
+    const i = players.findIndex(p => p.conn === conn);
+    if (i < 0) return;
+    const p = players[i];
+    p.conn = null; p.isBot = true; p.name += ' (бот)';   // a bot finishes for whoever left
+    if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
+      suit = botSuit(p); phase = 'play';
+      const q = pendingQueen; pendingQueen = null;
+      afterPlay(q.pi, q.card);
+    } else if (phase === 'play' && turn === i && !busy) step();
+    else render();
+  }
+
+  function drawLobby() {
+    const host = mode === 'host';
+    const names = host ? lobby.map(s => s.name) : lobby;
+    $('lobCode').textContent = roomCode;
+    $('lobHint').textContent = host ? 'Скажите этот код друзьям. Не закрывайте игру, пока идёт партия.' : 'Ждём, пока хозяин комнаты начнёт игру…';
+    $('lobList').innerHTML = names.map(n => `<li>${esc(n)}</li>`).join('');
+    $('addBotBtn').style.display = host && names.length < MAX_PLAYERS ? '' : 'none';
+    $('startBtn').style.display = host ? '' : 'none';
+    $('startBtn').disabled = names.length < 2;
+    showOnly('lobby');
+    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names }); });
+  }
+
+  // ----- guest -----
+  async function joinRoom() {
+    const code = $('codeIn').value.trim();
+    if (!/^\d{4}$/.test(code)) { netMsg('Введите код из 4 цифр'); return; }
+    netMsg('Подключаемся…');
+    try { await loadPeerLib(); } catch { netMsg('Нет интернета'); return; }
+    const name = myName();
+    const p = new Peer();
+    peer = p;
+    let joined = false;
+    const fail = t => { if (peer !== p) return; leave(); netMsg(t); };
+    p.on('open', () => {
+      const conn = p.connect(ROOM_PREFIX + code, { reliable: true });
+      hostConn = conn;
+      conn.on('open', () => { mode = 'guest'; roomCode = code; conn.send({ t: 'join', name }); });
+      conn.on('data', d => {
+        if (!d || typeof d !== 'object') return;
+        if (d.t === 'lobby') { joined = true; lobby = d.names; netMsg(''); drawLobby(); }
+        else if (d.t === 'view') { joined = true; $('setup').classList.remove('show'); $('lobby').classList.remove('show'); view = d.v; draw(view); }
+        else if (d.t === 'full') fail('Комната заполнена или игра уже идёт');
+      });
+      conn.on('close', () => fail(joined ? 'Связь с комнатой потеряна' : 'Не удалось войти'));
+      setTimeout(() => { if (peer === p && !joined) fail('Не удалось подключиться. Проверьте код и интернет.'); }, 15000);
+    });
+    p.on('error', e => fail(e.type === 'peer-unavailable' ? 'Комната с таким кодом не найдена' : 'Ошибка сети'));
+  }
+
+  // ================= WIRING =================
+  SUITS.forEach(s => {
+    const b = document.createElement('button');
+    b.textContent = s;
+    if (RED.has(s)) b.className = 'red';
+    b.onclick = () => action({ t: 'suit', s });
+    $('suitBtns').appendChild(b);
+  });
+  document.querySelectorAll('[data-bots]').forEach(b => {
+    b.onclick = () => {
+      mode = 'solo'; mySeat = 0; roomCode = '';
+      const seats = [{ name: 'Игрок' }];
+      for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: 'Бот ' + i, isBot: true });
+      startMatch(seats);
+    };
+  });
+  $('hostBtn').onclick = () => createRoom();
+  $('joinBtn').onclick = joinRoom;
+  $('addBotBtn').onclick = () => {
+    if (mode !== 'host' || lobby.length >= MAX_PLAYERS) return;
+    lobby.push({ name: 'Бот ' + (lobby.filter(s => s.isBot).length + 1), isBot: true, conn: null });
+    drawLobby();
+  };
+  $('startBtn').onclick = () => {
+    if (mode !== 'host' || lobby.length < 2) return;
+    started = true;
+    startMatch(lobby);
+  };
+  $('leaveBtn').onclick = leave;
+  $('newBtn').onclick = () => {
+    if (mode !== 'solo' && !confirm('Выйти из комнаты?')) return;
+    leave();
+  };
+  try { $('nick').value = localStorage.getItem('g101-name') || ''; } catch {}
+})();
+</script>
+</body>
+</html>
