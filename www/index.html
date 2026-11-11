@@ -100,11 +100,10 @@
   }
   .card.red { color: var(--red); }
   /* a card just taken from the deck */
-  .card.new, .hand-me .card.new { box-shadow: 0 0 0 3px var(--gold), 0 0 14px 4px rgba(242,193,78,.85); filter: none; z-index: 1; }
+  .card.new, .hand-me .card.new { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); filter: none; }
   .card.new::after {
-    content: 'новая'; position: absolute; left: 0; right: 0; bottom: 0;
-    background: var(--gold); color: #2a1d00; font-size: 11px; line-height: 16px; text-align: center;
-    border-radius: 0 0 8px 8px;
+    content: ''; position: absolute; right: 5px; top: 5px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--gold);
   }
   .card .tl { position: absolute; left: 5px; top: 3px; font-size: calc(var(--cw) * .27); line-height: 1; text-align: center; }
   .card .tl small { display: block; font-size: calc(var(--cw) * .25); }
@@ -231,7 +230,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 8;                     // keep in sync with www/version.txt
+  const VERSION = 9;                    // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
