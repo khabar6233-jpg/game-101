@@ -186,6 +186,7 @@
     <h2>101</h2>
     <p>Ходите в масть или в значение. Нет карты — берите из колоды.<br>
        Туз — пропуск хода, шестёрка — соседу 2 карты и пропуск хода.<br>
+       Втроём и больше шестёрку можно перевести своей шестёркой: следующему +2 карты.<br>
        Дама кладётся на любую карту и заказывает масть.<br>
        Шестёркой и тузом закончить нельзя.<br>
        102 очка — проигрыш, ровно 101 — счёт обнуляется.</p>
@@ -255,7 +256,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 19;                 // keep in sync with www/version.txt
+  const VERSION = 20;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -268,7 +269,8 @@
   let players = [], deck = [], pile = [], suit = null, turn = 0, drew = false;
   let sixRun = 0, passStreak = 0, starter = 0, roundNo = 0, phase = 'setup';
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
-  let evSeq = 0, lastEv = null, viewRev = 0;   // the last card event (who played / who drew), so screens can animate it
+  let evSeq = 0, lastEv = null, viewRev = 0;
+  let pendingSix = 0;             // 3+ players: cards the current player must take unless they add a six   // the last card event (who played / who drew), so screens can animate it
 
   // ----- session state -----
   let mode = 'solo';            // 'solo' | 'host' | 'guest'
@@ -283,7 +285,8 @@
   const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   const active = () => players.filter(p => !p.out);
   const top = () => pile[pile.length - 1];
-  const canPlay = c => c.r === 12 || c.s === suit || c.r === top().r;   // a queen goes on any card
+  // a queen goes on any card; while sixes are stacked on you, only another six can be played
+  const canPlay = c => (pendingSix ? c.r === 6 : c.r === 12 || c.s === suit || c.r === top().r);
   const label = c => RANK_NAME[c.r] + c.s;
   const isSpecialEnd = c => c.r === 6 || c.r === 14;
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
@@ -325,7 +328,7 @@
     let id = 0;
     for (const s of SUITS) for (let r = 6; r <= 14; r++) deck.push({ s, r, id: id++ });
     shuffle(deck);
-    pile = []; sixRun = 0; passStreak = 0; drew = false; busy = false; pendingQueen = null; result = null;
+    pile = []; sixRun = 0; pendingSix = 0; passStreak = 0; drew = false; busy = false; pendingQueen = null; result = null;
     players.forEach(p => { p.hand = []; });
     for (let k = 0; k < HAND_SIZE; k++) active().forEach(p => p.hand.push(deck.pop()));
     phase = 'play';
@@ -393,14 +396,34 @@
     if (card.r === 14) {                       // ace: next player skips
       say(who(n, 'пропускаете ход', 'пропускает ход'));
       n = nextIdx(n);
-    } else if (card.r === 6) {                 // six: next player draws and skips
-      const k = active().length === 2 && sixRun >= 2 ? 4 : 2;
+    } else if (card.r === 6 && active().length >= 3) {
+      // 3+ players: the next player may answer with a six of their own; every six in a row adds 2 cards
+      pendingSix += 2;
+      const k = pendingSix;
+      say(who(n, `должны взять ${k} ${cardsWord(k)} или подкинуть шестёрку`, `должен взять ${k} ${cardsWord(k)} или подкинуть шестёрку`));
+    } else if (card.r === 6) {                 // one on one: the opponent draws at once and skips
+      const k = sixRun >= 2 ? 4 : 2;
       const got = give(players[n], k);
       lastEv = { seq: ++evSeq, type: 'draw', pi: n, k: got };
       say(who(n, `берёте ${got} ${cardsWord(got)} и пропускаете ход`, `берёт ${got} ${cardsWord(got)} и пропускает ход`));
       n = nextIdx(n);
     }
     turn = n;
+    drew = false;
+    step();
+  }
+
+  // the current player gives up on the sixes: takes the stacked cards and skips the turn
+  function takePenalty() {
+    const pi = turn, p = players[pi];
+    const total = pendingSix;
+    const k = Math.max(total - (drew ? 1 : 0), 0);      // a card already drawn this turn counts
+    const got = give(p, k);
+    lastEv = { seq: ++evSeq, type: 'draw', pi, k: got };
+    const all = got + (drew ? 1 : 0);
+    say(who(pi, `берёте ${all} ${cardsWord(all)} и пропускаете ход`, `берёт ${all} ${cardsWord(all)} и пропускает ход`));
+    pendingSix = 0;
+    turn = nextIdx(pi);
     drew = false;
     step();
   }
@@ -419,7 +442,7 @@
     if (phase !== 'play') return;
     const p = players[turn];
     if (p.isBot) later(botTurn);
-    else if (drew && !p.hand.some(canPlay)) later(pass);
+    else if (drew && !p.hand.some(canPlay)) later(pendingSix ? takePenalty : pass);
   }
 
   function later(fn, ms = DELAY) {
@@ -459,12 +482,14 @@
         lastEv = { seq: ++evSeq, type: 'draw', pi: seat, k: 1 };
         say(me => (me === seat ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
       } else {
-        if (!p.hand.length) { endRound(seat); return; }   // no cards left anywhere: empty hand wins
+        if (!p.hand.length && !pendingSix) { endRound(seat); return; }   // no cards left anywhere: empty hand wins
         say(who(seat, 'не можете взять карту', 'не может взять карту'));
       }
       step();
     } else if (a.t === 'pass') {
-      if (drew) pass();
+      if (drew && !pendingSix) pass();
+    } else if (a.t === 'take') {
+      if (pendingSix) takePenalty();
     }
   }
 
@@ -478,10 +503,10 @@
     const p = players[turn];
     const opts = p.hand.filter(canPlay);
     if (!opts.length) {
-      if (drew) { pass(); return; }
+      if (drew) { if (pendingSix) takePenalty(); else pass(); return; }
       drew = true;
       const c = drawOne();
-      if (!c) { if (!p.hand.length) endRound(turn); else pass(); return; }
+      if (!c) { if (pendingSix) takePenalty(); else if (!p.hand.length) endRound(turn); else pass(); return; }
       p.hand.push(c);
       lastEv = { seq: ++evSeq, type: 'draw', pi: turn, k: 1 };
       say(`${p.name} берёт карту`);
@@ -533,7 +558,7 @@
   function viewFor(seat) {
     const t = top();
     return {
-      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev,
+      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev, pendingSix,
       top: t ? { s: t.s, r: t.r, id: t.id } : null,
       tail: pile.slice(-PILE_SHOWN).map(c => ({ s: c.s, r: c.r, id: c.id })),
       deckCount: deck.length, pileCount: pile.length,
@@ -652,7 +677,9 @@
     $('histList').innerHTML = v.log.slice().reverse().map(l => `<li>${esc(l)}</li>`).join('') || '<li>Ходов пока нет</li>';
 
     const mb = $('meBar');
-    const hint = me.out ? ' · вы выбыли' : !myTurn ? '' : hasMove ? ' · ваш ход' : v.drew ? '' : ' · нет карты — нажмите на стол, чтобы взять';
+    const hint = me.out ? ' · вы выбыли' : !myTurn ? ''
+      : v.pendingSix ? (hasMove ? ' · подкиньте шестёрку или берите' : v.drew ? '' : ' · берите карты или попробуйте вытянуть шестёрку')
+      : hasMove ? ' · ваш ход' : v.drew ? '' : ' · нет карты — нажмите на стол, чтобы взять';
     mb.textContent = `Ваши очки: ${me.score}${hint}`;
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
@@ -709,7 +736,14 @@
     }
 
     const a = $('actions'); a.innerHTML = '';
-    if (myTurn && v.drew && hasMove) {
+    if (myTurn && v.pendingSix) {
+      const left = v.pendingSix - (v.drew ? 1 : 0);
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = v.drew ? `Беру ещё ${left}` : `Беру ${left} ${cardsWord(left)}`;
+      b.onclick = () => action({ t: 'take' });
+      a.appendChild(b);
+    } else if (myTurn && v.drew && hasMove) {
       const b = document.createElement('button');
       b.className = 'btn'; b.textContent = 'Пас';
       b.onclick = () => action({ t: 'pass' });
@@ -730,7 +764,7 @@
       const added = ids.filter(id => !prevHand.has(id));
       const removed = [...prevHand].some(id => !ids.includes(id));
       if (removed) newIds = new Map();
-      if (added.length && added.length < ids.length) { newIds = new Map(added.map(id => [id, Date.now()])); fresh = added; }
+      if (added.length && added.length < ids.length) { newIds = new Map(added.map((id, i) => [id, Date.now() + i * 180 + 500])); fresh = added; }
     }
     prevHand = new Set(ids);
     prevRound = v.roundNo;
