@@ -60,6 +60,9 @@
 
   .middle { flex: 1; display: flex; align-items: center; justify-content: center; gap: 22px; min-height: 0; }
   .slot { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  #pile { position: relative; height: var(--ch); min-width: var(--cw); transition: width .15s; }
+  #pile .card { position: absolute; }
+  .middle { gap: 16px; }
   .deck.can { box-shadow: 0 0 0 3px var(--gold), 0 2px 6px rgba(0,0,0,.35); cursor: pointer; }
   .suit-now { font-size: 44px; line-height: 1; width: 56px; text-align: center; }
   .suit-now.red { color: #ff6b72; }
@@ -217,6 +220,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
+  const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
   const PEER_LIB = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
   const ROOM_PREFIX = 'cardgame101-room-';
@@ -471,6 +475,7 @@
     return {
       seat, roundNo, phase, turn, drew, busy, suit, room: roomCode,
       top: t ? { s: t.s, r: t.r, id: t.id } : null,
+      tail: pile.slice(-PILE_SHOWN).map(c => ({ s: c.s, r: c.r, id: c.id })),
       deckCount: deck.length, pileCount: pile.length,
       canDraw: deck.length > 0 || pile.length > 1,
       players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length })),
@@ -525,10 +530,19 @@
     $('deckCount').textContent = v.deckCount;
 
     const pl = $('pile'); pl.innerHTML = '';
-    if (v.top) {
-      pl.appendChild(cardEl(v.top, v.top.id !== lastTopId ? 'pop' : ''));
-      lastTopId = v.top.id;
-    }
+    // the last few cards lie in a loose stack, newest on top, like on a real table
+    const tail = v.tail || (v.top ? [v.top] : []);
+    pl.style.width = `calc(var(--cw) + ${Math.max(tail.length - 1, 0) * PILE_STEP}px)`;
+    tail.forEach((c, i) => {
+      const isTop = i === tail.length - 1;
+      const el = cardEl(c, isTop && c.id !== lastTopId ? 'pop' : '');
+      el.style.left = i * PILE_STEP + 'px';
+      el.style.top = ((c.id * 29) % 9) - 4 + 'px';
+      el.style.transform = `rotate(${((c.id * 37) % 13) - 6}deg)`;
+      if (!isTop) el.style.filter = 'brightness(.9)';
+      pl.appendChild(el);
+    });
+    if (v.top) lastTopId = v.top.id;
     $('pileCount').textContent = v.pileCount;
 
     const sn = $('suitNow');
