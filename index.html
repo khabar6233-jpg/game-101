@@ -248,7 +248,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 17;                 // keep in sync with www/version.txt
+  const VERSION = 18;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
@@ -260,7 +260,7 @@
   let players = [], deck = [], pile = [], suit = null, turn = 0, drew = false;
   let sixRun = 0, passStreak = 0, starter = 0, roundNo = 0, phase = 'setup';
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
-  let evSeq = 0, lastEv = null;   // the last card event (who played / who drew), so screens can animate it
+  let evSeq = 0, lastEv = null, viewRev = 0;   // the last card event (who played / who drew), so screens can animate it
 
   // ----- session state -----
   let mode = 'solo';            // 'solo' | 'host' | 'guest'
@@ -525,7 +525,7 @@
   function viewFor(seat) {
     const t = top();
     return {
-      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv,
+      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev,
       top: t ? { s: t.s, r: t.r, id: t.id } : null,
       tail: pile.slice(-PILE_SHOWN).map(c => ({ s: c.s, r: c.r, id: c.id })),
       deckCount: deck.length, pileCount: pile.length,
@@ -540,9 +540,9 @@
 
   function render() {
     if (!players.length) return;
-    view = viewFor(mySeat);
-    draw(view);
     if (mode === 'host') players.forEach((p, i) => { if (p.conn && p.conn.open) p.conn.send({ t: 'view', v: viewFor(i) }); });
+    view = viewFor(mySeat);
+    try { draw(view); } catch (e) { console.error(e); }
   }
 
   // ================= UI (works only from a view) =================
@@ -1103,7 +1103,7 @@
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
     const name = myName();
-    let joined = false, lastHeard = Date.now();
+    let joined = false, lastHeard = Date.now(), lastRev = 0;
     const fail = t => { if (peer !== n) return; leave(); netMsg(t); };
     const n = netOpen((topic, from, d) => {
       if (peer !== n || !d || typeof d !== 'object') return;
@@ -1111,9 +1111,12 @@
       if (d.t === 'lobby') { joined = true; lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
       else if (d.t === 'view') {
         joined = true;
+        // messages travel through two relays and may arrive out of order: never go back to an older state
+        if (d.v.rev && d.v.rev < lastRev) return;
+        if (d.v.rev) lastRev = d.v.rev;
         $('setup').classList.remove('show'); $('lobby').classList.remove('show');
         view = d.v;
-        draw(view);
+        try { draw(view); } catch (e) { console.error(e); }
       } else if (d.t === 'full') fail('Комната заполнена или игра уже идёт');
       else if (d.t === 'kicked') fail('Хозяин комнаты заменил вас ботом');
     });
