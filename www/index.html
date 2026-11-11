@@ -163,6 +163,7 @@
     <h2>101</h2>
     <p>Ходите в масть или в значение. Нет карты — берите из колоды.<br>
        Туз — пропуск хода, дама — заказ масти, шестёрка — соседу 2 карты.<br>
+       Шестёркой и тузом закончить нельзя.<br>
        102 очка — проигрыш, ровно 101 — счёт обнуляется.</p>
     <h3>С ботами</h3>
     <div class="row">
@@ -241,6 +242,7 @@
   const top = () => pile[pile.length - 1];
   const canPlay = c => c.s === suit || c.r === top().r;
   const label = c => RANK_NAME[c.r] + c.s;
+  const isSpecialEnd = c => c.r === 6 || c.r === 14;
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
   const handPoints = p => p.hand.reduce((n, c) => n + POINTS(c.r), 0);
   // log lines are built per viewer: "Вы кладёте…" for me, "Имя кладёт…" for others
@@ -286,8 +288,12 @@
     phase = 'play';
     turn = starter;
     // the starter keeps 4 cards; the 5th is opened as their move
+    // a six or an ace is never the opening card
     const st = players[starter];
-    const opened = st.hand.splice(Math.floor(Math.random() * st.hand.length), 1)[0];
+    const openable = st.hand.filter(c => !isSpecialEnd(c));
+    if (!openable.length) { roundNo--; startRound(); return; }   // all five are sixes/aces: deal again
+    const opened = openable[Math.floor(Math.random() * openable.length)];
+    st.hand.splice(st.hand.indexOf(opened), 1);
     players.forEach(p => sortHand(p.hand));
     playCard(starter, opened, true);
   }
@@ -318,9 +324,10 @@
     if (opened) say(me => `Открыта карта ${label(card)} — это ${pi === me ? 'ваш ход' : 'ход: ' + p.name}`);
     else say(who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card)));
 
-    if (p.hand.length === 0) { endRound(pi); return; }
+    // a six or an ace cannot finish the round: the player stays in and draws on their next turn
+    if (p.hand.length === 0 && !isSpecialEnd(card)) { endRound(pi); return; }
 
-    if (card.r === 12) {                       // queen: choose a suit
+    if (card.r === 12) {                      // queen: choose a suit
       if (p.isBot) {
         suit = botSuit(p);
         say(`${p.name} заказывает ${suit}`);
@@ -402,7 +409,10 @@
       if (c) {
         p.hand.push(c); sortHand(p.hand);
         say(me => (me === seat ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
-      } else say(who(seat, 'не можете взять карту', 'не может взять карту'));
+      } else {
+        if (!p.hand.length) { endRound(seat); return; }   // no cards left anywhere: empty hand wins
+        say(who(seat, 'не можете взять карту', 'не может взять карту'));
+      }
       step();
     } else if (a.t === 'pass') {
       if (drew) pass();
@@ -422,7 +432,7 @@
       if (drew) { pass(); return; }
       drew = true;
       const c = drawOne();
-      if (!c) { pass(); return; }
+      if (!c) { if (!p.hand.length) endRound(turn); else pass(); return; }
       p.hand.push(c);
       say(`${p.name} берёт карту`);
       later(botTurn);
