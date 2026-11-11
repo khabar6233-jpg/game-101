@@ -246,11 +246,13 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 12;                 // keep in sync with www/version.txt
+  const VERSION = 13;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
-  const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
+  const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, MAX_PLAYERS = 4;
+  const DELAY = 700;        // a bot "thinks" this long before its move
+  const PLAY_PAUSE = 650;   // pause after any card is played, before its effect and the next turn
   const PEER_LIB = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
   const ROOM_PREFIX = 'cardgame101-room-';
 
@@ -258,11 +260,13 @@
   let players = [], deck = [], pile = [], suit = null, turn = 0, drew = false;
   let sixRun = 0, passStreak = 0, starter = 0, roundNo = 0, phase = 'setup';
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
+  let evSeq = 0, lastEv = null;   // the last card event (who played / who drew), so screens can animate it
 
   // ----- session state -----
   let mode = 'solo';            // 'solo' | 'host' | 'guest'
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Set();
+  let animRound = 0, lastEvSeq = 0, flyingTop = null;
   const flying = new Set();
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '', hostVer = 0;
 
@@ -348,6 +352,7 @@
     const i = p.hand.indexOf(card);
     if (i >= 0) p.hand.splice(i, 1);
     pile.push(card);
+    lastEv = { seq: ++evSeq, type: 'play', pi };
     suit = card.s;
     passStreak = 0;
     sixRun = card.r === 6 ? sixRun + 1 : 0;
@@ -355,7 +360,7 @@
     else say(who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card)));
 
     // a six or an ace cannot finish the round: the player stays in and draws on their next turn
-    if (p.hand.length === 0 && !isSpecialEnd(card)) { endRound(pi); return; }
+    if (p.hand.length === 0 && !isSpecialEnd(card)) { later(() => endRound(pi), PLAY_PAUSE); return; }
 
     if (card.r === 12) {                      // queen: choose a suit
       if (chosenSuit) {                        // the player picked the suit before laying the queen
@@ -371,7 +376,7 @@
         return;
       }
     }
-    afterPlay(pi, card);
+    later(() => afterPlay(pi, card), PLAY_PAUSE);   // let everyone see the card before anything else happens
   }
 
   function afterPlay(pi, card) {
@@ -382,6 +387,7 @@
     } else if (card.r === 6) {                 // six: next player draws and skips
       const k = active().length === 2 && sixRun >= 2 ? 4 : 2;
       const got = give(players[n], k);
+      lastEv = { seq: ++evSeq, type: 'draw', pi: n, k: got };
       say(who(n, `берёте ${got} ${cardsWord(got)} и пропускаете ход`, `берёт ${got} ${cardsWord(got)} и пропускает ход`));
       n = nextIdx(n);
     }
@@ -407,7 +413,7 @@
     else if (drew && !p.hand.some(canPlay)) later(pass);
   }
 
-  function later(fn) {
+  function later(fn, ms = DELAY) {
     busy = true;
     render();
     const g = gameId;
@@ -415,7 +421,7 @@
       if (g !== gameId) return;                // a new game started meanwhile
       busy = false;
       if (phase === 'play') fn();
-    }, DELAY);
+    }, ms);
   }
 
   // one entry point for every human move, local or remote
@@ -427,7 +433,7 @@
       say(who(seat, 'заказываете ' + a.s, 'заказывает ' + a.s));
       phase = 'play';
       const q = pendingQueen; pendingQueen = null;
-      afterPlay(q.pi, q.card);
+      later(() => afterPlay(q.pi, q.card), PLAY_PAUSE);
       return;
     }
     if (phase !== 'play' || turn !== seat || busy) return;
@@ -441,6 +447,7 @@
       const c = drawOne();
       if (c) {
         p.hand.push(c); sortHand(p.hand);
+        lastEv = { seq: ++evSeq, type: 'draw', pi: seat, k: 1 };
         say(me => (me === seat ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
       } else {
         if (!p.hand.length) { endRound(seat); return; }   // no cards left anywhere: empty hand wins
@@ -467,6 +474,7 @@
       const c = drawOne();
       if (!c) { if (!p.hand.length) endRound(turn); else pass(); return; }
       p.hand.push(c);
+      lastEv = { seq: ++evSeq, type: 'draw', pi: turn, k: 1 };
       say(`${p.name} берёт карту`);
       later(botTurn);
       return;
@@ -516,7 +524,7 @@
   function viewFor(seat) {
     const t = top();
     return {
-      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION,
+      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv,
       top: t ? { s: t.s, r: t.r, id: t.id } : null,
       tail: pile.slice(-PILE_SHOWN).map(c => ({ s: c.s, r: c.r, id: c.id })),
       deckCount: deck.length, pileCount: pile.length,
@@ -562,10 +570,22 @@
       : hv < VERSION ? 'У хозяина комнаты старая версия игры: правила могут отличаться. Пусть он обновит игру.'
       : 'У вас старая версия игры. Выйдите и обновите её.';
 
+    // what just happened, so the right card can be animated
+    const roundChanged = v.roundNo !== animRound;
+    animRound = v.roundNo;
+    const ev = v.ev && v.ev.seq !== lastEvSeq && !roundChanged ? v.ev : null;
+    if (v.ev) lastEvSeq = v.ev.seq;
+    let playFrom = null;
+    if (ev && ev.type === 'play' && ev.pi === v.seat && v.top) {
+      const old = $('myHand').querySelector(`[data-id="${v.top.id}"]`);
+      if (old) playFrom = old.getBoundingClientRect();     // where the card was in my hand
+    }
+
     const o = $('opps'); o.innerHTML = '';
     for (let k = 1; k < v.players.length; k++) {
       const i = (v.seat + k) % v.players.length, p = v.players[i];
       const d = document.createElement('div');
+      d.dataset.i = i;
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
       d.innerHTML = `<div class="name">${esc(p.name)}</div><div>${p.out ? 'выбыл' : 'очки: ' + p.score}</div>` +
         `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, 7))}</div>` +
@@ -584,7 +604,8 @@
     pl.style.width = `calc(var(--cw) + ${Math.max(tail.length - 1, 0) * PILE_STEP}px)`;
     tail.forEach((c, i) => {
       const isTop = i === tail.length - 1;
-      const el = cardEl(c, isTop && c.id !== lastTopId ? 'pop' : '');
+      const el = cardEl(c, isTop && c.id !== lastTopId && !(ev && ev.type === 'play') ? 'pop' : '');
+      if (flyingTop === c.id) el.style.opacity = '0';
       el.style.left = i * PILE_STEP + 'px';
       el.style.top = ((c.id * 29) % 9) - 4 + 'px';
       el.style.transform = `rotate(${((c.id * 37) % 13) - 6}deg)`;
@@ -624,7 +645,40 @@
       if (c.id === localQueen) el.style.transform = 'translateY(-26px)';
       mh.appendChild(el);
     });
-    if (fresh.length) flyFromDeck(fresh, v);
+    const oppBox = i => o.querySelector(`[data-i="${i}"] .minis`);
+    const deckRect = $('deck').getBoundingClientRect();
+    if (roundChanged) {
+      // the deal: my cards and a few card backs for every opponent fly out of the deck
+      flyFromDeck(v.hand.map(c => c.id), v, false, 90);
+      v.players.forEach((p, i) => {
+        const box = i !== v.seat && !p.out && oppBox(i);
+        if (box) for (let k = 0; k < 3; k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 110, s1: 0.4 });
+      });
+    } else if (fresh.length) flyFromDeck(fresh, v, true, 180);
+
+    if (ev && ev.type === 'play' && v.top) {
+      // the played card flies to the pile from my hand or from the opponent's panel
+      const fromOpp = !playFrom && oppBox(ev.pi);
+      const from = playFrom || (fromOpp && cardBoxAt(fromOpp));
+      const topEl = pl.lastElementChild;
+      if (from && topEl) {
+        const id = v.top.id;
+        flyingTop = id;
+        topEl.style.opacity = '0';
+        fly(cardEl(v.top), from, topEl.getBoundingClientRect(), {
+          s0: fromOpp ? 0.4 : 1,
+          done: () => {
+            if (flyingTop === id) flyingTop = null;
+            const cur = $('pile').lastElementChild;
+            if (cur) cur.style.opacity = '';
+          }
+        });
+      }
+    } else if (ev && ev.type === 'draw' && ev.pi !== v.seat) {
+      // an opponent takes cards: backs fly from the deck to their panel
+      const box = oppBox(ev.pi);
+      if (box) for (let k = 0; k < Math.min(ev.k, 4); k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 150, s1: 0.4 });
+    }
 
     const a = $('actions'); a.innerHTML = '';
     if (myTurn && v.drew && hasMove) {
@@ -655,35 +709,52 @@
     return fresh;
   }
 
-  // A copy of each new card flies from the deck to its place in the hand.
-  function flyFromDeck(fresh, v) {
+  // ----- card animations: a copy of the card flies, the real one appears when it lands -----
+  function backEl() {
+    const el = document.createElement('div');
+    el.className = 'card back';
+    return el;
+  }
+  function fly(node, from, to, opt = {}) {
+    const { delay = 0, s0 = 1, s1 = 1, dur = 450, done } = opt;
+    let ended = false;
+    const end = () => { if (ended) return; ended = true; node.remove(); if (done) done(); };
+    if (!node.animate) { if (done) done(); return; }
+    node.style.cssText += `;position:fixed;left:${from.left}px;top:${from.top}px;margin:0;z-index:5;pointer-events:none`;
+    document.body.appendChild(node);
+    const a = node.animate(
+      [{ transform: `translate(0,0) scale(${s0})` },
+       { transform: `translate(${to.left - from.left}px,${to.top - from.top}px) scale(${s1})` }],
+      { duration: dur, delay, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' });
+    a.onfinish = end;
+    a.oncancel = end;
+    setTimeout(end, dur + delay + 250);        // safety net if the animation is paused (hidden tab)
+  }
+  // a card-sized spot centred on an element (the small opponent panels)
+  function cardBoxAt(el) {
+    const r = el.getBoundingClientRect(), d = $('deck').getBoundingClientRect();
+    return { left: r.left + r.width / 2 - d.width / 2, top: r.top + r.height / 2 - d.height / 2 };
+  }
+  // cards fly from the deck to their places in my hand; `mark` frames them as newly drawn
+  function flyFromDeck(ids, v, mark, step) {
     const mh = $('myHand');
-    const first = mh.querySelector(`[data-id="${fresh[0]}"]`);
+    const first = mark && mh.querySelector(`[data-id="${ids[0]}"]`);
     if (first && first.scrollIntoView) first.scrollIntoView({ inline: 'center', block: 'nearest' });
     const from = $('deck').getBoundingClientRect();
-    fresh.forEach((id, i) => {
+    ids.forEach((id, i) => {
       const el = mh.querySelector(`[data-id="${id}"]`);
       const c = v.hand.find(x => x.id === id);
       if (!el || !c) return;
-      const to = el.getBoundingClientRect();
-      const ghost = cardEl(c, 'new');
-      ghost.style.cssText = `position:fixed;left:${from.left}px;top:${from.top}px;margin:0;z-index:5;pointer-events:none`;
-      const done = () => {
-        ghost.remove();
-        flying.delete(id);
-        const cur = $('myHand').querySelector(`[data-id="${id}"]`);
-        if (cur) cur.style.opacity = '';
-      };
-      if (!ghost.animate) return;
-      document.body.appendChild(ghost);
       flying.add(id);
       el.style.opacity = '0';
-      const anim = ghost.animate(
-        [{ transform: 'translate(0,0) scale(1.15)' }, { transform: `translate(${to.left - from.left}px,${to.top - from.top}px) scale(1)` }],
-        { duration: 550, delay: i * 180, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' });
-      anim.onfinish = done;
-      anim.oncancel = done;
-      setTimeout(done, 550 + i * 180 + 250);   // safety net if the animation is paused (hidden tab)
+      fly(cardEl(c, mark ? 'new' : ''), from, el.getBoundingClientRect(), {
+        delay: i * step, dur: 500, s0: 1.1,
+        done: () => {
+          flying.delete(id);
+          const cur = $('myHand').querySelector(`[data-id="${id}"]`);
+          if (cur) cur.style.opacity = '';
+        }
+      });
     });
   }
 
@@ -736,6 +807,7 @@
     if (peer) { try { peer.destroy(); } catch {} }
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
+    animRound = 0; prevHand = null; flyingTop = null;
     $('warn').textContent = '';
     showOnly('setup');
     if (typeof checkVersion === 'function') checkVersion();
