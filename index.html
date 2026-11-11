@@ -188,7 +188,7 @@
        Туз — пропуск хода, шестёрка — соседу 2 карты и пропуск хода.<br>
        Втроём и больше шестёрку можно перевести своей шестёркой: следующему +2 карты.<br>
        Дама кладётся на любую карту и заказывает масть.<br>
-       Шестёркой и тузом закончить нельзя.<br>
+       На шестёрке и тузе раунд не кончается: кто остался без карт, ждёт, пока их накроют.<br>
        102 очка — проигрыш, ровно 101 — счёт обнуляется.</p>
     <h3>С ботами</h3>
     <div class="row">
@@ -256,7 +256,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 21;                 // keep in sync with www/version.txt
+  const VERSION = 22;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -270,6 +270,7 @@
   let sixRun = 0, passStreak = 0, starter = 0, roundNo = 0, phase = 'setup';
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
   let evSeq = 0, lastEv = null, viewRev = 0;
+  let emptySeq = 0;               // order in which players ran out of cards
   let pendingSix = 0;             // 3+ players: cards the current player must take unless they add a six   // the last card event (who played / who drew), so screens can animate it
 
   // ----- session state -----
@@ -378,8 +379,13 @@
     if (opened) say(me => `Открыта карта ${label(card)} — это ${pi === me ? 'ваш ход' : 'ход: ' + p.name}`);
     else say(who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card)));
 
-    // a six or an ace cannot finish the round: the player stays in and draws on their next turn
-    if (p.hand.length === 0 && !isSpecialEnd(card)) { later(() => endRound(pi), PLAY_PAUSE); return; }
+    // Nobody wins on a six or an ace: a player left without cards waits until that card is covered.
+    // The first ordinary card on the pile ends the round for whoever ran out of cards first.
+    if (p.hand.length === 0) p.emptySince = ++emptySeq;
+    if (!isSpecialEnd(card)) {
+      const w = firstOut();
+      if (w >= 0) { later(() => endRound(w), PLAY_PAUSE); return; }
+    }
 
     if (card.r === 12) {                      // queen: choose a suit
       if (chosenSuit) {                        // the player picked the suit before laying the queen
@@ -435,9 +441,19 @@
     step();
   }
 
+  // the player without cards who has been waiting the longest (-1 if everybody still has cards)
+  function firstOut() {
+    let best = -1;
+    players.forEach((p, i) => {
+      if (!p.out && !p.hand.length && (best < 0 || (p.emptySince || 0) < (players[best].emptySince || 0))) best = i;
+    });
+    return best;
+  }
+
   function pass() {
     passStreak++;
-    say(who(turn, 'пасуете', 'пасует'));
+    if (players[turn].hand.length) say(who(turn, 'пасуете', 'пасует'));
+    else say(who(turn, 'без карт: ждёте, пока накроют', 'без карт: ждёт, пока накроют'));
     if (passStreak >= active().length && !deck.length && pile.length <= 1) { endRound(-1); return; }
     turn = nextIdx(turn);
     drew = false;
@@ -448,6 +464,9 @@
     render();
     if (phase !== 'play') return;
     const p = players[turn];
+    if (active().every(x => !x.hand.length)) { endRound(firstOut()); return; }   // nobody can cover any more
+    // without cards there is nothing to do: wait (or take the cards stacked by sixes)
+    if (!p.hand.length) { later(pendingSix ? takePenalty : pass); return; }
     if (p.isBot) later(botTurn);
     else if (drew && !p.hand.some(canPlay)) later(pendingSix ? takePenalty : pass);
   }
@@ -684,7 +703,9 @@
     $('histList').innerHTML = v.log.slice().reverse().map(l => `<li>${esc(l)}</li>`).join('') || '<li>Ходов пока нет</li>';
 
     const mb = $('meBar');
-    const hint = me.out ? ' · вы выбыли' : !myTurn ? ''
+    const hint = me.out ? ' · вы выбыли'
+      : !v.hand.length && v.phase === 'play' ? ' · карт нет: ждём, пока вашу карту накроют'
+      : !myTurn ? ''
       : v.pendingSix ? (hasMove ? ' · подкиньте шестёрку или берите' : v.drew ? '' : ' · берите карты или попробуйте вытянуть шестёрку')
       : hasMove ? ' · ваш ход' : v.drew ? '' : ' · нет карты — нажмите на стол, чтобы взять';
     mb.textContent = `Ваши очки: ${me.score}${hint}`;
