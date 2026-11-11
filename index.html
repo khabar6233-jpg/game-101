@@ -204,6 +204,7 @@
   <div class="dialog">
     <h2>Закажите масть</h2>
     <div class="suits" id="suitBtns"></div>
+    <button class="btn plain" id="suitCancel" style="margin-top:14px;width:100%">Отмена</button>
   </div>
 </div>
 
@@ -223,7 +224,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 6;                       // keep in sync with www/version.txt
+  const VERSION = 7;                      // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
@@ -237,7 +238,7 @@
 
   // ----- session state -----
   let mode = 'solo';            // 'solo' | 'host' | 'guest'
-  let mySeat = 0, view = null, lastTopId = -1;
+  let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '';
 
   const $ = id => document.getElementById(id);
@@ -317,7 +318,7 @@
     return n;
   }
 
-  function playCard(pi, card, opened) {
+  function playCard(pi, card, opened, chosenSuit) {
     const p = players[pi];
     const i = p.hand.indexOf(card);
     if (i >= 0) p.hand.splice(i, 1);
@@ -332,7 +333,10 @@
     if (p.hand.length === 0 && !isSpecialEnd(card)) { endRound(pi); return; }
 
     if (card.r === 12) {                      // queen: choose a suit
-      if (p.isBot) {
+      if (chosenSuit) {                        // the player picked the suit before laying the queen
+        suit = chosenSuit;
+        say(who(pi, 'заказываете ' + suit, 'заказывает ' + suit));
+      } else if (p.isBot) {
         suit = botSuit(p);
         say(`${p.name} заказывает ${suit}`);
       } else {
@@ -405,7 +409,7 @@
     const p = players[seat];
     if (a.t === 'play') {
       const c = p.hand.find(x => x.id === a.id);
-      if (c && canPlay(c)) playCard(seat, c);
+      if (c && canPlay(c)) playCard(seat, c, false, c.r === 12 && SUITS.includes(a.s) ? a.s : null);
     } else if (a.t === 'draw') {
       if (drew) return;
       drew = true;
@@ -524,6 +528,7 @@
     const me = v.players[v.seat];
     const myTurn = v.phase === 'play' && v.turn === v.seat && !v.busy;
     const hasMove = v.hand.some(c => c.ok);
+    if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
     $('roundNo').textContent = v.roundNo;
     $('roomTag').textContent = v.room ? ' · комната ' + v.room : '';
 
@@ -566,7 +571,7 @@
     $('status').innerHTML = v.log.map((l, i) => `<div class="${i < v.log.length - 1 ? 'old' : ''}">${esc(l)}</div>`).join('');
 
     const mb = $('meBar');
-    const hint = me.out ? ' · вы выбыли' : !myTurn ? '' : hasMove ? ' · ваш ход' : v.drew ? '' : ' · нет карты — берите из колоды';
+    const hint = me.out ? ' · вы выбыли' : !myTurn ? '' : hasMove ? ' · ваш ход' : v.drew ? '' : ' · нет карты — нажмите на стол, чтобы взять';
     mb.textContent = `Ваши очки: ${me.score}${hint}`;
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
@@ -574,7 +579,12 @@
     v.hand.forEach(c => {
       const ok = myTurn && c.ok;
       const el = cardEl(c, ok ? 'ok' : 'no');
-      if (ok) el.onclick = () => action({ t: 'play', id: c.id });
+      if (ok) el.onclick = () => {
+        // a queen asks for the suit first, so the move can still be cancelled
+        if (c.r === 12 && v.hand.length > 1) { localQueen = c.id; draw(v); }
+        else action({ t: 'play', id: c.id });
+      };
+      if (c.id === localQueen) el.style.transform = 'translateY(-26px)';
       mh.appendChild(el);
     });
 
@@ -586,7 +596,8 @@
       a.appendChild(b);
     }
 
-    $('suitPick').classList.toggle('show', v.choose);
+    $('suitPick').classList.toggle('show', v.choose || localQueen !== null);
+    $('suitCancel').style.display = localQueen !== null ? '' : 'none';
     drawResult(v);
   }
 
@@ -746,8 +757,22 @@
     const b = document.createElement('button');
     b.textContent = s;
     if (RED.has(s)) b.className = 'red';
-    b.onclick = () => action({ t: 'suit', s });
+    b.onclick = () => {
+      if (localQueen !== null) {
+        const id = localQueen;
+        localQueen = null;
+        $('suitPick').classList.remove('show');
+        action({ t: 'play', id, s });
+      } else action({ t: 'suit', s });
+    };
     $('suitBtns').appendChild(b);
+  });
+  $('suitCancel').onclick = () => { localQueen = null; if (view) draw(view); };
+  // tapping anywhere on the table (everything above "Ваши очки") draws a card
+  $('app').addEventListener('click', e => {
+    if (e.target.closest('.hand-me, .me-bar, .actions, .bar, #deck')) return;
+    const v = view;
+    if (v && v.phase === 'play' && v.turn === v.seat && !v.busy && !v.drew) action({ t: 'draw' });
   });
   document.querySelectorAll('[data-bots]').forEach(b => {
     b.onclick = () => {
