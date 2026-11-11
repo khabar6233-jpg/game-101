@@ -44,6 +44,8 @@
   .bar b { color: var(--text); font-size: 18px; }
   .btn-small { background: rgba(255,255,255,.12); border: 0; color: var(--text); padding: 6px 12px; border-radius: 8px; font-size: 14px; }
 
+  .warn { text-align: center; font-size: 13px; line-height: 1.3; color: #ffd9a0; }
+  .warn:empty { display: none; }
   .opps { display: flex; gap: 8px; justify-content: center; }
   .opp {
     flex: 1; max-width: 200px; min-width: 0;
@@ -100,11 +102,8 @@
   }
   .card.red { color: var(--red); }
   /* a card just taken from the deck */
-  .card.new, .hand-me .card.new { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); filter: none; }
-  .card.new::after {
-    content: ''; position: absolute; right: 5px; top: 5px; width: 8px; height: 8px;
-    border-radius: 50%; background: var(--gold);
-  }
+  /* only a frame: the card is still dimmed when it cannot be played */
+  .card.new { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); }
   .card .tl { position: absolute; left: 5px; top: 3px; font-size: calc(var(--cw) * .27); line-height: 1; text-align: center; }
   .card .tl small { display: block; font-size: calc(var(--cw) * .25); }
   .card .mid { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .55); }
@@ -150,6 +149,7 @@
     <span><b>101</b> · раунд <span id="roundNo">1</span><span id="roomTag"></span></span>
     <button class="btn-small" id="newBtn">Выйти</button>
   </div>
+  <div class="warn" id="warn"></div>
   <div class="opps" id="opps"></div>
 
   <div class="middle">
@@ -230,7 +230,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 9;                    // keep in sync with www/version.txt
+  const VERSION = 10;                   // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
@@ -247,7 +247,7 @@
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Set();
   const flying = new Set();
-  let peer = null, hostConn = null, lobby = null, started = false, roomCode = '';
+  let peer = null, hostConn = null, lobby = null, started = false, roomCode = '', hostVer = 0;
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -499,7 +499,7 @@
   function viewFor(seat) {
     const t = top();
     return {
-      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode,
+      seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION,
       top: t ? { s: t.s, r: t.r, id: t.id } : null,
       tail: pile.slice(-PILE_SHOWN).map(c => ({ s: c.s, r: c.r, id: c.id })),
       deckCount: deck.length, pileCount: pile.length,
@@ -538,7 +538,12 @@
     const hasMove = v.hand.some(c => c.ok);
     if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
     $('roundNo').textContent = v.roundNo;
-    $('roomTag').textContent = v.room ? ' · комната ' + v.room : '';
+    $('roomTag').textContent = (v.room ? ' · комната ' + v.room : '') + ' · v' + VERSION;
+    // the room owner's device applies the rules, so a version mismatch matters
+    const hv = v.ver || 0;
+    $('warn').textContent = mode !== 'guest' || hv === VERSION ? ''
+      : hv < VERSION ? 'У хозяина комнаты старая версия игры: правила могут отличаться. Пусть он обновит игру.'
+      : 'У вас старая версия игры. Выйдите и обновите её.';
 
     const o = $('opps'); o.innerHTML = '';
     for (let k = 1; k < v.players.length; k++) {
@@ -709,8 +714,10 @@
     phase = 'setup';
     if (peer) { try { peer.destroy(); } catch {} }
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
-    mode = 'solo'; mySeat = 0; players = [];
+    mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
+    $('warn').textContent = '';
     showOnly('setup');
+    if (typeof checkVersion === 'function') checkVersion();
   }
 
   // ----- host -----
@@ -744,7 +751,7 @@
         if (!lobby || !lobby.some(s => s.conn === conn)) { conn.send({ t: 'full' }); }
         return;
       }
-      lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false });
+      lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false, ver: +d.ver || 0 });
       drawLobby();
       return;
     }
@@ -774,15 +781,16 @@
 
   function drawLobby() {
     const host = mode === 'host';
-    const names = host ? lobby.map(s => s.name) : lobby;
+    const names = host ? lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? ' (другая версия игры)' : '')) : lobby;
     $('lobCode').textContent = roomCode;
-    $('lobHint').textContent = host ? 'Скажите этот код друзьям. Не закрывайте игру, пока идёт партия.' : 'Ждём, пока хозяин комнаты начнёт игру…';
+    $('lobHint').textContent = host ? 'Скажите этот код друзьям. Не закрывайте игру, пока идёт партия.'
+      : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
     $('lobList').innerHTML = names.map(n => `<li>${esc(n)}</li>`).join('');
     $('addBotBtn').style.display = host && names.length < MAX_PLAYERS ? '' : 'none';
     $('startBtn').style.display = host ? '' : 'none';
     $('startBtn').disabled = names.length < 2;
     showOnly('lobby');
-    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names }); });
+    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION }); });
   }
 
   // ----- guest -----
@@ -799,10 +807,10 @@
     p.on('open', () => {
       const conn = p.connect(ROOM_PREFIX + code, { reliable: true });
       hostConn = conn;
-      conn.on('open', () => { mode = 'guest'; roomCode = code; conn.send({ t: 'join', name }); });
+      conn.on('open', () => { mode = 'guest'; roomCode = code; conn.send({ t: 'join', name, ver: VERSION }); });
       conn.on('data', d => {
         if (!d || typeof d !== 'object') return;
-        if (d.t === 'lobby') { joined = true; lobby = d.names; netMsg(''); drawLobby(); }
+        if (d.t === 'lobby') { joined = true; lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
         else if (d.t === 'view') { joined = true; $('setup').classList.remove('show'); $('lobby').classList.remove('show'); view = d.v; draw(view); }
         else if (d.t === 'full') fail('Комната заполнена или игра уже идёт');
       });
@@ -863,16 +871,22 @@
 
   // ----- version: shown on the start screen; an old cached page reloads itself -----
   $('ver').textContent = 'версия ' + VERSION;
-  fetch(SITE + 'version.txt?' + Date.now(), { cache: 'no-store' })
-    .then(r => (r.ok ? r.text() : ''))
-    .then(t => {
-      const latest = parseInt(t, 10);
-      if (!(latest > VERSION)) return;
-      const onSite = location.href.startsWith(SITE);
-      if (onSite && !location.search.includes('v=' + latest)) location.replace(location.pathname + '?v=' + latest);
-      else $('ver').textContent = `версия ${VERSION} устарела — скачайте новую (${latest})`;
-    })
-    .catch(() => {});
+  function checkVersion() {
+    fetch(SITE + 'version.txt?' + Date.now(), { cache: 'no-store' })
+      .then(r => (r.ok ? r.text() : ''))
+      .then(t => {
+        const latest = parseInt(t, 10);
+        if (!(latest > VERSION)) return;
+        const onSite = location.href.startsWith(SITE);
+        const idle = phase === 'setup' && mode === 'solo' && !peer;   // never reload in the middle of a game
+        if (onSite && idle && !location.search.includes('v=' + latest)) location.replace(location.pathname + '?v=' + latest);
+        else $('ver').textContent = `версия ${VERSION} устарела — ${onSite ? 'выйдите на этот экран, игра обновится' : 'скачайте новую'} (${latest})`;
+      })
+      .catch(() => {});
+  }
+  checkVersion();
+  setInterval(checkVersion, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
 })();
 </script>
 </body>
