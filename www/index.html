@@ -71,8 +71,7 @@
 
   .status { text-align: center; min-height: 44px; font-size: 15px; line-height: 22px; }
   .status .old { color: var(--muted); font-size: 13px; }
-  .status { cursor: pointer; }
-  .status .more { color: var(--muted); font-size: 12px; line-height: 18px; text-decoration: underline; }
+  .status .more { display: inline-block; cursor: pointer; color: var(--muted); font-size: 12px; line-height: 18px; text-decoration: underline; padding: 2px 6px; }
   .hist { list-style: none; padding: 0; margin: 0 0 16px; text-align: left; font-size: 15px; }
   .hist li { padding: 7px 4px; border-bottom: 1px solid #eee; }
   .hist li:first-child { font-weight: 700; }
@@ -247,7 +246,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 14;                 // keep in sync with www/version.txt
+  const VERSION = 15;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
@@ -987,7 +986,7 @@
   // tapping anywhere on the table (everything above "Ваши очки") draws a card
   $('app').addEventListener('click', e => {
     if (suppressClick || !e.target.isConnected) return;
-    if (e.target.closest('#status')) { if (view) $('history').classList.add('show'); return; }   // move history
+    if (e.target.closest('#status .more')) { if (view) $('history').classList.add('show'); return; }   // move history
     if (e.target.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, #deck')) return;
     const v = view;
     if (v && v.phase === 'play' && v.turn === v.seat && !v.busy && !v.drew) action({ t: 'draw' });
