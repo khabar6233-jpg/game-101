@@ -182,6 +182,7 @@
       </div>
       <div class="msg" id="netMsg"></div>
     </div>
+    <p id="ver" style="margin:10px 0 0;font-size:12px;color:#888"></p>
   </div>
 </div>
 
@@ -222,6 +223,8 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
+  const VERSION = 6;                       // keep in sync with www/version.txt
+  const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, DELAY = 850, MAX_PLAYERS = 4;
   const PEER_LIB = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
@@ -772,6 +775,19 @@
     leave();
   };
   try { $('nick').value = localStorage.getItem('g101-name') || ''; } catch {}
+
+  // ----- version: shown on the start screen; an old cached page reloads itself -----
+  $('ver').textContent = 'версия ' + VERSION;
+  fetch(SITE + 'version.txt?' + Date.now(), { cache: 'no-store' })
+    .then(r => (r.ok ? r.text() : ''))
+    .then(t => {
+      const latest = parseInt(t, 10);
+      if (!(latest > VERSION)) return;
+      const onSite = location.href.startsWith(SITE);
+      if (onSite && !location.search.includes('v=' + latest)) location.replace(location.pathname + '?v=' + latest);
+      else $('ver').textContent = `версия ${VERSION} устарела — скачайте новую (${latest})`;
+    })
+    .catch(() => {});
 })();
 </script>
 </body>
