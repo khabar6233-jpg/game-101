@@ -111,8 +111,12 @@
   }
   .card.red { color: var(--red); }
   /* a card just taken from the deck */
-  /* only a frame: the card is still dimmed when it cannot be played */
-  .card.new { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); }
+  /* a soft gold frame that fades away: it only points at the card that was just drawn */
+  @keyframes newFade {
+    0%, 30% { box-shadow: 0 0 0 2px var(--gold), 0 0 10px 2px rgba(242,193,78,.5); }
+    100%    { box-shadow: 0 0 0 0 rgba(242,193,78,0), 0 2px 6px 0 rgba(0,0,0,.35); }
+  }
+  .card.new { animation: newFade 3.5s ease-out both; }
   .card .tl { position: absolute; left: 5px; top: 3px; font-size: calc(var(--cw) * .27); line-height: 1; text-align: center; }
   .card .tl small { display: block; font-size: calc(var(--cw) * .25); }
   .card .mid { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .55); }
@@ -156,7 +160,10 @@
 <div id="app">
   <div class="bar">
     <span><b>101</b> · раунд <span id="roundNo">1</span><span id="roomTag"></span></span>
-    <button class="btn-small" id="newBtn">Выйти</button>
+    <span style="display:flex;gap:6px">
+      <button class="btn-small" id="syncBtn" style="display:none" aria-label="Обновить связь">⟳</button>
+      <button class="btn-small" id="newBtn">Выйти</button>
+    </span>
   </div>
   <div class="warn" id="warn"></div>
   <div class="opps" id="opps"></div>
@@ -248,8 +255,9 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 18;                 // keep in sync with www/version.txt
+  const VERSION = 19;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
+  const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, MAX_PLAYERS = 4;
@@ -265,9 +273,9 @@
   // ----- session state -----
   let mode = 'solo';            // 'solo' | 'host' | 'guest'
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
-  let prevHand = null, prevRound = 0, newIds = new Set();
+  let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
-  let dropFrom = null, suppressClick = false;
+  let dropFrom = null, suppressClick = false, pendingPlay = null;
   const flying = new Set();
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '', hostVer = 0;
 
@@ -571,6 +579,11 @@
       : hv < VERSION ? 'У хозяина комнаты старая версия игры: правила могут отличаться. Пусть он обновит игру.'
       : 'У вас старая версия игры. Выйдите и обновите её.';
 
+    if (pendingPlay && (!v.hand.some(c => c.id === pendingPlay.id) || Date.now() - pendingPlay.t > 2500)) {
+      pendingPlay.ghost.remove();
+      pendingPlay = null;
+    }
+    $('syncBtn').style.display = mode === 'solo' ? 'none' : '';
     // what just happened, so the right card can be animated
     const roundChanged = v.roundNo !== animRound;
     animRound = v.roundNo;
@@ -647,9 +660,11 @@
     const fresh = trackNewCards(v);
     v.hand.forEach(c => {
       const ok = myTurn && c.ok;
-      const el = cardEl(c, (ok ? 'ok' : 'no') + (newIds.has(c.id) ? ' new' : ''));
+      const age = newIds.has(c.id) ? Date.now() - newIds.get(c.id) : NEW_MS;
+      const el = cardEl(c, (ok ? 'ok' : 'no') + (age < NEW_MS ? ' new' : ''));
+      if (age < NEW_MS) el.style.animationDelay = -age + 'ms';      // a redraw continues the fade, not restarts it
       el.dataset.id = c.id;
-      if (flying.has(c.id)) el.style.opacity = '0';
+      if (flying.has(c.id) || (pendingPlay && pendingPlay.id === c.id)) el.style.opacity = '0';
       if (ok) {
         // stopPropagation: the tap must not also reach the table, where a tap draws a card
         el.onclick = e => { e.stopPropagation(); if (!suppressClick) playFromHand(c.id); };
@@ -710,12 +725,12 @@
   function trackNewCards(v) {
     const ids = v.hand.map(c => c.id);
     let fresh = [];
-    if (!prevHand || v.roundNo !== prevRound) newIds = new Set();
+    if (!prevHand || v.roundNo !== prevRound) newIds = new Map();
     else {
       const added = ids.filter(id => !prevHand.has(id));
       const removed = [...prevHand].some(id => !ids.includes(id));
-      if (removed) newIds = new Set();
-      if (added.length && added.length < ids.length) { newIds = new Set(added); fresh = added; }
+      if (removed) newIds = new Map();
+      if (added.length && added.length < ids.length) { newIds = new Map(added.map(id => [id, Date.now()])); fresh = added; }
     }
     prevHand = new Set(ids);
     prevRound = v.roundNo;
@@ -725,12 +740,13 @@
   // Play a card from my hand (tap or swipe). A queen asks for the suit first, so it can be cancelled.
   function playFromHand(id, from) {
     const v = view;
-    if (!v || !(v.phase === 'play' && v.turn === v.seat && !v.busy)) return;
+    if (!v || !(v.phase === 'play' && v.turn === v.seat && !v.busy)) return false;
     const c = v.hand.find(x => x.id === id);
-    if (!c || !c.ok) return;
-    if (c.r === 12 && v.hand.length > 1) { localQueen = id; draw(v); return; }
+    if (!c || !c.ok) return false;
+    if (c.r === 12 && v.hand.length > 1) { localQueen = id; draw(v); return 'picker'; }
     dropFrom = from || null;
     action({ t: 'play', id });
+    return 'sent';
   }
 
   // Swipe a card up out of the hand to throw it on the pile.
@@ -761,11 +777,26 @@
       setTimeout(() => { suppressClick = false; }, 350);
       const g = ghost.getBoundingClientRect();
       const line = document.querySelector('.zone-line').getBoundingClientRect().top;
-      ghost.remove();
-      const cur = $('myHand').querySelector(`[data-id="${c.id}"]`);
-      if (cur) cur.style.opacity = '';
+      const restore = () => {
+        ghost.remove();
+        const cur = $('myHand').querySelector(`[data-id="${c.id}"]`);
+        if (cur) cur.style.opacity = '';
+      };
       // thrown far enough: past the line above the hand
-      if (ev.type === 'pointerup' && g.top + g.height / 2 < line) playFromHand(c.id, { left: g.left, top: g.top });
+      const thrown = ev.type === 'pointerup' && g.top + g.height / 2 < line;
+      if (!thrown) { restore(); return; }
+      const sent = playFromHand(c.id, { left: g.left, top: g.top });
+      if (sent === 'sent' && mode === 'guest') {
+        // the room has not answered yet: the card stays where it was dropped instead of jumping back
+        const id = c.id;
+        pendingPlay = { id, ghost, t: Date.now() };
+        const cur = $('myHand').querySelector(`[data-id="${id}"]`);
+        if (cur) cur.style.opacity = '0';
+        setTimeout(() => {
+          if (pendingPlay && pendingPlay.id === id && pendingPlay.ghost === ghost) { ghost.remove(); pendingPlay = null; if (view) draw(view); }
+        }, 2500);
+      } else if (sent === 'sent') ghost.remove();
+      else restore();
     };
     window.addEventListener('pointermove', move, { passive: false });
     window.addEventListener('pointerup', end);
@@ -921,6 +952,12 @@
       get up() { return up; },
       sub(t) { subs.add(t); if (up) sendSub(t); },
       pub(t, text) { if (up && ws.readyState === 1) ws.send(packet(0x30, [...str(t), ...enc.encode(text)])); },
+      reconnect() {
+        if (!alive) return;
+        try { ws.onclose = null; ws.onmessage = null; ws.close(); } catch {}
+        up = false; buf = new Uint8Array(0); clearInterval(pingT);
+        open();
+      },
       close() {
         alive = false; up = false; clearInterval(pingT);
         try { if (ws.readyState === 1) ws.send(new Uint8Array([0xE0, 0])); ws.close(); } catch {}
@@ -950,6 +987,7 @@
       sub(t) { links.forEach(l => l.sub(t)); },
       send(t, d) { const text = JSON.stringify({ f: id, q: ++seq, d }); links.forEach(l => l.pub(t, text)); },
       close() { links.forEach(l => l.close()); },
+      reconnect() { links.forEach(l => l.reconnect()); },
       async ready(ms) {
         const t0 = Date.now();
         while (!anyUp() && Date.now() - t0 < ms) await pause(100);
@@ -1157,6 +1195,20 @@
     };
     $('suitBtns').appendChild(b);
   });
+  // reconnect to the relay servers and fetch the current state (for a frozen or broken game)
+  $('syncBtn').onclick = async () => {
+    const n = peer;
+    if (!n) return;
+    $('warn').textContent = 'Обновляем связь…';
+    n.reconnect();
+    const ok = await n.ready(8000);
+    if (peer !== n) return;
+    if (!ok) { $('warn').textContent = 'Нет связи с игровым сервером. Проверьте интернет и нажмите ⟳ ещё раз.'; return; }
+    await pause(400);
+    if (peer !== n) return;
+    if (mode === 'guest' && hostConn) { $('warn').textContent = 'Связь обновлена, ждём ответ комнаты…'; hostConn.send({ t: 'ping' }); }
+    else if (mode === 'host') { $('warn').textContent = ''; render(); }
+  };
   $('histClose').onclick = () => $('history').classList.remove('show');
   $('history').onclick = e => { if (e.target === $('history')) $('history').classList.remove('show'); };
   $('suitCancel').onclick =() => { localQueen = null; if (view) draw(view); };
