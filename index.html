@@ -98,6 +98,7 @@
   .hand-me .inner { display: flex; margin: 0 auto; padding-right: 4px; }
   .hand-me .card { margin-left: calc(var(--cw) * -0.38); transition: transform .15s; }
   .hand-me .card:first-child { margin-left: 0; }
+  .hand-me .card { touch-action: pan-x; }   /* sideways scrolls the hand, upward throws the card */
   .hand-me .card.ok { transform: translateY(-14px); cursor: pointer; }
   .hand-me .card.no { filter: brightness(.72); }
 
@@ -246,7 +247,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 13;                 // keep in sync with www/version.txt
+  const VERSION = 14;                 // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
@@ -267,6 +268,7 @@
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Set();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
+  let dropFrom = null, suppressClick = false;
   const flying = new Set();
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '', hostVer = 0;
 
@@ -578,7 +580,8 @@
     let playFrom = null;
     if (ev && ev.type === 'play' && ev.pi === v.seat && v.top) {
       const old = $('myHand').querySelector(`[data-id="${v.top.id}"]`);
-      if (old) playFrom = old.getBoundingClientRect();     // where the card was in my hand
+      if (old) playFrom = dropFrom || old.getBoundingClientRect();   // where the card was (or where it was dropped)
+      dropFrom = null;
     }
 
     const o = $('opps'); o.innerHTML = '';
@@ -637,11 +640,11 @@
       const el = cardEl(c, (ok ? 'ok' : 'no') + (newIds.has(c.id) ? ' new' : ''));
       el.dataset.id = c.id;
       if (flying.has(c.id)) el.style.opacity = '0';
-      if (ok) el.onclick = () => {
-        // a queen asks for the suit first, so the move can still be cancelled
-        if (c.r === 12 && v.hand.length > 1) { localQueen = c.id; draw(v); }
-        else action({ t: 'play', id: c.id });
-      };
+      if (ok) {
+        // stopPropagation: the tap must not also reach the table, where a tap draws a card
+        el.onclick = e => { e.stopPropagation(); if (!suppressClick) playFromHand(c.id); };
+        el.onpointerdown = e => startDrag(e, el, c);
+      }
       if (c.id === localQueen) el.style.transform = 'translateY(-26px)';
       mh.appendChild(el);
     });
@@ -707,6 +710,56 @@
     prevHand = new Set(ids);
     prevRound = v.roundNo;
     return fresh;
+  }
+
+  // Play a card from my hand (tap or swipe). A queen asks for the suit first, so it can be cancelled.
+  function playFromHand(id, from) {
+    const v = view;
+    if (!v || !(v.phase === 'play' && v.turn === v.seat && !v.busy)) return;
+    const c = v.hand.find(x => x.id === id);
+    if (!c || !c.ok) return;
+    if (c.r === 12 && v.hand.length > 1) { localQueen = id; draw(v); return; }
+    dropFrom = from || null;
+    action({ t: 'play', id });
+  }
+
+  // Swipe a card up out of the hand to throw it on the pile.
+  function startDrag(e, el, c) {
+    if (e.button > 0) return;
+    const sx = e.clientX, sy = e.clientY, r = el.getBoundingClientRect();
+    let ghost = null;
+    const move = ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!ghost) {
+        if (!(dy < -10 && Math.abs(dy) > Math.abs(dx))) return;      // only an upward move starts a throw
+        ghost = cardEl(c);
+        ghost.style.cssText += `;position:fixed;left:${r.left}px;top:${r.top}px;margin:0;z-index:6;pointer-events:none;box-shadow:0 10px 20px rgba(0,0,0,.45)`;
+        document.body.appendChild(ghost);
+        el.style.opacity = '.25';
+      }
+      ghost.style.transform = `translate(${dx}px,${dy}px) rotate(${dx / 20}deg)`;
+      if (ev.cancelable) ev.preventDefault();
+    };
+    const end = ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (!ghost) return;                                            // it was a plain tap
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 350);
+      const g = ghost.getBoundingClientRect();
+      const line = document.querySelector('.zone-line').getBoundingClientRect().top;
+      ghost.remove();
+      const cur = $('myHand').querySelector(`[data-id="${c.id}"]`);
+      if (cur) cur.style.opacity = '';
+      // thrown far enough: past the line above the hand
+      if (ev.type === 'pointerup' && g.top + g.height / 2 < line) playFromHand(c.id, { left: g.left, top: g.top });
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   }
 
   // ----- card animations: a copy of the card flies, the real one appears when it lands -----
@@ -933,6 +986,7 @@
   $('suitCancel').onclick =() => { localQueen = null; if (view) draw(view); };
   // tapping anywhere on the table (everything above "Ваши очки") draws a card
   $('app').addEventListener('click', e => {
+    if (suppressClick || !e.target.isConnected) return;
     if (e.target.closest('#status')) { if (view) $('history').classList.add('show'); return; }   // move history
     if (e.target.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, #deck')) return;
     const v = view;
