@@ -12,6 +12,8 @@ $out = "$root\android\build"
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 New-Item -ItemType Directory -Force "$out\assets", "$out\classes", "$out\dex" | Out-Null
 Copy-Item "$root\www\index.html" "$out\assets\index.html"
+if (Test-Path "$out\assets\cards") { Remove-Item "$out\assets\cards" -Recurse -Force }
+Copy-Item "$root\www\cards" "$out\assets\cards" -Recurse -Force
 
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed" } }
 

@@ -19,9 +19,9 @@
     --text: #eaf5ee;
     --muted: #a9cbb6;
     /* cards are as big as the screen allows: by width, and by height so nothing has to scroll */
-    --cw: clamp(56px, min(19vw, 11vh), 92px);
-    --cw: clamp(56px, min(19vw, 11dvh), 92px);
-    --ch: calc(var(--cw) * 1.42);
+    --cw: clamp(56px, min(19vw, 10.5vh), 92px);
+    --cw: clamp(56px, min(19vw, 10.5dvh), 92px);
+    --ch: calc(var(--cw) * 1.5);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; }
@@ -67,7 +67,7 @@
   .opp .name { color: var(--text); font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .opp .minis { display: flex; justify-content: center; height: 34px; margin-top: 4px; }
   .mini { width: 22px; height: 32px; border-radius: 4px; margin-left: -14px; flex: none;
-    background: repeating-linear-gradient(45deg, #7a1f2b 0 4px, #942836 4px 8px); border: 2px solid #fff; }
+    background: var(--bk); border: 2px solid #fff; }
   .mini:first-child { margin-left: 0; }
 
   .middle { flex: 1; display: flex; align-items: center; justify-content: center; gap: 22px; min-height: 0; }
@@ -113,6 +113,8 @@
     position: relative; font-weight: 700; flex: none;
   }
   .card.red { color: var(--red); }
+  .card .art { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 8px; background: #fff;
+    pointer-events: none; -webkit-user-drag: none; }
   /* a card just taken from the deck */
   /* a soft gold frame that fades away: it only points at the card that was just drawn */
   @keyframes newFade {
@@ -130,7 +132,16 @@
     content: ''; position: absolute; width: 74%; aspect-ratio: 1; border-radius: 50%;
     border: 2px solid currentColor; outline: 1px solid currentColor; outline-offset: 3px; opacity: .45;
   }
-  .back { background: repeating-linear-gradient(45deg, #7a1f2b 0 6px, #942836 6px 12px); border: 3px solid #fff; }
+  .back { background: var(--bk); border: 3px solid #fff; }
+  /* card backs: every new game gets another one */
+  body { --bk: repeating-linear-gradient(45deg, #7a1f2b 0 6px, #942836 6px 12px); }
+  body[data-back="1"] { --bk: repeating-linear-gradient(45deg, rgba(255,255,255,.16) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.16) 0 2px, transparent 2px 9px), #1f4f8f; }
+  body[data-back="2"] { --bk: radial-gradient(circle, rgba(255,255,255,.34) 1.5px, transparent 2px) 0 0 / 9px 9px, #5b2a86; }
+  body[data-back="3"] { --bk: repeating-conic-gradient(#26262b 0 25%, #4a4130 0 50%) 0 0 / 12px 12px; }
+  body[data-back="4"] { --bk: repeating-linear-gradient(90deg, #b3541e 0 5px, #cf7430 5px 10px); }
+  body[data-back="5"] { --bk: repeating-linear-gradient(0deg, rgba(255,255,255,.14) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.14) 0 1px, transparent 1px 8px), #0f6f7a; }
   .empty-slot { width: var(--cw); height: var(--ch); border: 2px dashed rgba(255,255,255,.25); border-radius: 8px; }
 
   .overlay {
@@ -266,7 +277,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 28;              // keep in sync with www/version.txt
+  const VERSION = 29;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -281,6 +292,9 @@
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
   let evSeq = 0, lastEv = null, viewRev = 0;
   let emptySeq = 0;               // order in which players ran out of cards
+  const BACKS = 6;
+  let backNo = Math.floor(Math.random() * BACKS);   // which card back this game uses
+  let pend = null;                // what the engine timer is about to do (so another device can carry on)
   let pendingSix = 0;             // 3+ players: cards the current player must take unless they add a six   // the last card event (who played / who drew), so screens can animate it
 
   // ----- session state -----
@@ -332,6 +346,7 @@
     players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, hand: [], score: 0, out: false }));
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = []; result = null;
+    backNo = (backNo + 1 + Math.floor(Math.random() * (BACKS - 1))) % BACKS;
     showOnly(null);
     startRound();
   }
@@ -397,7 +412,7 @@
     if (p.hand.length === 0) p.emptySince = ++emptySeq;
     if (!isSpecialEnd(card)) {
       const w = lastOut();
-      if (w >= 0) { later(() => endRound(w), PLAY_PAUSE); return; }
+      if (w >= 0) { later('end', [w], PLAY_PAUSE); return; }
     }
 
     if (card.r === 12) {                      // queen: choose a suit
@@ -416,7 +431,7 @@
         return;
       }
     }
-    later(() => afterPlay(pi, card), PLAY_PAUSE);   // let everyone see the card before anything else happens
+    later('after', [pi, card.id], PLAY_PAUSE);   // let everyone see the card before anything else happens
   }
 
   function afterPlay(pi, card) {
@@ -478,17 +493,25 @@
     const p = players[turn];
     if (active().every(x => !x.hand.length)) { endRound(lastOut()); return; }   // nobody can cover any more
     // people press "Пас" / "Беру" themselves, so nobody can tell from the timing what they hold
-    if (p.isBot) later(botTurn);
+    if (p.isBot) later('bot');
   }
 
-  function later(fn, ms = DELAY) {
+  // delayed engine steps are named, not closures: the game state can then be handed to another device
+  const PEND = {
+    bot: () => botTurn(),
+    after: (pi, id) => afterPlay(pi, pile.find(c => c.id === id)),
+    end: w => endRound(w)
+  };
+  function later(k, a = [], ms = DELAY) {
     busy = true;
+    pend = { k, a };
     render();
     const g = gameId;
     setTimeout(() => {
       if (g !== gameId) return;                // a new game started meanwhile
       busy = false;
-      if (phase === 'play') fn();
+      pend = null;
+      if (phase === 'play') PEND[k](...a);
     }, ms);
   }
 
@@ -501,7 +524,7 @@
       say(who(seat, 'заказываете ' + a.s, 'заказывает ' + a.s));
       phase = 'play';
       const q = pendingQueen; pendingQueen = null;
-      later(() => afterPlay(q.pi, q.card), PLAY_PAUSE);
+      later('after', [q.pi, q.card.id], PLAY_PAUSE);
       return;
     }
     if (phase !== 'play' || turn !== seat || busy) return;
@@ -547,7 +570,7 @@
       p.hand.push(c);
       lastEv = { seq: ++evSeq, type: 'draw', pi: turn, k: 1 };
       say(`${p.name} берёт карту`);
-      later(botTurn);
+      later('bot');
       return;
     }
     // drop expensive cards first, attack with sixes, keep queens for later
@@ -588,6 +611,7 @@
     players.forEach(p => { p.score = 0; p.out = false; });
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = [];
+    backNo = (backNo + 1 + Math.floor(Math.random() * (BACKS - 1))) % BACKS;
     startRound();
   }
 
@@ -599,6 +623,7 @@
     const t = top();
     return {
       seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev, pendingSix,
+      term, back: backNo,
       top: t ? face(t) : null,
       tail: pile.slice(-PILE_SHOWN).map(face),
       hist: pile.slice(-HISTORY).map(face),
@@ -608,13 +633,16 @@
       hand: players[seat].hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })),
       log: log.map(f => f(seat)),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
-      result, canControl: seat === 0
+      result, canControl: seat === mySeat
     };
   }
 
   function render() {
     if (!players.length) return;
-    if (mode === 'host') players.forEach((p, i) => { if (p.conn && p.conn.open) p.conn.send({ t: 'view', v: viewFor(i) }); });
+    if (mode === 'host') {
+      const st = snapshot();
+      players.forEach((p, i) => { if (p.conn && p.conn.open) p.conn.send({ t: 'view', v: viewFor(i), st }); });
+    }
     view = viewFor(mySeat);
     try { draw(view); } catch (e) { console.error(e); }
   }
@@ -634,12 +662,23 @@
     13: '<svg viewBox="0 0 64 48"><path d="M8 38 4 14l15 11L32 8l13 17 15-11-4 24z"/><rect x="7" y="40" width="50" height="7" rx="2"/>' +
         '<path d="M30 0h4v3h3v4h-3v4h-4V7h-3V3h3z"/><circle cx="4" cy="12" r="3"/><circle cx="60" cy="12" r="3"/></svg>'
   };
+  for (let r = 11; r <= 14; r++) for (let i = 0; i < 4; i++) new Image().src = `cards/${r}_${i}.png`;   // load ahead
   function cardEl(c, extra = '') {
     const el = document.createElement('div');
     el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
     el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}<small>${c.s}</small></div>` +
       (ART[c.r] ? `<div class="mid face">${ART[c.r]}<span>${c.s}</span></div>`
                 : `<div class="mid${c.r === 14 ? ' ace' : ''}">${c.s}</div>`);
+    if (c.r >= 11) {
+      // jack, queen, king and ace are the classic "atlas" cards; if the picture is missing, the drawn card stays
+      const img = new Image();
+      img.className = 'art';
+      img.alt = '';
+      img.draggable = false;
+      img.onerror = () => img.remove();
+      img.src = `cards/${c.r}_${SUITS.indexOf(c.s)}.png`;
+      el.appendChild(img);
+    }
     return el;
   }
 
@@ -673,6 +712,7 @@
     drawWish = 0;
     wasMyTurn = myTurn;
     $('roundNo').textContent = v.roundNo;
+    document.body.dataset.back = v.back || 0;
     $('roomTag').textContent = (v.room ? ' · комната ' + v.room : '') + ' · v' + VERSION;
     // the room owner's device applies the rules, so a version mismatch matters
     const hv = v.ver || 0;
@@ -1106,11 +1146,12 @@
   function netOpen(onMessage) {
     const id = Math.random().toString(36).slice(2, 10);
     const seen = new Set();
-    let seq = 0;
+    let seq = 0, lastEcho = 0;
     const links = BROKERS.map((u, i) => mqttLink(u, 'g101_' + id + '_' + i, (topic, text) => {
       let m;
       try { m = JSON.parse(text); } catch { return; }
-      if (!m || typeof m.f !== 'string' || m.f === id) return;
+      if (!m || typeof m.f !== 'string') return;
+      if (m.f === id) { if (m.d && m.d.t === 'echo') lastEcho = Date.now(); return; }
       const key = m.f + ':' + m.q;
       if (seen.has(key)) return;
       seen.add(key);
@@ -1121,6 +1162,7 @@
     return {
       id,
       get up() { return anyUp(); },
+      get lastEcho() { return lastEcho; },
       sub(t) { links.forEach(l => l.sub(t)); },
       send(t, d) { const text = JSON.stringify({ f: id, q: ++seq, d }); links.forEach(l => l.pub(t, text)); },
       close() { links.forEach(l => l.close()); },
@@ -1138,9 +1180,14 @@
     phase = 'setup';
     clearInterval(netTimer);
     if (peer) {
-      try { if (mode === 'guest' && hostConn) hostConn.send({ t: 'bye' }); } catch {}
+      try {
+        if (mode === 'guest' && hostConn) hostConn.send({ t: 'bye' });
+        // the room owner leaves for good: the room is closed for everybody
+        else if (mode === 'host' && peer.id === ownerId) conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
+      } catch {}
       try { peer.close(); } catch {}
     }
+    conns.clear(); kicked.clear(); gJoined = false; gSnap = null; term = 1; ownerId = '';
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
     animRound = 0; prevHand = null; flyingTop = null;
@@ -1149,47 +1196,51 @@
     if (typeof checkVersion === 'function') checkVersion();
   }
 
-  // ----- host -----
-  async function createRoom(attempt = 0) {
-    netMsg('Создаём комнату…');
+  // ----- rooms -----
+  // The room owner's device starts as the host: it applies the rules. Every guest also receives the
+  // whole game state, so when the host stops answering (the game was minimised, the phone fell asleep)
+  // another player's device carries the game on, and the old host rejoins it as an ordinary player.
+  // The room is closed only when its owner presses "Выйти".
+  const TAKE_MS = 12000, TAKE_STEP = 6000;
+  const conns = new Map(), kicked = new Map();
+  let term = 1, ownerId = '';       // term grows with every change of host; the newest host wins
+  let gJoined = false, gHeard = 0, gRev = 0, gTerm = 0, gSnap = null, gT0 = 0, gName = '';
+  const hostTopic = code => TOPIC + code + '/h';
+  const topicOf = (code, id) => TOPIC + code + '/c/' + id;
+  const mkConn = (n, code, id) => ({ id, open: true, last: 0, send: x => n.send(topicOf(code, id), x) });
+  const quit = text => { leave(); netMsg(text); };
+
+  function snapshot() {
+    const me = peer ? peer.id : '';
+    return {
+      term, owner: ownerId, hostSeat: mySeat, back: backNo,
+      players: players.map((p, i) => ({
+        name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out, emptySince: p.emptySince || 0,
+        cid: p.isBot ? null : p.conn ? p.conn.id : i === mySeat ? me : null
+      })),
+      deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
+      queen: pendingQueen ? { pi: pendingQueen.pi, id: pendingQueen.card.id } : null,
+      result, evSeq, lastEv, viewRev,
+      log: log.map(f => players.map((_, i) => f(i)))
+    };
+  }
+  function restore(st) {
+    gameId++;
+    players = st.players.map(p => ({ name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out,
+      emptySince: p.emptySince, cid: p.cid, conn: null, lost: false }));
+    deck = st.deck; pile = st.pile; suit = st.suit; turn = st.turn; drew = st.drew; sixRun = st.sixRun;
+    pendingSix = st.pendingSix; emptySeq = st.emptySeq; passStreak = st.passStreak; starter = st.starter;
+    roundNo = st.roundNo; phase = st.phase; pend = st.pend; busy = false; backNo = st.back || 0;
+    pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
+    result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
+    log = st.log.map(lines => me => lines[me]);
+  }
+
+  // every few seconds: mark the players we have not heard from, and keep sending them the game
+  function hostTimer(n, code) {
     clearInterval(netTimer);
-    if (peer) { try { peer.close(); } catch {} }
-    const code = String(Math.floor(1000 + Math.random() * 9000));
-    const conns = new Map();
-    let taken = false;
-    const toGuest = id => TOPIC + code + '/c/' + id;
-    const n = netOpen((topic, from, d) => {
-      if (peer !== n || !d || typeof d !== 'object') return;
-      if (topic === toGuest(n.id)) { if (d.t === 'taken') taken = true; return; }
-      if (d.t === 'probe') { if (mode === 'host' && roomCode === code) n.send(toGuest(from), { t: 'taken' }); return; }
-      if (mode !== 'host' || roomCode !== code) return;
-      let conn = conns.get(from);
-      if (!conn) { conn = { id: from, open: true, last: 0, send: x => n.send(toGuest(from), x) }; conns.set(from, conn); }
-      if (conn.left) return;                                // left or was replaced by a bot
-      conn.last = Date.now();
-      if (d.t === 'bye') { conn.left = true; conn.open = false; onGuestGone(conn); return; }
-      if (d.t === 'ping') { resync(conn); return; }
-      onHostData(conn, d);
-    });
-    peer = n;
-    if (!(await n.ready(8000))) {
-      if (peer === n) { n.close(); peer = null; netMsg('Нет связи с игровым сервером. Проверьте интернет.'); }
-      return;
-    }
-    if (peer !== n) return;
-    n.sub(TOPIC + code + '/h');
-    n.sub(toGuest(n.id));
-    await pause(400);
-    n.send(TOPIC + code + '/h', { t: 'probe' });           // is this code already in use?
-    await pause(1000);
-    if (peer !== n) return;
-    if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
-    mode = 'host'; mySeat = 0; started = false; roomCode = code;
-    lobby = [{ name: myName(), conn: null, isBot: false }];
-    netMsg('');
-    drawLobby();
-    netTimer = setInterval(() => {                          // mark guests that have been silent for a minute
-      if (peer !== n || !started) return;
+    netTimer = setInterval(() => {
+      if (peer !== n || mode !== 'host' || !started) return;
       const now = Date.now();
       let changed = false;
       conns.forEach(c => {
@@ -1198,7 +1249,155 @@
         if (p && !!p.lost !== !!silent) { p.lost = !!silent; changed = true; }
       });
       if (changed) render();
+      // a device that wakes up after a long sleep finds the game again (or learns that it was replaced)
+      const st = snapshot();
+      players.forEach((p, i) => { if (p.conn && p.lost && !p.conn.left) p.conn.send({ t: 'view', v: viewFor(i), st }); });
+      kicked.forEach((t, id) => { if (now - t > 900000) kicked.delete(id); else n.send(topicOf(code, id), { t: 'kicked', term }); });
     }, PING_MS);
+  }
+
+  function hostMsg(n, code, topic, from, d) {
+    if (topic === topicOf(code, n.id)) {
+      // another device carries this game on with a newer state: join it as a player
+      if (d.t === 'view' && d.v && (d.v.term || 0) > term) becomeGuest(n, code, d);
+      else if (d.t === 'kicked' && (d.term || 0) > term) quit('Игра продолжилась без вас: вас заменили ботом');
+      else if (d.t === 'closed' && (d.term || 0) > term) quit('Хозяин комнаты вышел из игры. Игра окончена.');
+      return;
+    }
+    if (topic !== hostTopic(code)) return;
+    if (d.t === 'probe') { n.send(topicOf(code, from), { t: 'taken' }); return; }
+    let conn = conns.get(from);
+    if (!conn) { conn = mkConn(n, code, from); conns.set(from, conn); }
+    if (conn.left) { if (d.t === 'ping') conn.send({ t: 'kicked', term }); return; }   // left or replaced by a bot
+    conn.last = Date.now();
+    if (d.t === 'bye') {
+      conn.left = true; conn.open = false;
+      if (started && from === ownerId) {                    // the room owner left for good
+        conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
+        quit('Хозяин комнаты вышел из игры. Игра окончена.');
+        return;
+      }
+      onGuestGone(conn);
+      return;
+    }
+    if (d.t === 'ping') { resync(conn); return; }
+    onHostData(conn, d);
+  }
+
+  function guestMsg(n, code, topic, from, d) {
+    if (topic !== topicOf(code, n.id)) return;
+    if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
+    else if (d.t === 'view' && d.v) {
+      const t = d.v.term || 0;
+      if (t < gTerm) return;                                // a host that has already been replaced
+      if (t > gTerm) { gTerm = t; gRev = 0; }
+      gJoined = true; gHeard = Date.now();
+      // messages travel through two relays and may arrive out of order: never go back to an older state
+      if (d.v.rev && d.v.rev < gRev) return;
+      if (d.v.rev) gRev = d.v.rev;
+      if (d.st) gSnap = d.st;
+      $('setup').classList.remove('show'); $('lobby').classList.remove('show');
+      view = d.v;
+      try { draw(view); } catch (e) { console.error(e); }
+    } else if (d.t === 'full') { if (!gJoined) quit('Комната заполнена или игра уже идёт'); }
+    else if (d.t === 'kicked') { if ((d.term || 0) >= gTerm) quit('Вас заменили ботом'); }
+    else if (d.t === 'closed') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты вышел из игры. Игра окончена.'); }
+  }
+
+  function guestTimer(n, code) {
+    clearInterval(netTimer);
+    const tick = () => {
+      if (peer !== n || mode !== 'guest') return;
+      if (!gJoined) {
+        if (Date.now() - gT0 > 12000) { quit('Комната с таким кодом не найдена'); return; }
+        hostConn.send({ t: 'join', name: gName, ver: VERSION });      // repeated until the room answers
+        return;
+      }
+      const silent = Date.now() - gHeard;
+      hostConn.send({ t: 'ping' });
+      if (silent < TAKE_MS / 2) return;
+      $('warn').textContent = gSnap && view ? 'Хозяин комнаты не отвечает. Если он не вернётся, игра продолжится без него…'
+        : 'Нет связи с комнатой. Пробуем восстановить…';
+      if (!gSnap || !view) return;
+      n.send(topicOf(code, n.id), { t: 'echo' });           // does my own connection still work?
+      // players take the game over in seat order, each one a little later than the previous
+      const humans = gSnap.players.map((p, i) => (p.cid && i !== gSnap.hostSeat ? p.cid : null)).filter(Boolean);
+      const rank = humans.indexOf(n.id);
+      if (rank >= 0 && silent > TAKE_MS + rank * TAKE_STEP && Date.now() - n.lastEcho < PING_MS + 1500) takeOver(n, code);
+    };
+    netTimer = setInterval(tick, PING_MS);
+    setTimeout(tick, 400);
+  }
+
+  // the host has been silent for too long: this device continues the game from the last state it received
+  function takeOver(n, code) {
+    const st = gSnap, seat = st.players.findIndex(p => p.cid === n.id);
+    if (seat < 0) return;
+    restore(st);
+    term = Math.floor(st.term || 1) + 1 + (9 - seat) / 10;   // two devices can never get the same term
+    mode = 'host'; mySeat = seat; started = true; lobby = null; hostConn = null; ownerId = st.owner || '';
+    conns.clear(); kicked.clear();
+    players.forEach((p, i) => {
+      if (!p.cid || i === seat) return;
+      p.conn = mkConn(n, code, p.cid);
+      p.conn.last = Date.now();
+      conns.set(p.cid, p.conn);
+      if (i === st.hostSeat) { p.conn.last = 1; p.lost = true; }      // silent until it answers again
+    });
+    n.sub(hostTopic(code));
+    hostTimer(n, code);
+    const name = players[seat].name;
+    say(me => (me === seat ? 'Хозяин комнаты не отвечает — игру ведёте вы' : 'Хозяин комнаты не отвечает — игру ведёт ' + name));
+    $('warn').textContent = '';
+    if (phase === 'play' && pend) later(pend.k, pend.a, PLAY_PAUSE);
+    else if (phase === 'play') step();
+    else render();
+  }
+
+  // this device was the host, but the game went on without it: continue as a player
+  function becomeGuest(n, code, d) {
+    gameId++;
+    players = []; started = false; conns.clear(); kicked.clear();
+    mode = 'guest';
+    hostConn = { open: true, send: x => n.send(hostTopic(code), x) };
+    gJoined = true; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null;
+    guestTimer(n, code);
+    guestMsg(n, code, topicOf(code, n.id), '', d);
+  }
+
+  // ----- host -----
+  async function createRoom(attempt = 0) {
+    netMsg('Создаём комнату…');
+    clearInterval(netTimer);
+    if (peer) { try { peer.close(); } catch {} }
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    let taken = false;
+    const n = netOpen((topic, from, d) => {
+      if (peer !== n || !d || typeof d !== 'object') return;
+      if (d.t === 'taken' && topic === topicOf(code, n.id)) { taken = true; return; }
+      if (roomCode !== code) return;
+      if (mode === 'host') hostMsg(n, code, topic, from, d);
+      else if (mode === 'guest') guestMsg(n, code, topic, from, d);
+    });
+    peer = n;
+    if (!(await n.ready(8000))) {
+      if (peer === n) { n.close(); peer = null; netMsg('Нет связи с игровым сервером. Проверьте интернет.'); }
+      return;
+    }
+    if (peer !== n) return;
+    n.sub(hostTopic(code));
+    n.sub(topicOf(code, n.id));
+    await pause(400);
+    n.send(hostTopic(code), { t: 'probe' });                // is this code already in use?
+    await pause(1000);
+    if (peer !== n) return;
+    if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
+    conns.clear(); kicked.clear(); term = 1; ownerId = n.id;
+    mode = 'host'; mySeat = 0; started = false; roomCode = code;
+    lobby = [{ name: myName(), conn: null, isBot: false }];
+    netMsg('');
+    drawLobby();
+    hostTimer(n, code);
   }
 
   const lobbyNames = () => lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? ' (другая версия игры)' : ''));
@@ -1210,8 +1409,8 @@
       return;
     }
     const seat = players.findIndex(p => p.conn === conn);
-    if (seat > 0) conn.send({ t: 'view', v: viewFor(seat) });
-    else conn.send({ t: 'full' });
+    if (seat >= 0) conn.send({ t: 'view', v: viewFor(seat), st: snapshot() });
+    else conn.send({ t: 'kicked', term });                  // not a player of this game
   }
 
   function onHostData(conn, d) {
@@ -1226,7 +1425,7 @@
     }
     if (!started) return;
     const seat = players.findIndex(p => p.conn === conn);
-    if (seat > 0) act(seat, d);
+    if (seat >= 0) act(seat, d);
   }
 
   // a guest pressed "Выйти": in the lobby they just disappear, in a game they are marked as gone
@@ -1241,11 +1440,12 @@
     if (p) { p.lost = true; render(); }
   }
 
-  // only the room owner can hand a player's seat to a bot
+  // only the device that runs the game can hand a player's seat to a bot
   function replaceWithBot(i) {
     const p = players[i];
     if (mode !== 'host' || !started || !p || !p.conn) return;
-    try { p.conn.send({ t: 'kicked' }); } catch {}
+    try { p.conn.send({ t: 'kicked', term }); } catch {}
+    kicked.set(p.conn.id, Date.now());
     p.conn.left = true; p.conn.open = false;
     p.conn = null; p.isBot = true; p.lost = false; p.name += ' (бот)';
     if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
@@ -1260,7 +1460,7 @@
     const host = mode === 'host';
     const names = host ? lobbyNames() : lobby;
     $('lobCode').textContent = roomCode;
-    $('lobHint').textContent = host ? 'Скажите этот код друзьям. Не закрывайте игру, пока идёт партия.'
+    $('lobHint').textContent = host ? 'Скажите этот код друзьям. Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
       : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
     $('lobList').innerHTML = names.map(n => `<li>${esc(n)}</li>`).join('');
     $('addBotBtn').style.display = host && names.length < MAX_PLAYERS ? '' : 'none';
@@ -1277,44 +1477,20 @@
     netMsg('Подключаемся…');
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
-    const name = myName();
-    let joined = false, lastHeard = Date.now(), lastRev = 0;
-    const fail = t => { if (peer !== n) return; leave(); netMsg(t); };
+    gName = myName();
     const n = netOpen((topic, from, d) => {
-      if (peer !== n || !d || typeof d !== 'object') return;
-      lastHeard = Date.now();
-      if (d.t === 'lobby') { joined = true; lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
-      else if (d.t === 'view') {
-        joined = true;
-        // messages travel through two relays and may arrive out of order: never go back to an older state
-        if (d.v.rev && d.v.rev < lastRev) return;
-        if (d.v.rev) lastRev = d.v.rev;
-        $('setup').classList.remove('show'); $('lobby').classList.remove('show');
-        view = d.v;
-        try { draw(view); } catch (e) { console.error(e); }
-      } else if (d.t === 'full') fail('Комната заполнена или игра уже идёт');
-      else if (d.t === 'kicked') fail('Хозяин комнаты заменил вас ботом');
+      if (peer !== n || !d || typeof d !== 'object' || roomCode !== code) return;
+      if (mode === 'guest') guestMsg(n, code, topic, from, d);
+      else if (mode === 'host') hostMsg(n, code, topic, from, d);
     });
     peer = n;
-    if (!(await n.ready(8000))) { fail('Нет связи с игровым сервером. Проверьте интернет.'); return; }
+    if (!(await n.ready(8000))) { if (peer === n) quit('Нет связи с игровым сервером. Проверьте интернет.'); return; }
     if (peer !== n) return;
-    n.sub(TOPIC + code + '/c/' + n.id);
+    n.sub(topicOf(code, n.id));
     mode = 'guest'; roomCode = code;
-    hostConn = { open: true, send: d => n.send(TOPIC + code + '/h', d) };
-    const t0 = Date.now();
-    const tick = () => {
-      if (peer !== n) return;
-      if (!joined) {
-        if (Date.now() - t0 > 12000) { fail('Комната с таким кодом не найдена'); return; }
-        hostConn.send({ t: 'join', name, ver: VERSION });      // repeated until the room answers
-      } else {
-        // keep trying: when the room answers again, the game simply continues
-        if (Date.now() - lastHeard > LOST_MS) $('warn').textContent = 'Нет связи с комнатой больше минуты. Пробуем восстановить…';
-        hostConn.send({ t: 'ping' });
-      }
-    };
-    netTimer = setInterval(tick, PING_MS);
-    setTimeout(tick, 400);
+    hostConn = { open: true, send: d => n.send(hostTopic(code), d) };
+    gJoined = false; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now();
+    guestTimer(n, code);
   }
 
   // ================= WIRING =================
