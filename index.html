@@ -286,7 +286,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 31;              // keep in sync with www/version.txt
+  const VERSION = 32;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1098,22 +1098,24 @@
 
   // "Проверить связь": which relay servers answer from this network
   async function testNet() {
-    netMsg('Проверяем связь…');
+    netMsg('Проверяем связь (10 секунд)…');
+    // not only "does the server answer": 40 KB go to each server and must come back
     const one = url => new Promise(res => {
-      let ws, done = false;
-      const fin = ok => { if (done) return; done = true; try { ws.close(); } catch {} res(ok); };
-      try { ws = new WebSocket(url, 'mqtt'); } catch { res(false); return; }
-      ws.binaryType = 'arraybuffer';
-      const id = 'g101t' + Math.floor(100 + Math.random() * 900);
-      ws.onopen = () => ws.send(new Uint8Array([0x10, 12 + id.length, 0, 4, 77, 81, 84, 84, 4, 2, 0, 30, 0, id.length,
-        ...[...id].map(ch => ch.charCodeAt(0))]));
-      ws.onmessage = e => fin(new Uint8Array(e.data)[0] === 0x20);
-      ws.onerror = ws.onclose = () => fin(false);
-      setTimeout(() => fin(false), 7000);
+      const r = Math.random().toString(36).slice(2, 10), topic = TOPIC + 't/' + r, blob = 'x'.repeat(2000), t0 = Date.now();
+      let got = 0, sent = false, wasUp = false;
+      const l = mqttLink(url, 'g101t' + r, (t, text) => { got += text.length; });
+      l.sub(topic);
+      const iv = setInterval(() => {
+        if (l.up && !sent) {
+          sent = wasUp = true;
+          let k = 0;
+          const p = setInterval(() => { l.pub(topic, blob); if (++k >= 20) clearInterval(p); }, 150);
+        }
+        if (got >= 40000 || Date.now() - t0 > 10000) { clearInterval(iv); l.close(); res(wasUp ? Math.round(got / 1000) : -1); }
+      }, 200);
     });
-    const r = await Promise.all(BROKERS.map(one)), ok = r.filter(Boolean).length;
-    netMsg(ok ? `Связь есть: отвечают ${ok} из ${r.length} игровых серверов.`
-      : 'Ни один игровой сервер не отвечает: в этой сети комнаты работать не будут.');
+    const r = await Promise.all(BROKERS.map(one));
+    netMsg('Связь с серверами: ' + r.map(x => (x < 0 ? 'нет' : x + ' КБ')).join(', ') + '. Норма — 40 КБ на каждом.');
   }
 
   // --- a minimal MQTT 3.1.1 client over WebSocket: connect, subscribe, publish (QoS 0), ping ---
