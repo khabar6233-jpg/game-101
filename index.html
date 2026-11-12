@@ -55,17 +55,11 @@
     border: 2px solid transparent; text-align: center; font-size: 13px; color: var(--muted);
   }
   .opp.turn { border-color: var(--gold); }
-  /* an arrow points at whoever is to move */
-  @keyframes bob { 50% { transform: translateY(5px); } }
-  .opp.turn::after {
-    content: ''; position: absolute; left: 50%; bottom: -19px; margin-left: -10px;
-    border: 10px solid transparent; border-top: 0; border-bottom: 13px solid var(--gold);
-    animation: bob .9s ease-in-out infinite;
-  }
-  .me-bar.turn::before, .me-bar.turn::after {
-    content: ''; display: inline-block; vertical-align: middle; margin: 0 10px;
-    border: 8px solid transparent; border-bottom: 0; border-top: 11px solid var(--gold);
-    animation: bob .9s ease-in-out infinite;
+  /* a quiet compass needle on the table: it turns towards whoever is to move */
+  .middle { position: relative; }
+  #compass {
+    position: absolute; left: 50%; top: 4px; width: 22px; height: 34px; margin-left: -11px;
+    fill: rgba(255,255,255,.34); pointer-events: none; transition: transform .7s ease-in-out;
   }
   .opp.out { opacity: .4; }
   .opp .lost { color: #ffb37a; font-weight: 700; }
@@ -185,6 +179,7 @@
   <div class="opps" id="opps"></div>
 
   <div class="middle">
+    <svg id="compass" viewBox="0 0 22 34"><path d="M11 0 20 22H2z"/><circle cx="11" cy="28" r="4"/></svg>
     <div class="slot"><div id="deck"></div><span>Колода: <span id="deckCount">0</span></span></div>
     <div class="slot"><div id="pile"></div><span>Сброс: <span id="pileCount">0</span></span></div>
     <div class="slot"><div class="suit-now" id="suitNow"></div><span>Масть</span></div>
@@ -271,7 +266,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 27;               // keep in sync with www/version.txt
+  const VERSION = 28;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -295,6 +290,7 @@
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
   let dropFrom = null, pendingPlay = null;
   let wasMyTurn = false, drawWish = 0;
+  let needleAt = -1, needleDeg = 0;
   let prevDeckCount = 0, prevPileCount = 0;
   const flying = new Set();
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '', hostVer = 0;
@@ -764,6 +760,19 @@
       : hasMove ? ' · ваш ход' : v.drew ? ' · карта не подошла — нажмите «Пас»' : ' · нет карты — нажмите на стол, чтобы взять';
     mb.textContent = `Ваши очки: ${me.score}${hint}`;
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
+
+    // The compass needle turns to the player who is to move. While a six is waiting to be taken or
+    // answered it stays where it was, so it does not dart to that player and back.
+    if (!v.pendingSix || needleAt < 0 || !v.players[needleAt] || v.players[needleAt].out) needleAt = v.turn;
+    const aim = needleAt === v.seat ? mb : o.querySelector(`[data-i="${needleAt}"]`);
+    const cp = $('compass');
+    if (aim) {
+      const a = aim.getBoundingClientRect(), b = cp.parentElement.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + 4 + 17;
+      const want = Math.atan2(a.left + a.width / 2 - cx, cy - (a.top + a.height / 2)) * 180 / Math.PI;
+      needleDeg += ((want - needleDeg) % 360 + 540) % 360 - 180;          // turn the short way round
+      cp.style.transform = `rotate(${needleDeg}deg)`;
+    }
 
     const mh = $('myHand'); mh.innerHTML = '';
     const fresh = trackNewCards(v);
