@@ -18,10 +18,11 @@
     --gold: #f2c14e;
     --text: #eaf5ee;
     --muted: #a9cbb6;
-    --cw: 62px;
-    --ch: 88px;
+    /* cards are as big as the screen allows: by width, and by height so nothing has to scroll */
+    --cw: clamp(56px, min(19vw, 11vh), 92px);
+    --cw: clamp(56px, min(19vw, 11dvh), 92px);
+    --ch: calc(var(--cw) * 1.42);
   }
-  @media (min-width: 600px) { :root { --cw: 76px; --ch: 108px; } }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; }
   body {
@@ -29,6 +30,7 @@
     color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
     overflow: hidden;
   }
   #app {
@@ -48,11 +50,23 @@
   .warn:empty { display: none; }
   .opps { display: flex; gap: 8px; justify-content: center; }
   .opp {
-    flex: 1; max-width: 200px; min-width: 0;
+    flex: 1; max-width: 200px; min-width: 0; position: relative;
     background: rgba(0,0,0,.18); border-radius: 12px; padding: 8px 4px;
     border: 2px solid transparent; text-align: center; font-size: 13px; color: var(--muted);
   }
   .opp.turn { border-color: var(--gold); }
+  /* an arrow points at whoever is to move */
+  @keyframes bob { 50% { transform: translateY(5px); } }
+  .opp.turn::after {
+    content: ''; position: absolute; left: 50%; bottom: -19px; margin-left: -10px;
+    border: 10px solid transparent; border-top: 0; border-bottom: 13px solid var(--gold);
+    animation: bob .9s ease-in-out infinite;
+  }
+  .me-bar.turn::before, .me-bar.turn::after {
+    content: ''; display: inline-block; vertical-align: middle; margin: 0 10px;
+    border: 8px solid transparent; border-bottom: 0; border-top: 11px solid var(--gold);
+    animation: bob .9s ease-in-out infinite;
+  }
   .opp.out { opacity: .4; }
   .opp .lost { color: #ffb37a; font-weight: 700; }
   .opp .swap { margin-top: 4px; background: rgba(255,255,255,.14); color: var(--text); border: 0; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-family: inherit; }
@@ -73,10 +87,11 @@
 
   .status { text-align: center; min-height: 44px; font-size: 15px; line-height: 22px; }
   .status .old { color: var(--muted); font-size: 13px; }
-  .status .more { display: inline-block; cursor: pointer; color: var(--muted); font-size: 12px; line-height: 18px; text-decoration: underline; padding: 2px 6px; }
-  .hist { list-style: none; padding: 0; margin: 0 0 16px; text-align: left; font-size: 15px; }
-  .hist li { padding: 7px 4px; border-bottom: 1px solid #eee; }
-  .hist li:first-child { font-weight: 700; }
+  #pile { cursor: pointer; }
+  /* the discard pile spread out: the last cards that were played, oldest first */
+  .spread { text-align: center; color: var(--text); font-size: 14px; }
+  .spread .cards { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 440px; margin-top: 12px; }
+  .spread .card:last-child { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); }
   .actions { display: flex; justify-content: center; gap: 10px; min-height: 46px; }
   .btn {
     background: var(--gold); color: #2a1d00; border: 0; border-radius: 12px;
@@ -91,17 +106,11 @@
   .zone-line { height: 0; border-top: 1px solid rgba(255,255,255,.28); margin: 0 -16px; }
   .me-bar { text-align: center; font-size: 14px; color: var(--muted); border-radius: 8px; padding: 2px; border: 2px solid transparent; }
   .me-bar.turn { border-color: var(--gold); color: var(--text); }
-  .hand-me {
-    display: flex; overflow-x: auto; padding: 18px 4px 6px;
-    min-height: calc(var(--ch) + 26px); scrollbar-width: none;
-  }
-  .hand-me::-webkit-scrollbar { display: none; }
-  .hand-me .inner { display: flex; margin: 0 auto; padding-right: 4px; }
-  .hand-me .card { margin-left: calc(var(--cw) * -0.38); transition: transform .15s; }
-  .hand-me .card:first-child { margin-left: 0; }
-  .hand-me .card { touch-action: pan-x; }   /* sideways scrolls the hand, upward throws the card */
-  .hand-me .card.ok { transform: translateY(-14px); cursor: pointer; }
-  .hand-me .card.no { filter: brightness(.72); }
+  /* the whole hand always fits the screen: the cards overlap as much as needed (see draw) */
+  .hand-me { display: flex; padding: 18px 4px 6px; min-height: calc(var(--ch) + 26px); }
+  .hand-me .inner { display: flex; margin: 0 auto; }
+  .hand-me .card { transition: transform .15s; touch-action: none; }
+  .hand-me .card.ok { transform: translateY(-14px); cursor: pointer; }   /* playable cards are only lifted */
 
   .card {
     width: var(--cw); height: var(--ch);
@@ -120,6 +129,13 @@
   .card .tl { position: absolute; left: 5px; top: 3px; font-size: calc(var(--cw) * .27); line-height: 1; text-align: center; }
   .card .tl small { display: block; font-size: calc(var(--cw) * .25); }
   .card .mid { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .55); }
+  /* jack, queen, king: a picture with the suit under it; ace: the suit in a double ring */
+  .card .mid.face { flex-direction: column; padding-top: 16%; font-size: calc(var(--cw) * .34); line-height: 1; }
+  .card .mid.face svg { width: 66%; height: auto; fill: currentColor; margin-bottom: 4%; }
+  .card .mid.ace::before {
+    content: ''; position: absolute; width: 74%; aspect-ratio: 1; border-radius: 50%;
+    border: 2px solid currentColor; outline: 1px solid currentColor; outline-offset: 3px; opacity: .45;
+  }
   .back { background: repeating-linear-gradient(45deg, #7a1f2b 0 6px, #942836 6px 12px); border: 3px solid #fff; }
   .empty-slot { width: var(--cw); height: var(--ch); border: 2px dashed rgba(255,255,255,.25); border-radius: 8px; }
 
@@ -233,10 +249,9 @@
 </div>
 
 <div class="overlay" id="history">
-  <div class="dialog">
-    <h2>Последние ходы</h2>
-    <ul class="hist" id="histList"></ul>
-    <button class="btn" id="histClose">Закрыть</button>
+  <div class="spread">
+    <div>Последние карты на столе: от старых к новым</div>
+    <div class="cards" id="histCards"></div>
   </div>
 </div>
 
@@ -256,7 +271,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 26;               // keep in sync with www/version.txt
+  const VERSION = 27;               // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -278,7 +293,8 @@
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
-  let dropFrom = null, suppressClick = false, pendingPlay = null;
+  let dropFrom = null, pendingPlay = null;
+  let wasMyTurn = false, drawWish = 0;
   let prevDeckCount = 0, prevPileCount = 0;
   const flying = new Set();
   let peer = null, hostConn = null, lobby = null, started = false, roomCode = '', hostVer = 0;
@@ -381,10 +397,10 @@
     else say(who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card)));
 
     // Nobody wins on a six or an ace: a player left without cards waits until that card is covered.
-    // The first ordinary card on the pile ends the round for whoever ran out of cards first.
+    // The first ordinary card on the pile ends the round for whoever ran out of cards last.
     if (p.hand.length === 0) p.emptySince = ++emptySeq;
     if (!isSpecialEnd(card)) {
-      const w = firstOut();
+      const w = lastOut();
       if (w >= 0) { later(() => endRound(w), PLAY_PAUSE); return; }
     }
 
@@ -441,11 +457,11 @@
     step();
   }
 
-  // the player without cards who has been waiting the longest (-1 if everybody still has cards)
-  function firstOut() {
+  // the player who got rid of their cards last (-1 if everybody still has cards)
+  function lastOut() {
     let best = -1;
     players.forEach((p, i) => {
-      if (!p.out && !p.hand.length && (best < 0 || (p.emptySince || 0) < (players[best].emptySince || 0))) best = i;
+      if (!p.out && !p.hand.length && (best < 0 || (p.emptySince || 0) > (players[best].emptySince || 0))) best = i;
     });
     return best;
   }
@@ -464,7 +480,7 @@
     render();
     if (phase !== 'play') return;
     const p = players[turn];
-    if (active().every(x => !x.hand.length)) { endRound(firstOut()); return; }   // nobody can cover any more
+    if (active().every(x => !x.hand.length)) { endRound(lastOut()); return; }   // nobody can cover any more
     // people press "Пас" / "Беру" themselves, so nobody can tell from the timing what they hold
     if (p.isBot) later(botTurn);
   }
@@ -589,6 +605,7 @@
       seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev, pendingSix,
       top: t ? face(t) : null,
       tail: pile.slice(-PILE_SHOWN).map(face),
+      hist: pile.slice(-HISTORY).map(face),
       deckCount: deck.length, pileCount: pile.length,
       canDraw: deck.length > 0 || pile.length > 1,
       players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length, lost: !!p.lost, remote: !!p.conn })),
@@ -612,11 +629,39 @@
     else act(mySeat, a);
   }
 
+  // pictures for the jack (a cap with a feather), the queen (a tiara) and the king (a crown)
+  const ART = {
+    11: '<svg viewBox="0 0 64 48"><path d="M9 38c0-15 9-23 23-23s21 8 21 23z"/><rect x="5" y="38" width="54" height="7" rx="3.5"/>' +
+        '<path d="M38 19C37 8 45 1 60 1c1 12-8 19-22 18z" opacity=".7"/></svg>',
+    12: '<svg viewBox="0 0 64 48"><path d="M8 38C5 28 7 20 10 14c4 8 8 12 13 13 2-8 5-15 9-21 4 6 7 13 9 21 5-1 9-5 13-13 3 6 5 14 2 24z"/>' +
+        '<rect x="7" y="40" width="50" height="6" rx="3"/><circle cx="10" cy="11" r="3.4"/><circle cx="32" cy="4" r="3.4"/><circle cx="54" cy="11" r="3.4"/></svg>',
+    13: '<svg viewBox="0 0 64 48"><path d="M8 38 4 14l15 11L32 8l13 17 15-11-4 24z"/><rect x="7" y="40" width="50" height="7" rx="2"/>' +
+        '<path d="M30 0h4v3h3v4h-3v4h-4V7h-3V3h3z"/><circle cx="4" cy="12" r="3"/><circle cx="60" cy="12" r="3"/></svg>'
+  };
   function cardEl(c, extra = '') {
     const el = document.createElement('div');
     el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
-    el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}<small>${c.s}</small></div><div class="mid">${c.s}</div>`;
+    el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}<small>${c.s}</small></div>` +
+      (ART[c.r] ? `<div class="mid face">${ART[c.r]}<span>${c.s}</span></div>`
+                : `<div class="mid${c.r === 14 ? ' ace' : ''}">${c.s}</div>`);
     return el;
+  }
+
+  // A tap is handled when the finger lifts: phones sometimes swallow or delay the click that should
+  // follow it. `fn` returns true when it did something; the late click is then thrown away.
+  let eatClickUntil = 0;
+  document.addEventListener('click', e => {
+    if (Date.now() < eatClickUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  function onTap(el, fn) {
+    if (!window.PointerEvent) { el.addEventListener('click', fn); return; }
+    let d = null;
+    el.addEventListener('pointerdown', e => { d = { id: e.pointerId, x: e.clientX, y: e.clientY }; });
+    el.addEventListener('pointerup', e => {
+      const ok = d && d.id === e.pointerId && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 12;
+      d = null;
+      if (ok && fn(e)) eatClickUntil = Date.now() + 400;
+    });
   }
 
   function draw(v) {
@@ -624,6 +669,13 @@
     const myTurn = v.phase === 'play' && v.turn === v.seat && !v.busy;
     const hasMove = v.hand.some(c => c.ok);
     if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
+    if (myTurn && !wasMyTurn) {
+      try { if (navigator.vibrate) navigator.vibrate(150); } catch {}      // "your move"
+      // the table was tapped while the previous card was still landing: take the card now
+      if (Date.now() - drawWish < 900 && !v.drew && !v.pendingSix) setTimeout(() => action({ t: 'draw' }), 0);
+    }
+    drawWish = 0;
+    wasMyTurn = myTurn;
     $('roundNo').textContent = v.roundNo;
     $('roomTag').textContent = (v.room ? ' · комната ' + v.room : '') + ' · v' + VERSION;
     // the room owner's device applies the rules, so a version mismatch matters
@@ -675,7 +727,6 @@
     const dk = $('deck');
     const canDrawNow = myTurn && !v.drew && !v.pendingSix;
     dk.className = (v.canDraw ? 'card back deck' : 'empty-slot') + (canDrawNow ? ' can' : '');
-    dk.onclick = () => { if (canDrawNow) action({ t: 'draw' }); };
     $('deckCount').textContent = v.deckCount;
 
     const pl = $('pile'); pl.innerHTML = '';
@@ -700,10 +751,10 @@
     sn.className = 'suit-now' + (RED.has(v.suit) ? ' red' : '');
 
     const recent = v.log.slice(-2);
-    $('status').innerHTML = recent.map((l, i) => `<div class="${i < recent.length - 1 ? 'old' : ''}">${esc(l)}</div>`).join('') +
-      '<div class="more">история ходов ›</div>';
-    // newest move first
-    $('histList').innerHTML = v.log.slice().reverse().map(l => `<li>${esc(l)}</li>`).join('') || '<li>Ходов пока нет</li>';
+    $('status').innerHTML = recent.map((l, i) => `<div class="${i < recent.length - 1 ? 'old' : ''}">${esc(l)}</div>`).join('');
+    // tapping the pile spreads out the last cards that were played
+    const hc = $('histCards'); hc.innerHTML = '';
+    (v.hist || tail).forEach(c => hc.appendChild(cardEl(c)));
 
     const mb = $('meBar');
     const hint = me.out ? ' · вы выбыли'
@@ -716,18 +767,19 @@
 
     const mh = $('myHand'); mh.innerHTML = '';
     const fresh = trackNewCards(v);
-    v.hand.forEach(c => {
+    // the cards overlap just enough for the whole hand to fit the screen
+    const cw = $('deck').offsetWidth || 62;
+    const room = mh.parentElement.clientWidth - 8 - cw;
+    const stepX = Math.min(cw + 6,v.hand.length > 1 ? room / (v.hand.length - 1) : cw);
+    v.hand.forEach((c, n) => {
       const ok = myTurn && c.ok;
       const age = newIds.has(c.id) ? Date.now() - newIds.get(c.id) : NEW_MS;
       const el = cardEl(c, (ok ? 'ok' : 'no') + (age < NEW_MS ? ' new' : ''));
       if (age < NEW_MS) el.style.animationDelay = -age + 'ms';      // a redraw continues the fade, not restarts it
       el.dataset.id = c.id;
+      if (n) el.style.marginLeft = stepX - cw + 'px';
       if (flying.has(c.id) || (pendingPlay && pendingPlay.id === c.id)) el.style.opacity = '0';
-      if (ok) {
-        // stopPropagation: the tap must not also reach the table, where a tap draws a card
-        el.onclick = e => { e.stopPropagation(); if (!suppressClick) playFromHand(c.id); };
-        el.onpointerdown = e => startDrag(e, el, c);
-      }
+      if (ok) el.onpointerdown = e => startDrag(e, el, c);      // a tap or a swipe up plays the card
       if (c.id === localQueen) el.style.transform = 'translateY(-26px)';
       mh.appendChild(el);
     });
@@ -780,12 +832,12 @@
       const b = document.createElement('button');
       b.className = 'btn';
       b.textContent = v.drew ? `Беру ещё ${left}` : `Беру ${left} ${cardsWord(left)}`;
-      b.onclick = () => action({ t: 'take' });
+      onTap(b, () => { action({ t: 'take' }); return true; });
       a.appendChild(b);
     } else if (myTurn && v.drew) {
       const b = document.createElement('button');
       b.className = 'btn'; b.textContent = 'Пас';
-      b.onclick = () => action({ t: 'pass' });
+      onTap(b, () => { action({ t: 'pass' }); return true; });
       a.appendChild(b);
     }
 
@@ -845,9 +897,14 @@
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
-      if (!ghost) return;                                            // it was a plain tap
-      suppressClick = true;
-      setTimeout(() => { suppressClick = false; }, 350);
+      if (!ghost) {                                                  // it was a plain tap
+        if (ev.type === 'pointerup' && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 12) {
+          eatClickUntil = Date.now() + 400;
+          playFromHand(c.id);
+        }
+        return;
+      }
+      eatClickUntil = Date.now() + 400;
       const g = ghost.getBoundingClientRect();
       const line = document.querySelector('.zone-line').getBoundingClientRect().top;
       const restore = () => {
@@ -905,8 +962,6 @@
   // cards fly from the deck to their places in my hand; `mark` frames them as newly drawn
   function flyFromDeck(ids, v, mark, step) {
     const mh = $('myHand');
-    const first = mark && mh.querySelector(`[data-id="${ids[0]}"]`);
-    if (first && first.scrollIntoView) first.scrollIntoView({ inline: 'center', block: 'nearest' });
     const from = $('deck').getBoundingClientRect();
     ids.forEach((id, i) => {
       const el = mh.querySelector(`[data-id="${id}"]`);
@@ -1258,14 +1313,15 @@
     const b = document.createElement('button');
     b.textContent = s;
     if (RED.has(s)) b.className = 'red';
-    b.onclick = () => {
+    onTap(b, () => {
       if (localQueen !== null) {
         const id = localQueen;
         localQueen = null;
         $('suitPick').classList.remove('show');
         action({ t: 'play', id, s });
       } else action({ t: 'suit', s });
-    };
+      return true;
+    });
     $('suitBtns').appendChild(b);
   });
   // reconnect to the relay servers and fetch the current state (for a frozen or broken game)
@@ -1282,17 +1338,23 @@
     if (mode === 'guest' && hostConn) { $('warn').textContent = 'Связь обновлена, ждём ответ комнаты…'; hostConn.send({ t: 'ping' }); }
     else if (mode === 'host') { $('warn').textContent = ''; render(); }
   };
-  $('histClose').onclick = () => $('history').classList.remove('show');
-  $('history').onclick = e => { if (e.target === $('history')) $('history').classList.remove('show'); };
-  $('suitCancel').onclick =() => { localQueen = null; if (view) draw(view); };
-  // tapping anywhere on the table (everything above "Ваши очки") draws a card
-  $('app').addEventListener('click', e => {
-    if (suppressClick || !e.target.isConnected) return;
-    if (e.target.closest('#status .more')) { if (view) $('history').classList.add('show'); return; }   // move history
-    if (e.target.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, #deck, .opp .swap')) return;
+  onTap($('history'), () => { $('history').classList.remove('show'); return true; });
+  onTap($('suitCancel'), () => { localQueen = null; if (view) draw(view); return true; });
+  // tapping anywhere on the table (everything above "Ваши очки") draws a card; the pile shows its last cards
+  onTap($('app'), e => {
+    // what is under the finger now: the element that was touched may already have been redrawn
+    const t = document.elementFromPoint(e.clientX, e.clientY);
+    if (!t || !$('app').contains(t)) return false;
+    if (t.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, .opp .swap')) return false;
     const v = view;
-    if (v && v.phase === 'play' && v.turn === v.seat && !v.busy && !v.drew && !v.pendingSix) action({ t: 'draw' });
+    if (!v) return false;
+    if (t.closest('#pile')) { $('history').classList.add('show'); return true; }
+    if (v.phase !== 'play') return false;
+    if (v.busy) { drawWish = Date.now(); return true; }            // remembered until the card has landed
+    if (v.turn === v.seat && !v.drew && !v.pendingSix) { action({ t: 'draw' }); return true; }
+    return false;
   });
+  window.addEventListener('resize', () => { if (view) draw(view); });
   document.querySelectorAll('[data-bots]').forEach(b => {
     b.onclick = () => {
       mode = 'solo'; mySeat = 0; roomCode = '';
