@@ -17,7 +17,11 @@ Copy-Item "$root\www\cards" "$out\assets\cards" -Recurse -Force
 
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed" } }
 
-& "$bt\aapt2.exe" link -o "$out\base.apk" -I $jar --manifest "$root\android\AndroidManifest.xml" -A "$out\assets" `
+# the launcher icon (android\res, drawn by android\make-icon.ps1)
+& "$bt\aapt2.exe" compile --dir "$root\android\res" -o "$out\res.zip"
+Check 'aapt2 compile'
+
+& "$bt\aapt2.exe" link -o "$out\base.apk" -I $jar --manifest "$root\android\AndroidManifest.xml" -A "$out\assets" "$out\res.zip" `
     --min-sdk-version 24 --target-sdk-version 35 --version-code 2 --version-name 2.0
 Check 'aapt2'
 

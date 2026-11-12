@@ -58,8 +58,8 @@
   /* a quiet compass needle on the table: it turns towards whoever is to move */
   .middle { position: relative; }
   #compass {
-    position: absolute; left: 50%; top: 4px; width: 22px; height: 34px; margin-left: -11px;
-    fill: rgba(255,255,255,.34); pointer-events: none; transition: transform .7s ease-in-out;
+    position: absolute; left: 50%; top: 50%; width: 22px; height: 34px; margin: -17px 0 0 -11px;
+    fill: rgba(255,255,255,.34); pointer-events: none; transition: transform .8s ease-in-out;
   }
   .opp.out { opacity: .4; }
   .opp .lost { color: #ffb37a; font-weight: 700; }
@@ -115,6 +115,12 @@
   .card.red { color: var(--red); }
   .card .art { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 8px; background: #fff;
     pointer-events: none; -webkit-user-drag: none; }
+  /* picture cards carry the same rank and suit marks as the number cards (the printed ones are covered) */
+  .card.court .tl { z-index: 1; left: 0; top: 0; min-width: 36%; padding: 3px 3px 2px 5px; text-align: left;
+    background: #fff; border-radius: 8px 0 8px 0; }
+  .card.court .tl small { text-align: left; }
+  .card.court::after { content: ''; position: absolute; right: 0; bottom: 0; width: 17%; height: 24%;
+    background: #fff; border-radius: 8px 0 8px 0; }
   /* a card just taken from the deck */
   /* a soft gold frame that fades away: it only points at the card that was just drawn */
   @keyframes newFade {
@@ -168,7 +174,9 @@
   .dialog .msg { color: #b3261e; font-size: 14px; min-height: 20px; }
   .code { font-size: 44px; font-weight: 800; letter-spacing: 6px; color: #13603a; user-select: text; -webkit-user-select: text; }
   .plist { list-style: none; padding: 0; margin: 10px 0 14px; }
-  .plist li { padding: 8px; border-bottom: 1px solid #eee; font-weight: 700; }
+  .plist li { padding: 8px; border-bottom: 1px solid #eee; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .plist .kick { border: 0; background: #f1d6d3; color: #b3261e; border-radius: 8px; width: 34px; height: 30px; font-size: 16px; font-family: inherit; }
+  .opp .tools { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
   .suits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .suits button { font-size: 40px; height: 76px; border-radius: 12px; border: 2px solid #ddd; background: #fafafa; color: #1b1b1b; }
   .suits button.red { color: var(--red); }
@@ -227,6 +235,7 @@
         <button class="btn" id="joinBtn">Войти</button>
       </div>
       <div class="msg" id="netMsg"></div>
+      <button class="btn-small" id="netTest" style="background:#eee;color:#555">Проверить связь</button>
     </div>
     <p id="ver" style="margin:10px 0 0;font-size:12px;color:#888"></p>
   </div>
@@ -277,7 +286,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 29;              // keep in sync with www/version.txt
+  const VERSION = 30;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -608,8 +617,10 @@
     if (!result.gameOver) { startRound(); return; }
     if (mode === 'solo') { leave(); return; }
     // same room, fresh match
-    players.forEach(p => { p.score = 0; p.out = false; });
+    players.forEach(p => { p.score = 0; p.out = !!p.removed; });
+    if (active().length < 2) { leave(); return; }             // everybody else was removed
     starter = Math.floor(Math.random() * players.length);
+    if (players[starter].out) starter = nextIdx(starter);
     roundNo = 0; log = [];
     backNo = (backNo + 1 + Math.floor(Math.random() * (BACKS - 1))) % BACKS;
     startRound();
@@ -629,7 +640,7 @@
       hist: pile.slice(-HISTORY).map(face),
       deckCount: deck.length, pileCount: pile.length,
       canDraw: deck.length > 0 || pile.length > 1,
-      players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length, lost: !!p.lost, remote: !!p.conn })),
+      players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length, lost: !!p.lost, remote: !!p.conn, gone: !!p.removed })),
       hand: players[seat].hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })),
       log: log.map(f => f(seat)),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
@@ -662,20 +673,21 @@
     13: '<svg viewBox="0 0 64 48"><path d="M8 38 4 14l15 11L32 8l13 17 15-11-4 24z"/><rect x="7" y="40" width="50" height="7" rx="2"/>' +
         '<path d="M30 0h4v3h3v4h-3v4h-4V7h-3V3h3z"/><circle cx="4" cy="12" r="3"/><circle cx="60" cy="12" r="3"/></svg>'
   };
-  for (let r = 11; r <= 14; r++) for (let i = 0; i < 4; i++) new Image().src = `cards/${r}_${i}.png`;   // load ahead
+  for (let r = 11; r <= 13; r++) for (let i = 0; i < 4; i++) new Image().src = `cards/${r}_${i}.png`;   // load ahead
   function cardEl(c, extra = '') {
     const el = document.createElement('div');
     el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
     el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}<small>${c.s}</small></div>` +
       (ART[c.r] ? `<div class="mid face">${ART[c.r]}<span>${c.s}</span></div>`
                 : `<div class="mid${c.r === 14 ? ' ace' : ''}">${c.s}</div>`);
-    if (c.r >= 11) {
-      // jack, queen, king and ace are the classic "atlas" cards; if the picture is missing, the drawn card stays
+    if (c.r >= 11 && c.r <= 13) {
+      // jack, queen and king are the classic "atlas" pictures; if a picture is missing, the drawn card stays
       const img = new Image();
+      el.classList.add('court');
       img.className = 'art';
       img.alt = '';
       img.draggable = false;
-      img.onerror = () => img.remove();
+      img.onerror = () => { img.remove(); el.classList.remove('court'); };
       img.src = `cards/${c.r}_${SUITS.indexOf(c.s)}.png`;
       el.appendChild(img);
     }
@@ -743,19 +755,24 @@
       const d = document.createElement('div');
       d.dataset.i = i;
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
-      d.innerHTML = `<div class="name">${esc(p.name)}</div><div>${p.out ? 'выбыл' : 'очки: ' + p.score}</div>` +
+      d.innerHTML = `<div class="name">${esc(p.name)}</div><div>${p.gone ? 'удалён' : p.out ? 'выбыл' : 'очки: ' + p.score}</div>` +
         `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, 7))}</div>` +
         `<div>карт: <span class="cnt">${p.count}</span></div>` +
         (p.lost ? '<div class="lost">нет связи</div>' : '');
-      if (mode === 'host' && p.remote) {
-        const b = document.createElement('button');
-        b.className = 'swap';
-        b.textContent = 'заменить ботом';
-        b.onclick = e => {
-          e.stopPropagation();
-          if (confirm(`Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`)) replaceWithBot(i);
+      if (mode === 'host' && !p.out) {
+        // the device that runs the game can hand a seat to a bot or remove the player (or bot) altogether
+        const tools = document.createElement('div');
+        tools.className = 'tools';
+        const add = (text, ask, fn) => {
+          const b = document.createElement('button');
+          b.className = 'swap';
+          b.textContent = text;
+          b.onclick = e => { e.stopPropagation(); if (confirm(ask)) fn(i); };
+          tools.appendChild(b);
         };
-        d.appendChild(b);
+        if (p.remote) add('бот', `Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`, replaceWithBot);
+        add('удалить', `Удалить «${p.name}» из игры? Его карты вернутся в колоду.`, removePlayer);
+        d.appendChild(tools);
       }
       o.appendChild(d);
     }
@@ -808,10 +825,12 @@
     const cp = $('compass');
     if (aim) {
       const a = aim.getBoundingClientRect(), b = cp.parentElement.getBoundingClientRect();
-      const cx = b.left + b.width / 2, cy = b.top + 4 + 17;
+      // it sits on an invisible circle around the cards on the table and slides along it
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
       const want = Math.atan2(a.left + a.width / 2 - cx, cy - (a.top + a.height / 2)) * 180 / Math.PI;
-      needleDeg += ((want - needleDeg) % 360 + 540) % 360 - 180;          // turn the short way round
-      cp.style.transform = `rotate(${needleDeg}deg)`;
+      needleDeg += ((want - needleDeg) % 360 + 540) % 360 - 180;          // go the short way round
+      const R = Math.max(Math.min(b.width, b.height) / 2 - 20, $('deck').offsetHeight / 2 + 26);
+      cp.style.transform = `rotate(${needleDeg}deg) translateY(${-Math.round(R)}px)`;
     }
 
     const mh = $('myHand'); mh.innerHTML = '';
@@ -1058,7 +1077,9 @@
   // Players talk through public MQTT brokers (plain message relays), so nothing has to connect
   // phone-to-phone and no outside library is loaded. The room owner's device keeps the game;
   // guests send their moves and receive only their own view.
-  const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+  // several independent public relays in different places: two players need just one in common
+  const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt',
+    'wss://test.mosquitto.org:8081/mqtt', 'wss://broker-cn.emqx.io:8084/mqtt'];
   const TOPIC = 'cardgame101/v1/';
   const PING_MS = 3000, LOST_MS = 60000;
   let netTimer = null;
@@ -1068,6 +1089,26 @@
     const n = $('nick').value.trim().slice(0, 12) || 'Игрок';
     try { localStorage.setItem('g101-name', n); } catch {}
     return n;
+  }
+
+  // "Проверить связь": which relay servers answer from this network
+  async function testNet() {
+    netMsg('Проверяем связь…');
+    const one = url => new Promise(res => {
+      let ws, done = false;
+      const fin = ok => { if (done) return; done = true; try { ws.close(); } catch {} res(ok); };
+      try { ws = new WebSocket(url, 'mqtt'); } catch { res(false); return; }
+      ws.binaryType = 'arraybuffer';
+      const id = 'g101t' + Math.floor(100 + Math.random() * 900);
+      ws.onopen = () => ws.send(new Uint8Array([0x10, 12 + id.length, 0, 4, 77, 81, 84, 84, 4, 2, 0, 30, 0, id.length,
+        ...[...id].map(ch => ch.charCodeAt(0))]));
+      ws.onmessage = e => fin(new Uint8Array(e.data)[0] === 0x20);
+      ws.onerror = ws.onclose = () => fin(false);
+      setTimeout(() => fin(false), 7000);
+    });
+    const r = await Promise.all(BROKERS.map(one)), ok = r.filter(Boolean).length;
+    netMsg(ok ? `Связь есть: отвечают ${ok} из ${r.length} игровых серверов.`
+      : 'Ни один игровой сервер не отвечает: в этой сети комнаты работать не будут.');
   }
 
   // --- a minimal MQTT 3.1.1 client over WebSocket: connect, subscribe, publish (QoS 0), ping ---
@@ -1215,7 +1256,7 @@
     return {
       term, owner: ownerId, hostSeat: mySeat, back: backNo,
       players: players.map((p, i) => ({
-        name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out, emptySince: p.emptySince || 0,
+        name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
         cid: p.isBot ? null : p.conn ? p.conn.id : i === mySeat ? me : null
       })),
       deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
@@ -1227,7 +1268,7 @@
   function restore(st) {
     gameId++;
     players = st.players.map(p => ({ name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out,
-      emptySince: p.emptySince, cid: p.cid, conn: null, lost: false }));
+      removed: !!p.removed, emptySince: p.emptySince, cid: p.cid, conn: null, lost: false }));
     deck = st.deck; pile = st.pile; suit = st.suit; turn = st.turn; drew = st.drew; sixRun = st.sixRun;
     pendingSix = st.pendingSix; emptySeq = st.emptySeq; passStreak = st.passStreak; starter = st.starter;
     roundNo = st.roundNo; phase = st.phase; pend = st.pend; busy = false; backNo = st.back || 0;
@@ -1260,7 +1301,7 @@
     if (topic === topicOf(code, n.id)) {
       // another device carries this game on with a newer state: join it as a player
       if (d.t === 'view' && d.v && (d.v.term || 0) > term) becomeGuest(n, code, d);
-      else if (d.t === 'kicked' && (d.term || 0) > term) quit('Игра продолжилась без вас: вас заменили ботом');
+      else if (d.t === 'kicked' && (d.term || 0) > term) quit('Игра продолжилась без вас: хозяин комнаты убрал вас из игры');
       else if (d.t === 'closed' && (d.term || 0) > term) quit('Хозяин комнаты вышел из игры. Игра окончена.');
       return;
     }
@@ -1300,7 +1341,7 @@
       view = d.v;
       try { draw(view); } catch (e) { console.error(e); }
     } else if (d.t === 'full') { if (!gJoined) quit('Комната заполнена или игра уже идёт'); }
-    else if (d.t === 'kicked') { if ((d.term || 0) >= gTerm) quit('Вас заменили ботом'); }
+    else if (d.t === 'kicked') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты убрал вас из игры'); }
     else if (d.t === 'closed') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты вышел из игры. Игра окончена.'); }
   }
 
@@ -1456,13 +1497,58 @@
     else render();
   }
 
+  // The device that runs the game removes a player or a bot: their cards go back into the deck
+  // and the others play on. With one player left the game is over.
+  function removePlayer(i) {
+    const p = players[i];
+    if (mode !== 'host' || !started || !p || p.out || i === mySeat) return;
+    if (p.conn) {
+      try { p.conn.send({ t: 'kicked', term }); } catch {}
+      kicked.set(p.conn.id, Date.now());
+      p.conn.left = true; p.conn.open = false; p.conn = null;
+    }
+    p.out = true; p.removed = true; p.isBot = true; p.lost = false;
+    deck = shuffle(deck.concat(p.hand));
+    p.hand = [];
+    say(p.name + ' удалён из игры');
+    const left = active();
+    if (phase === 'roundEnd') {
+      if (result && left.length < 2) { result.gameOver = true; result.champion = left.length ? players.indexOf(left[0]) : -1; }
+      render();
+    } else if (left.length < 2 || !left.some(x => !x.isBot)) {
+      gameId++; busy = false; pend = null; pendingQueen = null;
+      result = { w: -1, gameOver: true, champion: left.length === 1 ? players.indexOf(left[0]) : -1,
+        rows: left.map(x => ({ pi: players.indexOf(x), add: 0, score: x.score, note: '', win: false })) };
+      phase = 'roundEnd';
+      render();
+    } else if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
+      suit = top().s; phase = 'play';
+      const q = pendingQueen; pendingQueen = null;
+      afterPlay(q.pi, q.card);
+    } else if (phase === 'play' && turn === i && !(pend && pend.k !== 'bot')) {
+      gameId++; busy = false; pend = null;                  // it was their move: it passes on
+      turn = nextIdx(i); drew = false;
+      step();
+    } else render();
+  }
+
+  // the room owner removes somebody from the list before the game starts
+  function kickFromLobby(i) {
+    if (mode !== 'host' || started || !lobby || i <= 0 || !lobby[i]) return;
+    const c = lobby[i].conn;
+    if (c) { try { c.send({ t: 'kicked', term }); } catch {} c.left = true; c.open = false; }
+    lobby.splice(i, 1);
+    drawLobby();
+  }
+
   function drawLobby() {
     const host = mode === 'host';
     const names = host ? lobbyNames() : lobby;
     $('lobCode').textContent = roomCode;
     $('lobHint').textContent = host ? 'Скажите этот код друзьям. Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
       : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
-    $('lobList').innerHTML = names.map(n => `<li>${esc(n)}</li>`).join('');
+    $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
+      (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
     $('addBotBtn').style.display = host && names.length < MAX_PLAYERS ? '' : 'none';
     $('startBtn').style.display = host ? '' : 'none';
     $('startBtn').disabled = names.length < 2;
@@ -1561,6 +1647,8 @@
     startMatch(lobby);
   };
   $('leaveBtn').onclick = leave;
+  $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
+  $('netTest').onclick = testNet;
   $('newBtn').onclick = () => {
     if (mode !== 'solo' && !confirm('Выйти из комнаты?')) return;
     leave();
