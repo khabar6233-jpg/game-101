@@ -186,7 +186,7 @@
     <h2>101</h2>
     <p>Ходите в масть или в значение. Нет карты — берите из колоды.<br>
        Туз — пропуск хода, шестёрка — соседу 2 карты и пропуск хода.<br>
-       Шестёрку можно перевести своей шестёркой. Каждая шестёрка подряд на столе — ещё +2 карты: 2, 4, 6, 8…<br>
+       Втроём и больше шестёрку можно перевести своей шестёркой. Каждая шестёрка подряд на столе — ещё +2 карты: 2, 4, 6, 8…<br>
        Дама кладётся на любую карту и заказывает масть.<br>
        На шестёрке и тузе раунд не кончается: в свой ход берёте карту, подошла — накрываете и выигрываете.<br>
        102 очка — проигрыш, ровно 101 — счёт обнуляется.</p>
@@ -256,7 +256,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 25;                // keep in sync with www/version.txt
+  const VERSION = 26;               // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -288,7 +288,7 @@
   const active = () => players.filter(p => !p.out);
   const top = () => pile[pile.length - 1];
   // a queen goes on any card; while sixes are stacked on you, only another six can be played
-  const canPlay = c => (pendingSix ? c.r === 6 : c.r === 12 || c.s === suit || c.r === top().r);
+  const canPlay = c => (pendingSix ? c.r === 6 && active().length >= 3 :c.r === 12 || c.s === suit || c.r === top().r);
   const label = c => RANK_NAME[c.r] + c.s;
   const isSpecialEnd = c => c.r === 6 || c.r === 14;
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
@@ -418,7 +418,8 @@
       // or whether the deck was reshuffled. The next player answers with a six or presses "Беру".
       pendingSix = 2 * sixRun;
       const k = pendingSix;
-      say(who(n, `должны взять ${k} ${cardsWord(k)} или подкинуть шестёрку`, `должен взять ${k} ${cardsWord(k)} или подкинуть шестёрку`));
+      const or = active().length >= 3 ? ' или подкинуть шестёрку' : '';   // one on one a six cannot be answered
+      say(who(n, `должны взять ${k} ${cardsWord(k)}${or}`, `должен взять ${k} ${cardsWord(k)}${or}`));
     }
     turn = n;
     drew = false;
