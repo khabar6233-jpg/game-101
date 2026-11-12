@@ -286,7 +286,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 30;              // keep in sync with www/version.txt
+  const VERSION = 31;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -652,7 +652,12 @@
     if (!players.length) return;
     if (mode === 'host') {
       const st = snapshot();
-      players.forEach((p, i) => { if (p.conn && p.conn.open) p.conn.send({ t: 'view', v: viewFor(i), st }); });
+      players.forEach((p, i) => {
+        if (!p.conn || !p.conn.open) return;
+        const v = viewFor(i);
+        p.conn.rev = v.rev;
+        p.conn.send({ t: 'view', v, st });
+      });
     }
     view = viewFor(mySeat);
     try { draw(view); } catch (e) { console.error(e); }
@@ -1115,7 +1120,7 @@
   function mqttLink(url, clientId, onMessage) {
     const enc = new TextEncoder(), dec = new TextDecoder();
     const subs = new Set();
-    let ws = null, alive = true, up = false, buf = new Uint8Array(0), pingT = null, pid = 1;
+    let ws = null, alive = true, up = false, buf = new Uint8Array(0), pingT = null, pid = 1, lastIn = 0;
     const str = s => { const b = enc.encode(s); return [b.length >> 8, b.length & 255, ...b]; };
     const packet = (head, body) => {
       const len = [];
@@ -1140,8 +1145,6 @@
           if (body[1] !== 0) continue;
           up = true;
           subs.forEach(sendSub);
-          clearInterval(pingT);
-          pingT = setInterval(() => { if (ws.readyState === 1) ws.send(new Uint8Array([0xC0, 0])); }, 20000);
         } else if (type === 3) {                            // PUBLISH
           const qos = (head >> 1) & 3;
           const tl = (body[0] << 8) | body[1];
@@ -1154,28 +1157,37 @@
       if (!alive) return;
       let s;
       try { s = new WebSocket(url, 'mqtt'); } catch { setTimeout(open, 3000); return; }
-      ws = s;
+      ws = s; lastIn = Date.now();
       s.binaryType = 'arraybuffer';
       s.onopen = () => s.send(packet(0x10, [...str('MQTT'), 4, 2, 0, 30, ...str(clientId)]));
       s.onmessage = e => {
+        lastIn = Date.now();
         const chunk = new Uint8Array(e.data), nb = new Uint8Array(buf.length + chunk.length);
         nb.set(buf); nb.set(chunk, buf.length); buf = nb;
         parse();
       };
       s.onerror = () => {};
-      s.onclose = () => { up = false; buf = new Uint8Array(0); clearInterval(pingT); if (alive) setTimeout(open, 2000); };
+      s.onclose = () => { if (ws !== s) return; up = false; buf = new Uint8Array(0); if (alive) setTimeout(open, 2000); };
+    }
+    function restart() {
+      if (!alive) return;
+      try { ws.onclose = null; ws.onmessage = null; ws.close(); } catch {}
+      up = false; buf = new Uint8Array(0);
+      open();
     }
     open();
+    // some networks let a connection open and then quietly stop it: ask the server often,
+    // and when nothing has come back for a while, connect again
+    pingT = setInterval(() => {
+      if (!alive) return;
+      if (Date.now() - lastIn > 11000) { restart(); return; }
+      try { if (up && ws.readyState === 1) ws.send(new Uint8Array([0xC0, 0])); } catch {}
+    }, 4000);
     return {
       get up() { return up; },
       sub(t) { subs.add(t); if (up) sendSub(t); },
       pub(t, text) { if (up && ws.readyState === 1) ws.send(packet(0x30, [...str(t), ...enc.encode(text)])); },
-      reconnect() {
-        if (!alive) return;
-        try { ws.onclose = null; ws.onmessage = null; ws.close(); } catch {}
-        up = false; buf = new Uint8Array(0); clearInterval(pingT);
-        open();
-      },
+      reconnect: restart,
       close() {
         alive = false; up = false; clearInterval(pingT);
         try { if (ws.readyState === 1) ws.send(new Uint8Array([0xE0, 0])); ws.close(); } catch {}
@@ -1321,7 +1333,7 @@
       onGuestGone(conn);
       return;
     }
-    if (d.t === 'ping') { resync(conn); return; }
+    if (d.t === 'ping') { resync(conn, d); return; }
     onHostData(conn, d);
   }
 
@@ -1340,7 +1352,8 @@
       $('setup').classList.remove('show'); $('lobby').classList.remove('show');
       view = d.v;
       try { draw(view); } catch (e) { console.error(e); }
-    } else if (d.t === 'full') { if (!gJoined) quit('Комната заполнена или игра уже идёт'); }
+    } else if (d.t === 'ok') { if ((d.term || 0) >= gTerm) gHeard = Date.now(); }
+    else if (d.t === 'full') { if (!gJoined) quit('Комната заполнена или игра уже идёт'); }
     else if (d.t === 'kicked') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты убрал вас из игры'); }
     else if (d.t === 'closed') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты вышел из игры. Игра окончена.'); }
   }
@@ -1350,12 +1363,12 @@
     const tick = () => {
       if (peer !== n || mode !== 'guest') return;
       if (!gJoined) {
-        if (Date.now() - gT0 > 12000) { quit('Комната с таким кодом не найдена'); return; }
+        if (Date.now() - gT0 > 25000) { quit('Комната не отвечает: неверный код или нет связи с игровыми серверами'); return; }
         hostConn.send({ t: 'join', name: gName, ver: VERSION });      // repeated until the room answers
         return;
       }
       const silent = Date.now() - gHeard;
-      hostConn.send({ t: 'ping' });
+      hostConn.send({ t: 'ping', rev: gRev, term: gTerm });
       if (silent < TAKE_MS / 2) return;
       $('warn').textContent = gSnap && view ? 'Хозяин комнаты не отвечает. Если он не вернётся, игра продолжится без него…'
         : 'Нет связи с комнатой. Пробуем восстановить…';
@@ -1444,14 +1457,18 @@
   const lobbyNames = () => lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? ' (другая версия игры)' : ''));
 
   // send a guest the current state again (answers every ping, so a lost message heals itself)
-  function resync(conn) {
+  function resync(conn, d) {
     if (!started) {
       if (lobby && lobby.some(s => s.conn === conn)) conn.send({ t: 'lobby', code: roomCode, names: lobbyNames(), ver: VERSION });
       return;
     }
     const seat = players.findIndex(p => p.conn === conn);
-    if (seat >= 0) conn.send({ t: 'view', v: viewFor(seat), st: snapshot() });
-    else conn.send({ t: 'kicked', term });                  // not a player of this game
+    if (seat >= 0) {
+      if (d && d.rev && d.rev === conn.rev && d.term === term) { conn.send({ t: 'ok', term }); return; }   // up to date
+      const v = viewFor(seat);
+      conn.rev = v.rev;
+      conn.send({ t: 'view', v, st: snapshot() });
+    } else conn.send({ t: 'kicked', term });                  // not a player of this game
   }
 
   function onHostData(conn, d) {
