@@ -308,7 +308,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 34;              // keep in sync with www/version.txt
+  const VERSION = 35;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -677,7 +677,6 @@
       seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev, pendingSix,
       term, back: backNo,
       top: t ? face(t) : null,
-      tail: pile.slice(-PILE_SHOWN).map(face),
       hist: pile.slice(-HISTORY).map(face),
       deckCount: deck.length, pileCount: pile.length,
       canDraw: deck.length > 0 || pile.length > 1,
@@ -685,7 +684,7 @@
       hand: me ? me.hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })) : [],
       asks: me ? [...specs.values()].filter(x => x.asked === roundNo && x.wait.includes(seat)).map(x => ({ id: x.id, name: x.name })) : [],
       specN: specs.size,
-      log: log.map(f => f(seat)),
+      log: log.slice(-2).map(f => f(seat)),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
       result, canControl: seat === mySeat,
       ...(sp ? {
@@ -695,21 +694,32 @@
     };
   }
 
+  // The whole game (needed only if another device has to take the game over) is heavy, so it is sent
+  // once for all players, on its own topic, and at most every 1.2 seconds. Moves themselves stay light.
+  let stT = null, stAt = 0;
+  function pushState() {
+    if (stT) return;
+    stT = setTimeout(() => {
+      stT = null; stAt = Date.now();
+      if (mode === 'host' && peer && started && players.length) peer.send(TOPIC + roomCode + '/s', { t: 'st', st: snapshot() });
+    }, Math.max(0, 1200 - (Date.now() - stAt)));
+  }
+
   function render() {
     if (!players.length) return;
     if (mode === 'host') {
-      const st = snapshot();
       players.forEach((p, i) => {
         if (!p.conn || !p.conn.open) return;
         const v = viewFor(i);
         p.conn.rev = v.rev;
-        p.conn.send({ t: 'view', v, st });
+        p.conn.send({ t: 'view', v });
       });
       specs.forEach(sp => {                                 // spectators get the table, never the whole state
         const v = viewFor(-1, sp);
         sp.conn.rev = v.rev;
         sp.conn.send({ t: 'view', v });
       });
+      pushState();
     }
     view = viewFor(mySeat);
     try { draw(view); } catch (e) { console.error(e); }
@@ -859,7 +869,7 @@
 
     const pl = $('pile'); pl.innerHTML = '';
     // the last few cards lie in a loose stack, newest on top, like on a real table
-    const tail = v.tail || (v.top ? [v.top] : []);
+    const tail = v.tail || (v.hist ? v.hist.slice(-PILE_SHOWN) : v.top ? [v.top] : []);
     pl.style.width = `calc(var(--cw) + ${Math.max(tail.length - 1, 0) * PILE_STEP}px)`;
     tail.forEach((c, i) => {
       const isTop = i === tail.length - 1;
@@ -1361,7 +1371,7 @@
       deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
       queen: pendingQueen ? { pi: pendingQueen.pi, id: pendingQueen.card.id } : null,
       result, evSeq, lastEv, viewRev,
-      log: log.map(f => players.map((_, i) => f(i)).concat([f(-1)]))
+      log: log.slice(-2).map(f => players.map((_, i) => f(i)).concat([f(-1)]))
     };
   }
   function restore(st) {
@@ -1395,8 +1405,7 @@
       });
       if (changed) render();
       // a device that wakes up after a long sleep finds the game again (or learns that it was replaced)
-      const st = snapshot();
-      players.forEach((p, i) => { if (p.conn && p.lost && !p.conn.left) p.conn.send({ t: 'view', v: viewFor(i), st }); });
+      players.forEach((p, i) => { if (p.conn && p.lost && !p.conn.left) p.conn.send({ t: 'view', v: viewFor(i) }); });
       kicked.forEach((t, id) => { if (now - t > 900000) kicked.delete(id); else n.send(topicOf(code, id), { t: 'kicked', term }); });
     }, PING_MS);
   }
@@ -1430,6 +1439,10 @@
   }
 
   function guestMsg(n, code, topic, from, d) {
+    if (topic === TOPIC + code + '/s') {
+      if (d.t === 'st' && d.st && (d.st.term || 0) >= gTerm && view && !view.spec) gSnap = d.st;
+      return;
+    }
     if (topic !== topicOf(code, n.id)) return;
     if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
     else if (d.t === 'view' && d.v) {
@@ -1514,6 +1527,7 @@
     mode = 'guest';
     hostConn = { open: true, send: x => n.send(hostTopic(code), x) };
     gJoined = true; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null;
+    n.sub(TOPIC + code + '/s');
     guestTimer(n, code);
     guestMsg(n, code, topicOf(code, n.id), '', d);
   }
@@ -1747,6 +1761,7 @@
     if (!(await n.ready(8000))) { if (peer === n) quit('Нет связи с игровым сервером. Проверьте интернет.'); return; }
     if (peer !== n) return;
     n.sub(topicOf(code, n.id));
+    n.sub(TOPIC + code + '/s');
     mode = 'guest'; roomCode = code;
     hostConn = { open: true, send: d => n.send(hostTopic(code), d) };
     gJoined = false; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now();
