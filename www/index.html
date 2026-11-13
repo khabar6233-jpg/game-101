@@ -98,7 +98,33 @@
   #turnNote.on { visibility: visible; animation: turnPulse 2.4s ease-in-out infinite; }
   @keyframes turnPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.13); } }
   #syncBtn { font-size: 22px; line-height: 1; padding: 4px 12px; }
-  .opp .duel { color: var(--text); font-size: 12px; margin-top: 2px; }
+  /* ----- the table, cleaned up ----- */
+  .bar { padding: 2px 0; }
+  .opp { background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 10px 8px 9px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; transition: box-shadow .3s, border-color .3s; }
+  .opp.turn { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 18px rgba(242,193,78,.25); }
+  .opp .head { display: flex; align-items: center; gap: 8px; max-width: 100%; }
+  .opp .ava { flex: none; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 14px; line-height: 26px; text-align: center; }
+  .opp .name { font-size: 15px; }
+  .opp .pts { font-size: 13px; color: var(--muted); }
+  .opp .pts b { color: var(--text); font-size: 15px; }
+  .opp .minis { margin-top: 2px; }
+  .opp .cards-n { font-size: 12px; color: var(--muted); }
+  .opp .duel { display: flex; gap: 6px; margin-top: 2px; font-size: 11px; color: var(--muted); }
+  .opp .duel span { background: rgba(255,255,255,.08); border-radius: 10px; padding: 2px 8px; }
+  .opp .duel b { color: var(--text); font-size: 12px; }
+  .opps.many .opp .ava { width: 20px; height: 20px; line-height: 20px; font-size: 11px; }
+  .opps.many .opp .duel { display: none; }
+  .slot > span { background: rgba(0,0,0,.18); border-radius: 10px; padding: 2px 10px; font-size: 12px; }
+  .status { min-height: 40px; }
+  .status div { color: var(--text); }
+  .status .old { color: var(--muted); }
+  .me-bar { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; border: 0; padding: 4px 0; font-size: 14px; }
+  .me-bar.turn { border: 0; }
+  .me-pts b { color: var(--text); font-size: 16px; }
+  .me-hint { background: rgba(242,193,78,.16); color: var(--gold); border-radius: 10px; padding: 3px 10px; font-size: 13px; }
+  .zone-line { border-top-color: rgba(255,255,255,.16); transition: border-color .3s, box-shadow .3s; }
+  body.myturn .zone-line { border-top-color: rgba(242,193,78,.7); box-shadow: 0 -1px 10px rgba(242,193,78,.35); }
   .btn {
     background: var(--gold); color: #2a1d00; border: 0; border-radius: 12px;
     padding: 0 22px; min-height: 46px; font-size: 17px; font-weight: 700;
@@ -241,6 +267,12 @@
   .chip { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); color: var(--text); border-radius: 18px; padding: 8px 16px; font-size: 15px;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
   .chip.on { background: var(--gold); border-color: var(--gold); color: #2a1d00; font-weight: 700; }
+  /* somebody is playing in this company right now */
+  .chip.live { background: #2e9e5b; border-color: #7fe0a4; color: #fff; font-weight: 700; }
+  .chip.live::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c8ffd9; margin-right: 8px; vertical-align: 1px;
+    animation: liveDot 1.6s ease-in-out infinite; }
+  .chip.on.live { box-shadow: 0 0 0 3px var(--gold); }
+  @keyframes liveDot { 50% { opacity: .35; } }
   .home .room { background: rgba(255,255,255,.1); color: var(--text); border-radius: 14px; margin: 0; }
   .home .room.mine { background: #2e9e5b; box-shadow: 0 0 0 2px #7fe0a4 inset; }
   .home .room.mine span { color: #eafff1; }
@@ -306,7 +338,7 @@
       <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off"></div>
       <div class="field"><span>Компания</span><input id="groupIn" maxlength="20" placeholder="Код компании" autocomplete="off"></div>
       <div id="groupList"></div>
-      <div class="hint" id="groupHint">Нажмите на код, чтобы войти. Удерживайте — меню.</div>
+      <div class="hint" id="groupHint">Нажмите на код, чтобы войти. Удерживайте — меню. Зелёный — там сейчас играют.</div>
       <div id="rooms"></div>
       <button class="btn wide" id="hostBtn">Создать комнату</button>
       <div class="row" id="codeRow">
@@ -405,7 +437,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 49;              // keep in sync with www/version.txt
+  const VERSION = 50;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -499,6 +531,7 @@
   const canPlay = c => (pendingSix ? c.r === 6 && active().length >= 3 :c.r === 12 || c.s === suit || c.r === top().r);
   const label = c => RANK_NAME[c.r] + c.s;
   const isSpecialEnd = c => c.r === 6 || c.r === 14;
+  const pointsWord = n => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? 'очков' : b === 1 ? 'очко' : b >= 2 && b <= 4 ? 'очка' : 'очков'; };
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
   const handPoints = p => p.hand.reduce((n, c) => n + POINTS(c.r), 0);
   // log lines are built per viewer: "Вы кладёте…" for me, "Имя кладёт…" for others
@@ -1030,11 +1063,14 @@
       const d = document.createElement('div');
       d.dataset.i = i;
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
-      d.innerHTML = `<div class="name">${esc(p.name)}</div><div>${p.gone ? 'удалён' : p.out ? 'выбыл' : 'очки: ' + p.score}</div>` +
+      const hue = [...p.name].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
+      d.innerHTML = `<div class="head"><span class="ava" style="background:hsl(${hue} 45% 42%)">${esc((p.name.trim()[0] || '?').toUpperCase())}</span>` +
+        `<div class="name">${esc(p.name)}</div></div>` +
+        `<div class="pts">${p.gone ? 'удалён' : p.out ? 'выбыл' : `<b>${p.score}</b> ${pointsWord(p.score)}`}</div>` +
         (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${RANK_NAME[c.r]}<br>${c.s}</div>`).join('')}</div>`
           : `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, o.classList.contains('many') ? 4 : 7))}</div>`) +
-        `<div>карт: <span class="cnt">${p.count}</span></div>` +
-        (p === rival ? `<div class="duel">ваши победы: ${tally.w} · поражения: ${tally.l}</div>` : '') +
+        `<div class="cards-n">карт: <span class="cnt">${p.count}</span></div>` +
+        (p === rival ? `<div class="duel"><span>победы <b>${tally.w}</b></span><span>поражения <b>${tally.l}</b></span></div>` : '') +
         (p.lost ? '<div class="lost">нет связи</div>' : '');
       if (mode === 'host' && !p.out) {
         // the device that runs the game can hand a seat to a bot or remove the player (or bot) altogether
@@ -1091,8 +1127,9 @@
       : !v.hand.length && v.phase === 'play' ? (myTurn ? ' · карт нет — возьмите карту из колоды' : ' · карт нет: ждём своего хода')
       : !myTurn ? ''
       : v.pendingSix ? (hasMove ? ' · подкиньте шестёрку или берите карты' : ' · нажмите «Беру»')
-      : hasMove ? ' · ваш ход' : v.drew ? ' · карта не подошла — нажмите «Пас»' : ' · нет карты — нажмите на стол, чтобы взять';
-    mb.textContent = v.spec ? (v.sit ? 'Вы за столом: ждём новую игру' : 'Вы зритель') : `Ваши очки: ${me.score}${hint}`;
+      : hasMove ? '' : v.drew ? ' · карта не подошла — нажмите «Пас»' : ' · нет карты — нажмите на стол, чтобы взять';
+    mb.innerHTML = v.spec ? esc(v.sit ? 'Вы за столом: ждём новую игру' : 'Вы зритель')
+      : `<span class="me-pts">Вы · <b>${me.score}</b> ${pointsWord(me.score)}</span>` + (hint ? `<span class="me-hint">${esc(hint.replace(/^ · /, ''))}</span>` : '');
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
     // The compass needle turns to the player who is to move. While a six is waiting to be taken or
@@ -1172,6 +1209,7 @@
     }
 
     $('turnNote').className = myTurn ? 'on' : '';
+    document.body.classList.toggle('myturn', myTurn);
     const a = $('actions'); a.innerHTML = '';
     if (myTurn && v.pendingSix) {
       const left = v.pendingSix - (v.drew ? 1 : 0);
@@ -1635,6 +1673,7 @@
   }
 
   function leave() {
+    document.body.classList.remove('myturn');
     // one on one, the game is not finished: it is counted by points
     try {
       if (mode !== 'guest' && players.length && phase !== 'setup') { duelAbort(); if (duel && duel.id === matchId) render(); }
@@ -2241,7 +2280,8 @@
   // ----- the company code: friends who share it see each other's rooms on the start screen -----
   const groupTopic = g => TOPIC + 'g/' + g;
   const normGroup = t => String(t || '').trim().toLowerCase().replace(/[^a-zа-яё0-9]/g, '').slice(0, 20);
-  const rooms = new Map(), online = new Map();
+  const rooms = new Map(), online = new Map(), liveRooms = new Map();
+  const groupLive = g => [...liveRooms.keys()].some(k => k.startsWith(g + '/'));
   let watch = null, watchT = null, hereT = null, watchAt = 0, joinWant = 'seat', toastT = null, toastCode = '';
   let groups = [];
 
@@ -2282,17 +2322,26 @@
   function stopWatch() {
     if (watch) { try { watch.close(); } catch {} watch = null; }
     clearInterval(watchT); clearInterval(hereT);
-    rooms.clear(); online.clear();
+    rooms.clear(); online.clear(); liveRooms.clear();
     drawRooms();
   }
   function startWatch() {
     stopWatch();
-    if (!group) return;
+    const all = [...new Set([group, ...groups].filter(Boolean))];
+    if (!all.length) return;
     const g = group;
     watchAt = Date.now();
     const settled = () => Date.now() - watchAt > 6000;      // what is there already when I come is not news
     const w = watch = netOpen((topic, from, d) => {
-      if (topic !== groupTopic(g) || !d) return;
+      if (!d) return;
+      // every saved company: is somebody playing there?
+      const tg = all.find(x => groupTopic(x) === topic);
+      if (tg && d.t === 'room' && /^\d{4}$/.test(d.code)) {
+        const k = tg + '/' + d.code;
+        if (d.gone) liveRooms.delete(k); else liveRooms.set(k, Date.now());
+        drawGroups();
+      }
+      if (!g || topic !== groupTopic(g)) return;
       if (d.t === 'here') {                                 // a friend has the game open
         if (typeof d.pid !== 'string' || d.pid === myPid) return;
         const name = String(d.name || 'Игрок').slice(0, 12), fresh = !online.has(d.pid);
@@ -2312,20 +2361,22 @@
       }
       drawRooms();
     });
-    w.sub(groupTopic(g));
-    const here = () => w.send(groupTopic(g), { t: 'here', pid: myPid, name: $('nick').value.trim().slice(0, 12) || 'Игрок' });
+    all.forEach(x => w.sub(groupTopic(x)));
+    const here = () => g && w.send(groupTopic(g), { t: 'here', pid: myPid, name: $('nick').value.trim().slice(0, 12) || 'Игрок' });
     hereT = setInterval(here, 5000);
     setTimeout(() => { if (watch === w) here(); }, 1500);
     watchT = setInterval(() => {
       rooms.forEach((r, c) => { if (Date.now() - r.t > 10000) rooms.delete(c); });
       online.forEach((x, id) => { if (Date.now() - x.t > 16000) online.delete(id); });
-      drawRooms();
+      liveRooms.forEach((t, k) => { if (Date.now() - t > 10000) liveRooms.delete(k); });
+      drawRooms(); drawGroups();
     }, 3000);
   }
 
   // the company codes this device has used: one tap to choose, a cross to forget
   function drawGroups() {
-    $('groupList').innerHTML = groups.map(g => `<span class="chip${g === group ? ' on' : ''}" data-g="${esc(g)}">${esc(g)}</span>`).join('');
+    const html = groups.map(g => `<span class="chip${g === group ? ' on' : ''}${groupLive(g) ? ' live' : ''}" data-g="${esc(g)}">${esc(g)}</span>`).join('');
+    if ($('groupList').dataset.h !== html) { $('groupList').dataset.h = html; $('groupList').innerHTML = html; }
     $('groupHint').style.display = groups.length ? '' : 'none';
   }
   function setGroup(g) {
