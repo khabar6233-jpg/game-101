@@ -319,7 +319,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 39;              // keep in sync with www/version.txt
+  const VERSION = 40;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1404,10 +1404,24 @@
     $('spkBtn').className = 'btn-small voice ' + (vSpk ? 'on' : 'off');
     $('spkBtn').textContent = '🔊' + (vOn() ? ' ' + live : '');
   }
-  function vTrack(p) {
-    const t = vMic && vStream ? vStream.getAudioTracks()[0] || null : null;
-    if (p.sender) p.sender.replaceTrack(t).catch(() => {});
-  }
+  const vMicAsk = async () => {
+    try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+    catch { return null; }
+  };
+  const vApply = () => {
+    if (vStream) vStream.getAudioTracks().forEach(t => { t.enabled = vMic; });
+    vPeers.forEach(p => { p.audio.muted = !vSpk; if (vSpk && p.audio.srcObject) p.audio.play().catch(() => {}); });
+  };
+  const vHelloOn = () => {
+    if (!vHello) vHello = setInterval(() => vSend(null, 'hello'), 4000);
+    vSend(null, 'hello');
+  };
+  // my sound goes into a connection: the microphone track, or "listen only" when there is no microphone
+  const vAttach = pc => {
+    const t = vStream && vStream.getAudioTracks()[0];
+    if (t) pc.addTrack(t, vStream);
+    else if (!pc.getTransceivers().length) pc.addTransceiver('audio', { direction: 'recvonly' });
+  };
   function vDrop(id) {
     const p = vPeers.get(id);
     if (!p) return;
@@ -1438,8 +1452,7 @@
   async function vCall(id) {
     const p = vPeer(id);
     try {
-      p.sender = p.pc.addTransceiver('audio', { direction: 'sendrecv' }).sender;
-      vTrack(p);
+      vAttach(p.pc);
       await p.pc.setLocalDescription(await p.pc.createOffer());
       vSend(id, 'offer', p.pc.localDescription);
     } catch (e) { console.error(e); vDrop(id); }
@@ -1460,8 +1473,7 @@
         vDrop(from);
         const p = vPeer(from);
         await p.pc.setRemoteDescription(d.data);
-        const tr = p.pc.getTransceivers()[0];
-        if (tr) { tr.direction = 'sendrecv'; p.sender = tr.sender; vTrack(p); }
+        vAttach(p.pc);
         await p.pc.setLocalDescription(await p.pc.createAnswer());
         vSend(from, 'answer', p.pc.localDescription);
         await vFlush(from, p);
@@ -1481,16 +1493,11 @@
     vAuto = true;
     if (typeof RTCPeerConnection === 'undefined') return;
     const n = peer;
-    vSpk = true;
-    if (!vHello) vHello = setInterval(() => vSend(null, 'hello'), 4000);
-    vSend(null, 'hello');
-    vDraw();
-    let st = null;
-    try { st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch {}
-    if (!st) return;
-    if (peer !== n || !vSpk || vStream) { st.getTracks().forEach(t => t.stop()); return; }   // left the room or switched off meanwhile
-    vStream = st; vMic = true;
-    vPeers.forEach(vTrack);
+    const st = await vMicAsk();
+    if (peer !== n || vOn() || vStream) { if (st) st.getTracks().forEach(t => t.stop()); return; }   // left, or switched by hand meanwhile
+    vStream = st; vMic = !!st; vSpk = true;
+    vApply();
+    vHelloOn();
     vDraw();
   }
   function vStop(bye) {
@@ -1505,19 +1512,20 @@
   async function vToggle(mic) {
     if (mode === 'solo' || !peer) return;
     if (typeof RTCPeerConnection === 'undefined') { $('warn').textContent = 'Голосовой чат здесь не поддерживается.'; return; }
-    if (mic && !vMic) {
-      try {
-        vStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      } catch { $('warn').textContent = 'Нет доступа к микрофону: разрешите его для игры в настройках телефона.'; return; }
-      vMic = true;
-    } else if (mic) {
-      vMic = false;
-      if (vStream) { vStream.getTracks().forEach(t => t.stop()); vStream = null; }
-    } else vSpk = !vSpk;
-    vPeers.forEach(p => { vTrack(p); p.audio.muted = !vSpk; if (vSpk) p.audio.play().catch(() => {}); });
+    vAuto = true;
+    if (mic && !vMic && !vStream) {
+      const n = peer, st = await vMicAsk();
+      if (peer !== n) { if (st) st.getTracks().forEach(t => t.stop()); return; }
+      if (!st) { $('warn').textContent = 'Нет доступа к микрофону: разрешите его для игры в настройках телефона.'; return; }
+      vStream = st; vMic = true;
+      // the connections were made without a microphone: make them again
+      if (vHello) vSend(null, 'bye');
+      [...vPeers.keys()].forEach(vDrop);
+    } else if (mic) vMic = !vMic;
+    else vSpk = !vSpk;
+    vApply();
     if (!vOn()) { vStop(true); return; }
-    if (!vHello) vHello = setInterval(() => vSend(null, 'hello'), 4000);
-    vSend(null, 'hello');
+    vHelloOn();
     vDraw();
   }
 
