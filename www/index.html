@@ -338,6 +338,17 @@
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
   .chip.on { background: linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,.1)), var(--felt); border: 1.5px solid rgba(255,255,255,.6); color: #fff; font-weight: 700; }
   /* somebody is playing in this company right now */
+  #friendList { display: flex; flex-wrap: wrap; gap: 8px; }
+  #friendList:empty { display: none; }
+  .fchip { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
+    color: var(--text); border-radius: 18px; padding: 8px 14px; font-size: 15px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .fchip i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.25); }
+  .fchip.on i { background: #7fe0a4; }
+  .fchip.play { background: #2e9e5b; border-color: #7fe0a4; font-weight: 700; }
+  .fchip.play i { background: #fff; animation: liveDot 1.6s ease-in-out infinite; }
+  .fchip small { color: rgba(255,255,255,.75); font-size: 12px; }
+  .addf { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.08); color: var(--text); border-radius: 12px; padding: 2px 9px; margin: 2px 4px 2px 0;
+    font-size: 13px; font-family: inherit; }
   .chip.live { background: #2e9e5b; border-color: #7fe0a4; color: #fff; font-weight: 700; }
   .chip.live::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c8ffd9; margin-right: 8px; vertical-align: 1px;
     animation: liveDot 1.6s ease-in-out infinite; }
@@ -437,6 +448,13 @@
       </div>
       <label class="sw"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее и без голоса</span></label>
       <div class="msg" id="netMsg"></div>
+    </section>
+
+    <section class="panel" id="friendsPanel">
+      <h3>Друзья</h3>
+      <div id="friendList"></div>
+      <div class="hint" id="friendHint">Добавить друга: нажмите «＋» у имени в строке «В сети» или «☰» на его панели в игре.
+        О друзьях приходит уведомление, когда они заходят в игру и садятся за стол. Удерживайте имя — удалить.</div>
     </section>
 
     <section class="panel">
@@ -553,7 +571,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 56;              // keep in sync with www/version.txt
+  const VERSION = 57;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2414,7 +2432,8 @@
   function drawRooms() {
     const el = $('rooms');
     if (!group) { el.innerHTML = ''; el.dataset.h = ''; return; }
-    const who = online.size ? `<p class="none">В сети: ${esc([...online.values()].map(x => x.name).join(', '))}</p>` : '';
+    const who = online.size ? `<p class="none">В сети: ${[...online].map(([id, x]) => isFriend(id) ? `<span class="addf">★ ${esc(x.name)}</span>`
+      : `<button class="addf" data-af="${esc(id)}" data-n="${esc(x.name)}">${esc(x.name)} ＋</button>`).join('')}</p>` : '';
     const html = who + (rooms.size ? [...rooms].map(([c, r]) => {
       const full = !r.started && r.names.length >= MAX_PLAYERS;
       return `<div class="room${r.mine ? ' mine' : ''}"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` + (r.mine ? 'вы играете здесь · ' : '') +
@@ -2432,20 +2451,64 @@
     rooms.clear(); online.clear(); liveRooms.clear(); onlineAll.clear();
     drawRooms();
   }
+  // friends: pid -> name. Everybody's game says "I am here" on its own channel; friends listen to it.
+  let friends = {};
+  try { friends = JSON.parse(localStorage.getItem('g101-friends')) || {}; } catch {}
+  if (!friends || typeof friends !== 'object') friends = {};
+  const friendSeen = new Map();
+  const myTopic = id => TOPIC + 'u/' + id;
+  const isFriend = id => Object.prototype.hasOwnProperty.call(friends, id);
+  function saveFriends() {
+    try { localStorage.setItem('g101-friends', JSON.stringify(friends)); } catch {}
+    drawFriends();
+    startWatch();
+  }
+  function addFriend(id, name) {
+    if (!id || id === myPid || id === 'bot' || isFriend(id)) return;
+    friends[id] = String(name || 'Друг').slice(0, 12);
+    saveFriends();
+    notifyUser(`${friends[id]} теперь в друзьях`);
+  }
+  function dropFriend(id) { delete friends[id]; friendSeen.delete(id); saveFriends(); }
+  function drawFriends() {
+    const ids = Object.keys(friends);
+    const html = ids.map(id => {
+      const f = friendSeen.get(id), on = f && Date.now() - f.t < 16000;
+      const st = !on ? '' : f.room ? (f.started ? 'играет' : 'ждёт за столом') : 'в сети';
+      return `<span class="fchip${on ? ' on' : ''}${on && f.room ? ' play' : ''}" data-fr="${esc(id)}"><i></i>${esc(friends[id])}${st ? `<small>${st}</small>` : ''}</span>`;
+    }).join('');
+    const el = $('friendList');
+    if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+  }
   let watchKey = '';
   const onlineAll = new Map();
   function startWatch() {
     const all = [...new Set([group, ...groups].filter(Boolean))];
-    const key = all.join('|') + '#' + group + '#' + lite;
+    const fr = Object.keys(friends);
+    const key = all.join('|') + '#' + group + '#' + lite + '#' + fr.join(',');
     if (watch && key === watchKey) { drawRooms(); drawGroups(); return; }        // already listening
     stopWatch();
     watchKey = key;
-    if (!all.length) return;
+
     const g = group;
     watchAt = Date.now();
     const settled = () => Date.now() - watchAt > 6000;      // what is there already when I come is not news
     const w = watch = netOpen((topic, from, d) => {
       if (!d) return;
+      // a friend's game: online, sitting at a table, playing
+      if (d.t === 'me' && topic.startsWith(TOPIC + 'u/')) {
+        const id = topic.slice((TOPIC + 'u/').length);
+        if (!isFriend(id) || id === myPid) return;
+        const name = friends[id], prev = friendSeen.get(id), was = prev && Date.now() - prev.t < 16000;
+        const room = /^\d{4}$/.test(d.room) ? d.room : '';
+        friendSeen.set(id, { t: Date.now(), room, started: !!d.started });
+        if (settled()) {
+          if (!was) notifyUser(room ? `${name} за столом — нажмите, чтобы войти` : `${name} в сети`, room && room !== roomCode ? room : '', '');
+          else if (room && room !== prev.room && room !== roomCode) notifyUser(`${name} за столом — нажмите, чтобы войти`, room, '');
+        }
+        drawFriends();
+        return;
+      }
       // every saved company: is somebody playing there?
       const tg = all.find(x => groupTopic(x) === topic);
       if (tg && d.t === 'room' && /^\d{4}$/.test(d.code)) {
@@ -2480,13 +2543,20 @@
       drawRooms();
     });
     all.forEach(x => w.sub(groupTopic(x)));
-    const here = () => g && w.send(groupTopic(g), { t: 'here', pid: myPid, name: $('nick').value.trim().slice(0, 12) || 'Игрок' });
+    fr.forEach(id => w.sub(myTopic(id)));
+    const here = () => {
+      const name = $('nick').value.trim().slice(0, 12) || 'Игрок';
+      if (g) w.send(groupTopic(g), { t: 'here', pid: myPid, name });
+      // for my friends: where am I
+      w.send(myTopic(myPid), { t: 'me', name, room: mode !== 'solo' && roomCode ? roomCode : '', started: !!started });
+    };
     hereT = setInterval(here, 5000);
     setTimeout(() => { if (watch === w) here(); }, 1500);
     watchT = setInterval(() => {
       rooms.forEach((r, c) => { if (Date.now() - r.t > 10000) rooms.delete(c); });
       online.forEach((x, id) => { if (Date.now() - x.t > 16000) online.delete(id); });
       onlineAll.forEach((t, k) => { if (Date.now() - t > 16000) onlineAll.delete(k); });
+      drawFriends();
       liveRooms.forEach((t, k) => { if (Date.now() - t > 10000) liveRooms.delete(k); });
       drawRooms(); drawGroups();
     }, 3000);
@@ -2644,6 +2714,14 @@
       };
       if (p.remote) add('Заменить ботом', `Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`, replaceWithBot);
       add('Удалить из игры', `Удалить «${p.name}» из игры? Его карты вернутся в колоду.`, removePlayer);
+    }
+    if (p.pid && p.pid !== 'bot' && p.pid !== myPid) {
+      const b = document.createElement('button');
+      const fr = isFriend(p.pid);
+      b.className = fr ? 'btn plain' : 'btn';
+      b.textContent = fr ? 'Убрать из друзей' : 'Добавить в друзья';
+      b.onclick = () => { if (fr) dropFriend(p.pid); else addFriend(p.pid, p.name); $('oppInfo').classList.remove('show'); };
+      t.prepend(b);
     }
     $('oppInfo').classList.add('show');
   }
@@ -2876,16 +2954,41 @@
     $('toast').classList.remove('show');
     if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) {
       if (toastGroup && toastGroup !== group) setGroup(toastGroup);
+      $('codeRow').style.display = '';
       $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom();
     }
   };
   $('rooms').onclick = e => {
+    const f = e.target.closest('[data-af]');
+    if (f) { addFriend(f.dataset.af, f.dataset.n); drawRooms(); return; }
     const b = e.target.closest('[data-c]');
     if (!b) return;
     joinWant = b.dataset.w || 'seat';
     $('codeIn').value = b.dataset.c;
     joinRoom();
   };
+  {
+    let holdT = null, held = false;
+    const fl = $('friendList'), stop = () => { clearTimeout(holdT); holdT = null; };
+    fl.addEventListener('pointerdown', e => {
+      const c = e.target.closest('[data-fr]');
+      stop(); held = false;
+      if (c) holdT = setTimeout(() => {
+        held = true;
+        if (confirm(`Удалить «${friends[c.dataset.fr]}» из друзей?`)) dropFriend(c.dataset.fr);
+      }, 550);
+    });
+    fl.addEventListener('pointerup', e => {
+      const c = e.target.closest('[data-fr]');
+      stop();
+      if (!c || held) return;
+      const f = friendSeen.get(c.dataset.fr);
+      if (f && f.room && Date.now() - f.t < 16000 && mode === 'solo' && !peer) { $('codeIn').value = f.room; joinWant = 'seat'; joinRoom(); }
+    });
+    fl.addEventListener('pointercancel', stop);
+    fl.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  drawFriends();
   startWatch();
   $('newBtn').onclick = () => {
     if (mode !== 'solo' && !confirm('Выйти из комнаты?')) return;
