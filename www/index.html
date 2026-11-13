@@ -149,8 +149,11 @@
   #gearBtn { font-size: 20px; line-height: 1; padding: 4px 10px; }
   .vrow { display: flex; gap: 8px; }
   .vrow:empty, .vrow.none { display: none; }
-  .vbtn { flex: 1; border: 0; border-radius: 12px; min-height: 46px; font-size: 16px; font-weight: 700; font-family: inherit; background: #eee; color: #888; }
-  .vbtn.on { background: #2e9e5b; color: #fff; }
+  .vbtn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 20px;
+    height: 92px; font-size: 15px; font-weight: 600; font-family: inherit; background: #e9e9ee; color: #6e6e73; transition: background .2s, color .2s; }
+  .vbtn svg { width: 30px; height: 30px; fill: currentColor; }
+  .vbtn.on { background: var(--gold); color: #2a1d00; }
+  .vbtn:active { transform: scale(.97); }
   .gl { font-size: 13px; color: #666; margin-top: 4px; }
   .bgs { display: flex; justify-content: center; gap: 10px; }
   .bgs button { width: 40px; height: 40px; border-radius: 50%; border: 3px solid transparent; }
@@ -322,6 +325,24 @@
   .home #rooms { display: flex; flex-direction: column; gap: 8px; }
   .home #rooms:empty { display: none; }
   .home #rooms .none { color: var(--muted); }
+  /* the round / game result */
+  .dialog.res { padding: 26px 20px 20px; border-radius: 24px; }
+  .dialog.res h2 { font-size: 30px; margin: 0 0 4px; }
+  .dialog.res.win h2 { color: #1f9d55; }
+  .dialog.res.lose h2 { color: #d13b3b; }
+  .dialog.res.win { box-shadow: 0 0 0 4px rgba(31,157,85,.35), 0 20px 50px rgba(0,0,0,.45); }
+  .dialog.res.lose { box-shadow: 0 0 0 4px rgba(209,59,59,.3), 0 20px 50px rgba(0,0,0,.45); }
+  .dialog.res #resText { color: #6e6e73; font-size: 15px; margin-bottom: 18px; }
+  .dialog.res table { border-collapse: separate; border-spacing: 0 4px; margin-bottom: 18px; }
+  .dialog.res td { border: 0; padding: 9px 10px; font-size: 16px; }
+  .dialog.res tr.hd td { padding: 0 10px; font-size: 12px; color: #8e8e93; font-weight: 400; }
+  .dialog.res tr:not(.hd) td { background: #f2f2f7; }
+  .dialog.res tr:not(.hd) td:first-child { border-radius: 12px 0 0 12px; }
+  .dialog.res tr:not(.hd) td:last-child { border-radius: 0 12px 12px 0; }
+  .dialog.res tr.mine td { background: #fff4d6; }
+  .dialog.res td i { font-style: normal; color: #e0a400; margin-right: 6px; }
+  .dialog.res td:nth-child(2) { color: #8e8e93; }
+  .dialog.res #resBtn { width: 100%; border-radius: 14px; }
   ul.rules { margin: 0 0 14px; padding-left: 20px; text-align: left; color: #444; font-size: 14px; line-height: 1.45; }
   ul.rules li { margin-bottom: 6px; }
   #specRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
@@ -414,8 +435,8 @@
     <h2>Настройки</h2>
     <div class="col">
       <div class="vrow" id="voiceRow">
-        <button class="vbtn voice off" id="micBtn" style="display:none">🎤 Микрофон</button>
-        <button class="vbtn voice off" id="spkBtn" style="display:none">🔊</button>
+        <button class="vbtn off" id="micBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Мик</span></button>
+        <button class="vbtn off" id="spkBtn" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Звук</span></button>
       </div>
       <button class="btn" id="newGameBtn">Новая игра</button>
       <div class="gl">Фон стола</div>
@@ -506,7 +527,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 51;              // keep in sync with www/version.txt
+  const VERSION = 52;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1178,7 +1199,7 @@
       : v.pendingSix ? (hasMove ? ' · подкиньте шестёрку или берите карты' : ' · нажмите «Беру»')
       : hasMove ? '' : v.drew ? ' · карта не подошла — нажмите «Пас»' : ' · нет карты — нажмите на стол, чтобы взять';
     mb.innerHTML = v.spec ? esc(v.sit ? 'Вы за столом: ждём новую игру' : 'Вы зритель')
-      : `<span class="me-pts">Вы · <b>${me.score}</b> ${pointsWord(me.score)}</span>` + (hint ? `<span class="me-hint">${esc(hint.replace(/^ · /, ''))}</span>` : '');
+      : `<span class="me-pts">Вы · <b>${me.score}</b> ${pointsWord(me.score)}</span>`;
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
     // The compass needle turns to the player who is to move. While a six is waiting to be taken or
@@ -1432,19 +1453,22 @@
     $('result').classList.toggle('show', show);
     if (!show) return;
     const name = i => (i === v.seat ? 'Вы' : esc(v.players[i].name));
-    let title, text;
+    let title, text, tone = '';
+    const me = v.seat >= 0 && !v.spec;
     if (r.gameOver) {
-      if (r.champion === v.seat) { title = 'Вы выиграли игру!'; text = 'Все соперники набрали перебор.'; }
-      else if (v.seat >= 0 && v.players[v.seat].out) { title = 'Вы проиграли'; text = 'У вас больше 101 очка.'; }
-      else { title = 'Игра окончена'; text = 'Победитель: ' + name(r.champion); }
-    } else {
-      title = r.w === v.seat ? 'Раунд за вами!' : r.w >= 0 ? 'Раунд выиграл: ' + name(r.w) : 'Ходов нет';
-      text = r.w >= 0 ? 'Остальные считают карты на руках.' : 'Никто не может походить — все считают карты.';
-    }
+      if (me && r.champion === v.seat) { title = 'Вы выиграли!'; text = 'Игра окончена: все соперники набрали перебор'; tone = 'win'; }
+      else if (me) { title = 'Вы проиграли'; text = r.champion >= 0 ? 'Игру выиграл: ' + name(r.champion) : 'Игра окончена'; tone = 'lose'; }
+      else { title = 'Игра окончена'; text = r.champion >= 0 ? 'Победитель: ' + name(r.champion) : ''; }
+    } else if (r.w < 0) { title = 'Ходов нет'; text = 'Никто не может походить — все считают карты'; }
+    else if (me && r.w === v.seat) { title = 'Вы выиграли'; text = `Раунд ${v.roundNo} за вами`; tone = 'win'; }
+    else if (me) { title = 'Вы проиграли'; text = `Раунд ${v.roundNo} выиграл: ${name(r.w)}`; tone = 'lose'; }
+    else { title = 'Раунд ' + v.roundNo; text = 'Выиграл: ' + name(r.w); }
+    $('result').querySelector('.dialog').className = 'dialog res ' + tone;
     $('resTitle').innerHTML = title;
     $('resText').innerHTML = text;
-    $('resTable').innerHTML = r.rows.map(x =>
-      `<tr><td>${name(x.pi)}${x.note ? `<span class="note">${x.note}</span>` : ''}</td><td>${x.win ? '—' : '+' + x.add}</td><td><b>${x.score}</b></td></tr>`).join('');
+    $('resTable').innerHTML = '<tr class="hd"><td></td><td>за раунд</td><td>всего</td></tr>' + r.rows.map(x =>
+      `<tr class="${x.pi === v.seat ? 'mine' : ''}${x.win ? ' won' : ''}"><td>${x.win ? '<i>★</i>' : ''}${name(x.pi)}${x.note ? `<span class="note">${x.note}</span>` : ''}</td>` +
+      `<td>${x.win ? '0' : '+' + x.add}</td><td><b>${x.score}</b></td></tr>`).join('');
     const b = $('resBtn');
     b.disabled = !v.canControl;
     b.textContent = !v.canControl ? 'Ждём хозяина комнаты…' : r.gameOver ? 'Новая игра' : 'Следующий раунд';
@@ -1784,10 +1808,8 @@
   function vDraw() {
     let live = 0;
     vSeen.forEach((x, id) => { if (vDirect(id) || vViaRelay(id)) live++; });
-    $('micBtn').className = 'vbtn voice ' + (vMic ? 'on' : 'off');
-    $('spkBtn').className = 'vbtn voice ' + (vSpk ? 'on' : 'off');
-    $('micBtn').textContent = '🎤 Микрофон ' + (vMic ? 'вкл' : 'выкл');
-    $('spkBtn').textContent = '🔊 Звук ' + (vSpk ? 'вкл' + (live ? ' · ' + live : '') : 'выкл');
+    $('micBtn').className = 'vbtn ' + (vMic ? 'on' : 'off');
+    $('spkBtn').className = 'vbtn ' + (vSpk ? 'on' : 'off');
   }
   const vMicAsk = async () => {
     try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
