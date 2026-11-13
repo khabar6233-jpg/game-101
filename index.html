@@ -209,11 +209,43 @@
   #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60; max-width: 92vw; display: none;
     background: #fff; color: #222; border-radius: 12px; padding: 10px 16px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
   #toast.show { display: block; }
-  #groupList { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* ----- the start screen ----- */
+  #setup { background: radial-gradient(ellipse at 50% 0%, #1a7a4b 0%, var(--felt) 38%, var(--felt-dark) 100%); align-items: flex-start; padding: 0; overflow-y: auto; }
+  .home { width: 100%; max-width: 420px; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) 16px 28px; display: flex; flex-direction: column; gap: 14px; color: var(--text); }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
+  .brand img { width: 56px; height: 56px; border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  .brand .title { flex: 1; text-align: left; }
+  .brand h1 { margin: 0; font-size: 34px; line-height: 1; letter-spacing: 1px; }
+  .brand #ver { font-size: 12px; color: var(--muted); }
+  .ghost { background: rgba(255,255,255,.1); color: var(--text); border: 1px solid rgba(255,255,255,.22); border-radius: 12px; padding: 10px 16px; font-size: 15px; font-family: inherit; }
+  .ghost.small { align-self: center; font-size: 13px; padding: 8px 14px; color: var(--muted); border-color: rgba(255,255,255,.14); background: none; }
+  .panel { background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+  .panel h3 { margin: 0 0 2px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
+  .panel .hint { font-size: 12px; color: var(--muted); }
+  .field { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 0 14px; }
+  .field span { flex: none; width: 82px; font-size: 13px; color: var(--muted); }
+  .home input { flex: 1; min-width: 0; width: 100%; background: none; border: 0; outline: 0; color: var(--text); font-size: 17px; font-family: inherit; padding: 13px 0; }
+  .home input::placeholder { color: rgba(255,255,255,.35); }
+  .home .row { display: flex; gap: 8px; }
+  .home .row > input { flex: 1; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 13px 14px; text-align: center; }
+  .home .row > .btn { flex: none; }
+  .home .btn.wide { width: 100%; font-size: 18px; padding: 15px; }
+  .home .msg { color: #ffc2b8; font-size: 14px; white-space: pre-line; }
+  .home .msg:empty { display: none; }
+  .seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .seg .btn { padding: 13px 0; font-size: 19px; }
+  #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
   #groupList:empty { display: none; }
-  .chip { display: inline-flex; align-items: center; gap: 8px; background: #eee; color: #333; border-radius: 16px; padding: 6px 6px 6px 12px; font-size: 14px; }
-  .chip.on { background: #13603a; color: #fff; }
-  .chip b { display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; border-radius: 50%; background: rgba(0,0,0,.14); font-size: 12px; }
+  .chip { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); color: var(--text); border-radius: 18px; padding: 8px 16px; font-size: 15px;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+  .chip.on { background: var(--gold); border-color: var(--gold); color: #2a1d00; font-weight: 700; }
+  .home .room { background: rgba(255,255,255,.1); color: var(--text); border-radius: 14px; margin: 0; }
+  .home .room span { color: var(--gold); }
+  .home #rooms { display: flex; flex-direction: column; gap: 8px; }
+  .home #rooms:empty { display: none; }
+  .home #rooms .none { color: var(--muted); }
+  ul.rules { margin: 0 0 14px; padding-left: 20px; text-align: left; color: #444; font-size: 14px; line-height: 1.45; }
+  ul.rules li { margin-bottom: 6px; }
   #specRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
   #specRow:empty { display: none; }
   #specRow span { background: rgba(0,0,0,.2); color: var(--text); border-radius: 12px; padding: 2px 10px; font-size: 12px; }
@@ -258,37 +290,68 @@
 
 <div id="toast"></div>
 <div class="overlay show" id="setup">
-  <div class="dialog">
-    <h2>101</h2>
-    <p>Ходите в масть или в значение. Нет карты — берите из колоды.<br>
-       Туз — пропуск хода, шестёрка — соседу 2 карты и пропуск хода.<br>
-       Втроём и больше шестёрку можно перевести своей шестёркой. Каждая шестёрка подряд на столе — ещё +2 карты: 2, 4, 6, 8…<br>
-       Дама кладётся на любую карту и заказывает масть.<br>
-       На шестёрке и тузе раунд не кончается: в свой ход берёте карту, подошла — накрываете и выигрываете.<br>
-       102 очка — проигрыш, ровно 101 — счёт обнуляется.</p>
-    <h3>С ботами</h3>
-    <div class="row">
-      <button class="btn" data-bots="1">2 игрока</button>
-      <button class="btn" data-bots="2">3</button>
-      <button class="btn" data-bots="3">4</button>
-      <button class="btn" data-bots="4">5</button>
-      <button class="btn" data-bots="5">6</button>
+  <div class="home">
+    <div class="brand">
+      <img src="icon-192.png" alt="">
+      <div class="title"><h1>101</h1><span id="ver"></span></div>
+      <button class="ghost" id="rulesBtn">Правила</button>
     </div>
-    <h3>По сети с друзьями</h3>
-    <div class="col">
-      <input id="nick" maxlength="12" placeholder="Ваше имя" autocomplete="off">
-      <input id="groupIn" maxlength="20" placeholder="Код компании (один на всех друзей)" autocomplete="off">
+
+    <section class="panel">
+      <h3>С друзьями</h3>
+      <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off"></div>
+      <div class="field"><span>Компания</span><input id="groupIn" maxlength="20" placeholder="Код компании" autocomplete="off"></div>
       <div id="groupList"></div>
+      <div class="hint" id="groupHint">Нажмите на код, чтобы войти. Удерживайте — меню.</div>
       <div id="rooms"></div>
-      <button class="btn" id="hostBtn">Создать комнату</button>
+      <button class="btn wide" id="hostBtn">Создать комнату</button>
       <div class="row" id="codeRow">
-        <input id="codeIn" maxlength="4" inputmode="numeric" placeholder="Код" autocomplete="off">
+        <input id="codeIn" maxlength="4" inputmode="numeric" placeholder="Код комнаты" autocomplete="off">
         <button class="btn" id="joinBtn">Войти</button>
       </div>
       <div class="msg" id="netMsg"></div>
-      <button class="btn-small" id="netTest" style="background:#eee;color:#555">Проверить связь</button>
+    </section>
+
+    <section class="panel">
+      <h3>С ботами</h3>
+      <div class="hint">Сколько игроков за столом</div>
+      <div class="seg">
+        <button class="btn" data-bots="1">2</button>
+        <button class="btn" data-bots="2">3</button>
+        <button class="btn" data-bots="3">4</button>
+        <button class="btn" data-bots="4">5</button>
+        <button class="btn" data-bots="5">6</button>
+      </div>
+    </section>
+
+    <button class="ghost small" id="netTest">Проверить связь</button>
+  </div>
+</div>
+
+<div class="overlay" id="rules">
+  <div class="dialog">
+    <h2>Правила</h2>
+    <ul class="rules">
+      <li>Ходите в масть или в значение. Нет карты — берите из колоды.</li>
+      <li>Туз — пропуск хода. Шестёрка — соседу 2 карты и пропуск хода.</li>
+      <li>Втроём и больше шестёрку можно перевести своей шестёркой. Каждая шестёрка подряд на столе — ещё +2 карты: 2, 4, 6, 8…</li>
+      <li>Дама кладётся на любую карту и заказывает масть.</li>
+      <li>На шестёрке и тузе раунд не кончается: в свой ход берёте карту, подошла — накрываете и выигрываете.</li>
+      <li>102 очка — проигрыш, ровно 101 — счёт обнуляется.</li>
+    </ul>
+    <button class="btn" id="rulesClose" style="width:100%">Понятно</button>
+  </div>
+</div>
+
+<div class="overlay" id="chipMenu">
+  <div class="dialog">
+    <p style="margin:0">Компания</p>
+    <h2 id="chipName"></h2>
+    <div class="col">
+      <button class="btn" id="chipEnter">Войти</button>
+      <button class="btn plain" id="chipDel" style="color:#b3261e">Удалить</button>
+      <button class="btn plain" id="chipCancel">Отмена</button>
     </div>
-    <p id="ver" style="margin:10px 0 0;font-size:12px;color:#888"></p>
   </div>
 </div>
 
@@ -337,7 +400,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 46;              // keep in sync with www/version.txt
+  const VERSION = 47;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2133,7 +2196,8 @@
 
   // the company codes this device has used: one tap to choose, a cross to forget
   function drawGroups() {
-    $('groupList').innerHTML = groups.map(g => `<span class="chip${g === group ? ' on' : ''}" data-g="${esc(g)}">${esc(g)}<b data-x="${esc(g)}">✕</b></span>`).join('');
+    $('groupList').innerHTML = groups.map(g => `<span class="chip${g === group ? ' on' : ''}" data-g="${esc(g)}">${esc(g)}</span>`).join('');
+    $('groupHint').style.display = groups.length ? '' : 'none';
   }
   function setGroup(g) {
     group = normGroup(g);
@@ -2347,13 +2411,38 @@
   drawGroups();
   if (group) askNotify();
   $('groupIn').onchange = () => { setGroup($('groupIn').value); askNotify(); };
-  $('groupList').onclick = e => {
-    const x = e.target.closest('[data-x]'), c = e.target.closest('[data-g]');
-    if (x) {
-      groups = groups.filter(g => g !== x.dataset.x);
-      setGroup(group === x.dataset.x ? '' : group);
-    } else if (c) { setGroup(c.dataset.g); askNotify(); }
-  };
+  {
+    let holdT = null, held = false, menuG = '';
+    const gl = $('groupList'), stop = () => { clearTimeout(holdT); holdT = null; };
+    gl.addEventListener('pointerdown', e => {
+      const c = e.target.closest('[data-g]');
+      stop(); held = false;
+      if (!c) return;
+      holdT = setTimeout(() => {                            // held long enough: the menu
+        held = true; menuG = c.dataset.g;
+        $('chipName').textContent = menuG;
+        $('chipMenu').classList.add('show');
+      }, 550);
+    });
+    gl.addEventListener('pointerup', e => {
+      const c = e.target.closest('[data-g]');
+      stop();
+      if (c && !held) { setGroup(c.dataset.g); askNotify(); }
+    });
+    gl.addEventListener('pointercancel', stop);
+    gl.addEventListener('pointerleave', stop);
+    gl.addEventListener('contextmenu', e => e.preventDefault());
+    const close = () => $('chipMenu').classList.remove('show');
+    $('chipCancel').onclick = close;
+    $('chipEnter').onclick = () => { close(); setGroup(menuG); askNotify(); };
+    $('chipDel').onclick = () => {
+      close();
+      groups = groups.filter(g => g !== menuG);
+      setGroup(group === menuG ? '' : group);
+    };
+    $('rulesBtn').onclick = () => $('rules').classList.add('show');
+    $('rulesClose').onclick = () => $('rules').classList.remove('show');
+  }
   $('toast').onclick = () => {
     $('toast').classList.remove('show');
     if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) { $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom(); }
