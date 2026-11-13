@@ -193,6 +193,10 @@
     padding: 8px 10px; margin-bottom: 6px; font-family: inherit; font-size: 14px; color: #222; }
   .room span { font-size: 12px; color: #13603a; }
   #rooms .none { font-size: 13px; color: #888; margin: 0; }
+  .voice { position: relative; }
+  .voice.off { opacity: .55; }
+  .voice.off::after { content: ''; position: absolute; left: 5px; right: 5px; top: 50%; height: 2px; background: #fff; transform: rotate(-45deg); }
+  .voice.on { background: var(--gold); color: #222; }
   body.grp #codeRow, body.grp #lobCodeP, body.grp #lobCode { display: none; }
   .suits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .suits button { font-size: 40px; height: 76px; border-radius: 12px; border: 2px solid #ddd; background: #fafafa; color: #1b1b1b; }
@@ -207,6 +211,8 @@
   <div class="bar">
     <span><b>101</b> · раунд <span id="roundNo">1</span><span id="roomTag"></span></span>
     <span style="display:flex;gap:6px">
+      <button class="btn-small voice off" id="micBtn" style="display:none" aria-label="Микрофон">🎤</button>
+      <button class="btn-small voice off" id="spkBtn" style="display:none" aria-label="Звук">🔊</button>
       <button class="btn-small" id="syncBtn" style="display:none" aria-label="Обновить связь">⟳</button>
       <button class="btn-small" id="newBtn">Выйти</button>
     </span>
@@ -308,7 +314,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 37;              // keep in sync with www/version.txt
+  const VERSION = 38;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -333,6 +339,14 @@
   // spectators of a room: who watches, whose cards they may see, who wants a seat in the next game
   const specs = new Map();
   let group = '', roomGroup = '';
+  // this device's own mark: with it a player whose page was reloaded gets the old seat back
+  let myPid = new URLSearchParams(location.search).get('pid') || '';
+  try {
+    if (!myPid) myPid = localStorage.getItem('g101-pid') || '';
+    if (!myPid) { myPid = Math.random().toString(36).slice(2, 12); localStorage.setItem('g101-pid', myPid); }
+  } catch {}
+  if (!myPid) myPid = Math.random().toString(36).slice(2, 12);
+  const banned = new Set();
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
@@ -377,7 +391,7 @@
   // ================= ENGINE =================
   function startMatch(seats) {
     gameId++;
-    players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, hand: [], score: 0, out: false }));
+    players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, pid: s.pid || '', hand: [], score: 0, out: false }));
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = []; result = null;
     backNo = (backNo + 1 + Math.floor(Math.random() * (BACKS - 1))) % BACKS;
@@ -663,7 +677,7 @@
     players = players.filter(p => !p.removed);
     specs.forEach((sp, id) => {                             // spectators who asked for a seat sit down now
       if (!sp.sit || players.length >= MAX_PLAYERS) return;
-      players.push({ name: sp.name, isBot: false, conn: sp.conn, hand: [], score: 0, out: false });
+      players.push({ name: sp.name, isBot: false, conn: sp.conn, pid: sp.pid || '', hand: [], score: 0, out: false });
       specs.delete(id);
     });
     mySeat = Math.max(players.indexOf(meP), 0);
@@ -839,7 +853,7 @@
       pendingPlay.ghost.remove();
       pendingPlay = null;
     }
-    $('syncBtn').style.display = mode === 'solo' ? 'none' : '';
+    $('syncBtn').style.display = $('micBtn').style.display = $('spkBtn').style.display = mode === 'solo' ? 'none' : '';
     // what just happened, so the right card can be animated
     const roundChanged = v.roundNo !== animRound;
     animRound = v.roundNo;
@@ -1342,6 +1356,7 @@
   }
 
   function leave() {
+    vStop(true);
     gameId++;
     phase = 'setup';
     clearInterval(netTimer);
@@ -1356,7 +1371,7 @@
       } catch {}
       try { peer.close(); } catch {}
     }
-    conns.clear(); kicked.clear(); specs.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
+    conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
     animRound = 0; prevHand = null; flyingTop = null;
@@ -1364,6 +1379,121 @@
     showOnly('setup');
     if (typeof checkVersion === 'function') checkVersion();
     startWatch();
+  }
+
+  // ----- voice chat -----
+  // Two switches: the microphone (the others hear me) and the sound (I hear the others). The sound goes
+  // straight from phone to phone (WebRTC); the relay servers only help the phones to find each other.
+  const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302',
+    'stun:stun.cloudflare.com:3478', 'stun:stun.sipnet.ru:3478', 'stun:stun.nextcloud.com:443'] }] };
+  const vPeers = new Map(), vIce = new Map();
+  let vMic = false, vSpk = false, vStream = null, vHello = null;
+  const vOn = () => vMic || vSpk;
+  const vSend = (to, kind, data) => { if (peer && roomCode) peer.send(TOPIC + roomCode + '/v', { t: 'v', to, kind, data }); };
+  function vDraw() {
+    let live = 0;
+    vPeers.forEach(p => { if (p.pc.connectionState === 'connected') live++; });
+    $('micBtn').className = 'btn-small voice ' + (vMic ? 'on' : 'off');
+    $('spkBtn').className = 'btn-small voice ' + (vSpk ? 'on' : 'off');
+    $('spkBtn').textContent = '🔊' + (vOn() ? ' ' + live : '');
+  }
+  function vTrack(p) {
+    const t = vMic && vStream ? vStream.getAudioTracks()[0] || null : null;
+    if (p.sender) p.sender.replaceTrack(t).catch(() => {});
+  }
+  function vDrop(id) {
+    const p = vPeers.get(id);
+    if (!p) return;
+    vPeers.delete(id);
+    try { p.pc.close(); } catch {}
+    p.audio.srcObject = null;
+    vDraw();
+  }
+  function vPeer(id) {
+    const pc = new RTCPeerConnection(ICE);
+    const audio = new Audio();
+    audio.autoplay = true; audio.muted = !vSpk;
+    const p = { pc, audio, sender: null, t: Date.now() };
+    pc.ontrack = e => { audio.srcObject = e.streams[0] || new MediaStream([e.track]); audio.play().catch(() => {}); };
+    pc.onicecandidate = e => { if (e.candidate) vSend(id, 'ice', e.candidate); };
+    pc.onconnectionstatechange = () => {
+      if (vPeers.get(id) !== p) return;
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') vDrop(id); else vDraw();
+    };
+    vPeers.set(id, p);
+    return p;
+  }
+  async function vFlush(id, p) {
+    const q = vIce.get(id) || [];
+    vIce.delete(id);
+    for (const c of q) { try { await p.pc.addIceCandidate(c); } catch {} }
+  }
+  async function vCall(id) {
+    const p = vPeer(id);
+    try {
+      p.sender = p.pc.addTransceiver('audio', { direction: 'sendrecv' }).sender;
+      vTrack(p);
+      await p.pc.setLocalDescription(await p.pc.createOffer());
+      vSend(id, 'offer', p.pc.localDescription);
+    } catch (e) { console.error(e); vDrop(id); }
+  }
+  async function voiceMsg(from, d) {
+    if (!d || d.t !== 'v' || !peer || typeof RTCPeerConnection === 'undefined') return;
+    if (d.kind === 'bye') { vDrop(from); vIce.delete(from); return; }
+    if (!vOn()) return;
+    try {
+      if (d.kind === 'hello') {
+        const p = vPeers.get(from);
+        if (p && p.pc.connectionState !== 'connected' && Date.now() - p.t > 15000) vDrop(from);    // stuck: try again
+        if (!vPeers.has(from) && peer.id < from) vCall(from);                                     // one of the two calls
+        return;
+      }
+      if (d.to !== peer.id) return;
+      if (d.kind === 'offer') {
+        vDrop(from);
+        const p = vPeer(from);
+        await p.pc.setRemoteDescription(d.data);
+        const tr = p.pc.getTransceivers()[0];
+        if (tr) { tr.direction = 'sendrecv'; p.sender = tr.sender; vTrack(p); }
+        await p.pc.setLocalDescription(await p.pc.createAnswer());
+        vSend(from, 'answer', p.pc.localDescription);
+        await vFlush(from, p);
+      } else if (d.kind === 'answer') {
+        const p = vPeers.get(from);
+        if (p && !p.pc.remoteDescription) { await p.pc.setRemoteDescription(d.data); await vFlush(from, p); }
+      } else if (d.kind === 'ice') {
+        const p = vPeers.get(from);
+        if (p && p.pc.remoteDescription) await p.pc.addIceCandidate(d.data);
+        else { if (!vIce.has(from)) vIce.set(from, []); vIce.get(from).push(d.data); }
+      }
+    } catch (e) { console.error(e); }
+  }
+  function vStop(bye) {
+    clearInterval(vHello); vHello = null;
+    if (bye && vOn()) vSend(null, 'bye');
+    [...vPeers.keys()].forEach(vDrop);
+    vIce.clear();
+    if (vStream) { vStream.getTracks().forEach(t => t.stop()); vStream = null; }
+    vMic = false; vSpk = false;
+    vDraw();
+  }
+  async function vToggle(mic) {
+    if (mode === 'solo' || !peer) return;
+    if (typeof RTCPeerConnection === 'undefined') { $('warn').textContent = 'Голосовой чат здесь не поддерживается.'; return; }
+    if (mic && !vMic) {
+      try {
+        vStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      } catch { $('warn').textContent = 'Нет доступа к микрофону: разрешите его для игры в настройках телефона.'; return; }
+      vMic = true;
+    } else if (mic) {
+      vMic = false;
+      if (vStream) { vStream.getTracks().forEach(t => t.stop()); vStream = null; }
+    } else vSpk = !vSpk;
+    vPeers.forEach(p => { vTrack(p); p.audio.muted = !vSpk; if (vSpk) p.audio.play().catch(() => {}); });
+    if (!vOn()) { vStop(true); return; }
+    if (!vHello) vHello = setInterval(() => vSend(null, 'hello'), 4000);
+    vSend(null, 'hello');
+    vDraw();
   }
 
   // ----- rooms -----
@@ -1386,7 +1516,7 @@
       term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup,
       specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
-        name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
+        name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
         cid: p.isBot ? null : p.conn ? p.conn.id : i === mySeat ? me : null
       })),
       deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
@@ -1397,7 +1527,7 @@
   }
   function restore(st) {
     gameId++;
-    players = st.players.map(p => ({ name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out,
+    players = st.players.map(p => ({ name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out,
       removed: !!p.removed, emptySince: p.emptySince, cid: p.cid, conn: null, lost: false }));
     deck = st.deck; pile = st.pile; suit = st.suit; turn = st.turn; drew = st.drew; sixRun = st.sixRun;
     pendingSix = st.pendingSix; emptySeq = st.emptySeq; passStreak = st.passStreak; starter = st.starter;
@@ -1486,11 +1616,14 @@
 
   function guestTimer(n, code) {
     clearInterval(netTimer);
+    let lastTick = Date.now();
     const tick = () => {
       if (peer !== n || mode !== 'guest') return;
+      if (Date.now() - lastTick > PING_MS * 2.5) gHeard = Date.now();
+      lastTick = Date.now();
       if (!gJoined) {
         if (Date.now() - gT0 > 25000) { quit('Комната не отвечает: неверный код или нет связи с игровыми серверами'); return; }
-        hostConn.send({ t: 'join', name: gName, ver: VERSION });      // repeated until the room answers
+        hostConn.send({ t: 'join', name: gName, ver: VERSION, pid: myPid });      // repeated until the room answers
         return;
       }
       const silent = Date.now() - gHeard;
@@ -1565,6 +1698,7 @@
       if (peer !== n || !d || typeof d !== 'object') return;
       if (d.t === 'taken' && topic === topicOf(code, n.id)) { taken = true; return; }
       if (roomCode !== code) return;
+      if (topic === TOPIC + code + '/v') { voiceMsg(from, d); return; }
       if (mode === 'host') hostMsg(n, code, topic, from, d);
       else if (mode === 'guest') guestMsg(n, code, topic, from, d);
     });
@@ -1576,6 +1710,7 @@
     if (peer !== n) return;
     n.sub(hostTopic(code));
     n.sub(topicOf(code, n.id));
+    n.sub(TOPIC + code + '/v');
     await pause(400);
     n.send(hostTopic(code), { t: 'probe' });                // is this code already in use?
     await pause(1000);
@@ -1583,7 +1718,7 @@
     if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
     conns.clear(); kicked.clear(); term = 1; ownerId = n.id;
     mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
-    lobby = [{ name: myName(), conn: null, isBot: false }];
+    lobby = [{ name: myName(), conn: null, isBot: false, pid: myPid }];
     netMsg('');
     drawLobby();
     hostTimer(n, code);
@@ -1617,13 +1752,29 @@
     if (d.t === 'join') {
       const member = (lobby && lobby.some(s => s.conn === conn)) || players.some(p => p.conn === conn) || specs.has(conn.id);
       if (member) { resync(conn); return; }
-      if (started) {                                        // the game is on: come in as a spectator
-        specs.set(conn.id, { id: conn.id, name: String(d.name || 'Зритель').slice(0, 12), conn, asked: 0, sit: false, open: {}, wait: [] });
+      const pid = typeof d.pid === 'string' ? d.pid.slice(0, 24) : '';
+      if (pid && banned.has(pid)) { conn.send({ t: 'kicked', term }); return; }
+      const retire = c => { if (c) { c.left = true; c.open = false; } };
+      if (started) {
+        // the same device comes back with a reloaded page: it takes its old seat, not a second one
+        const p = pid ? players.find(x => x.pid === pid && !x.isBot && !x.removed) : null;
+        if (p) {
+          if (players.indexOf(p) !== mySeat) { retire(p.conn); p.conn = conn; p.lost = false; }
+          render();
+          return;
+        }
+        const old = pid ? [...specs.values()].find(x => x.pid === pid) : null;
+        if (old) { retire(old.conn); specs.delete(old.id); }
+        // the game is on: come in as a spectator
+        specs.set(conn.id, { id: conn.id, pid, name: String(d.name || 'Зритель').slice(0, 12), conn,
+          asked: old ? old.asked : 0, sit: old ? old.sit : false, open: old ? old.open : {}, wait: old ? old.wait : [] });
         render();
         return;
       }
+      const seat = pid && lobby ? lobby.find(x => x.pid === pid && x.conn) : null;
+      if (seat) { retire(seat.conn); seat.conn = conn; seat.ver = +d.ver || 0; drawLobby(); return; }
       if (!lobby || lobby.length >= MAX_PLAYERS) { conn.send({ t: 'full' }); return; }
-      lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false, ver: +d.ver || 0 });
+      lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false, ver: +d.ver || 0, pid });
       drawLobby();
       return;
     }
@@ -1696,7 +1847,8 @@
     try { p.conn.send({ t: 'kicked', term }); } catch {}
     kicked.set(p.conn.id, Date.now());
     p.conn.left = true; p.conn.open = false;
-    p.conn = null; p.isBot = true; p.lost = false; p.name += ' (бот)';
+    if (p.pid) banned.add(p.pid);
+    p.conn = null; p.isBot = true; p.lost = false; p.pid = ''; p.name += ' (бот)';
     if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
       suit = botSuit(p); phase = 'play';
       const q = pendingQueen; pendingQueen = null;
@@ -1715,7 +1867,8 @@
       kicked.set(p.conn.id, Date.now());
       p.conn.left = true; p.conn.open = false; p.conn = null;
     }
-    p.out = true; p.removed = true; p.isBot = true; p.lost = false;
+    if (p.pid) banned.add(p.pid);
+    p.out = true; p.removed = true; p.isBot = true; p.lost = false; p.pid = '';
     deck = shuffle(deck.concat(p.hand));
     p.hand = [];
     say(p.name + ' удалён из игры');
@@ -1775,6 +1928,7 @@
     gName = myName();
     const n = netOpen((topic, from, d) => {
       if (peer !== n || !d || typeof d !== 'object' || roomCode !== code) return;
+      if (topic === TOPIC + code + '/v') { voiceMsg(from, d); return; }
       if (mode === 'guest') guestMsg(n, code, topic, from, d);
       else if (mode === 'host') hostMsg(n, code, topic, from, d);
     });
@@ -1783,6 +1937,7 @@
     if (peer !== n) return;
     n.sub(topicOf(code, n.id));
     n.sub(TOPIC + code + '/s');
+    n.sub(TOPIC + code + '/v');
     mode = 'guest'; roomCode = code;
     hostConn = { open: true, send: d => n.send(hostTopic(code), d) };
     gJoined = false; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now();
@@ -1860,6 +2015,10 @@
   $('leaveBtn').onclick = leave;
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = testNet;
+  $('micBtn').onclick = () => vToggle(true);
+  $('spkBtn').onclick = () => vToggle(false);
+  // a sound that the browser refused to start on its own starts with the next touch
+  document.addEventListener('pointerup', () => { if (vSpk) vPeers.forEach(p => { if (p.audio.paused && p.audio.srcObject) p.audio.play().catch(() => {}); }); });
   try { group = normGroup(localStorage.getItem('g101-group')); } catch {}
   $('groupIn').value = group; document.body.classList.toggle('grp', !!group);
   $('groupIn').onchange = () => {
