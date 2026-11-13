@@ -177,6 +177,22 @@
   .plist li { padding: 8px; border-bottom: 1px solid #eee; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .plist .kick { border: 0; background: #f1d6d3; color: #b3261e; border-radius: 8px; width: 34px; height: 30px; font-size: 16px; font-family: inherit; }
   .opp .tools { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+  .opps.many { gap: 4px; }
+  .opps.many .opp { padding: 6px 2px; font-size: 11px; }
+  .opps.many .opp .name { font-size: 12px; }
+  .opp .minis.open { flex-wrap: wrap; height: auto; gap: 1px; }
+  .mini.f { margin-left: 0; background: #fff; border: 1px solid #bbb; color: #1b1b1b; font-size: 10px; line-height: 1.15; font-weight: 800; padding-top: 3px; }
+  .mini.f.red { color: #c8232c; }
+  #asks:empty { display: none; }
+  .ask { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--text);
+    background: rgba(0,0,0,.25); border-radius: 10px; padding: 6px; margin-bottom: 4px; }
+  .ask button { border: 0; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-family: inherit; background: var(--gold); color: #222; font-weight: 700; }
+  .ask button.no { background: rgba(255,255,255,.2); color: var(--text); }
+  .actions .btn.sm { font-size: 14px; padding: 8px 10px; }
+  .room { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: #e9f3ec; border: 0; border-radius: 10px;
+    padding: 8px 10px; margin-bottom: 6px; font-family: inherit; font-size: 14px; color: #222; }
+  .room span { font-size: 12px; color: #13603a; }
+  #rooms .none { font-size: 13px; color: #888; margin: 0; }
   .suits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .suits button { font-size: 40px; height: 76px; border-radius: 12px; border: 2px solid #ddd; background: #fafafa; color: #1b1b1b; }
   .suits button.red { color: var(--red); }
@@ -195,6 +211,7 @@
     </span>
   </div>
   <div class="warn" id="warn"></div>
+  <div id="asks"></div>
   <div class="opps" id="opps"></div>
 
   <div class="middle">
@@ -225,10 +242,14 @@
       <button class="btn" data-bots="1">2 игрока</button>
       <button class="btn" data-bots="2">3</button>
       <button class="btn" data-bots="3">4</button>
+      <button class="btn" data-bots="4">5</button>
+      <button class="btn" data-bots="5">6</button>
     </div>
     <h3>По сети с друзьями</h3>
     <div class="col">
       <input id="nick" maxlength="12" placeholder="Ваше имя" autocomplete="off">
+      <input id="groupIn" maxlength="20" placeholder="Код компании (один на всех друзей)" autocomplete="off">
+      <div id="rooms"></div>
       <button class="btn" id="hostBtn">Создать комнату</button>
       <div class="row">
         <input id="codeIn" maxlength="4" inputmode="numeric" placeholder="Код" autocomplete="off">
@@ -286,12 +307,12 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 32;              // keep in sync with www/version.txt
+  const VERSION = 33;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
-  const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, MAX_PLAYERS = 4;
+  const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, MAX_PLAYERS = 6;
   const DELAY = 700;        // a bot "thinks" this long before its move
   const PLAY_PAUSE = 650;   // pause after any card is played, before its effect and the next turn
 
@@ -308,6 +329,9 @@
 
   // ----- session state -----
   let mode = 'solo';            // 'solo' | 'host' | 'guest'
+  // spectators of a room: who watches, whose cards they may see, who wants a seat in the next game
+  const specs = new Map();
+  let group = '', roomGroup = '';
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
@@ -527,6 +551,14 @@
   // one entry point for every human move, local or remote
   function act(seat, a) {
     if (!a || typeof a !== 'object') return;
+    if (a.t === 'show') {                                   // a player answers a spectator: show my cards or not
+      const sp = specs.get(a.sid);
+      if (!sp || !sp.wait.includes(seat)) return;
+      sp.wait = sp.wait.filter(x => x !== seat);
+      if (a.ok) sp.open[seat] = roundNo;
+      render();
+      return;
+    }
     if (a.t === 'suit') {
       if (phase !== 'choose' || !pendingQueen || pendingQueen.pi !== seat || !SUITS.includes(a.s)) return;
       suit = a.s;
@@ -617,10 +649,17 @@
     if (!result.gameOver) { startRound(); return; }
     if (mode === 'solo') { leave(); return; }
     // same room, fresh match
-    players.forEach(p => { p.score = 0; p.out = !!p.removed; });
+    const meP = players[mySeat];
+    players = players.filter(p => !p.removed);
+    specs.forEach((sp, id) => {                             // spectators who asked for a seat sit down now
+      if (!sp.sit || players.length >= MAX_PLAYERS) return;
+      players.push({ name: sp.name, isBot: false, conn: sp.conn, hand: [], score: 0, out: false });
+      specs.delete(id);
+    });
+    mySeat = Math.max(players.indexOf(meP), 0);
+    players.forEach(p => { p.score = 0; p.out = false; });
     if (active().length < 2) { leave(); return; }             // everybody else was removed
     starter = Math.floor(Math.random() * players.length);
-    if (players[starter].out) starter = nextIdx(starter);
     roundNo = 0; log = [];
     backNo = (backNo + 1 + Math.floor(Math.random() * (BACKS - 1))) % BACKS;
     startRound();
@@ -630,8 +669,9 @@
   // how a card on the table looks: a queen takes the suit its player ordered
   const face = c => ({ s: c.as || c.s, r: c.r, id: c.id });
 
-  function viewFor(seat) {
-    const t = top();
+  // seat -1 with a spectator record gives the view of somebody who only watches
+  function viewFor(seat, sp) {
+    const t = top(), me = players[seat];
     return {
       seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev, pendingSix,
       term, back: backNo,
@@ -641,10 +681,16 @@
       deckCount: deck.length, pileCount: pile.length,
       canDraw: deck.length > 0 || pile.length > 1,
       players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length, lost: !!p.lost, remote: !!p.conn, gone: !!p.removed })),
-      hand: players[seat].hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })),
+      hand: me ? me.hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })) : [],
+      asks: me ? [...specs.values()].filter(x => x.asked === roundNo && x.wait.includes(seat)).map(x => ({ id: x.id, name: x.name })) : [],
+      specN: specs.size,
       log: log.map(f => f(seat)),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
-      result, canControl: seat === mySeat
+      result, canControl: seat === mySeat,
+      ...(sp ? {
+        spec: true, canAsk: sp.asked !== roundNo && phase === 'play', sit: !!sp.sit,
+        open: Object.fromEntries(players.map((p, i) => [i, p.hand.map(c => ({ s: c.s, r: c.r, id: c.id }))]).filter(([i]) => sp.open[i] === roundNo))
+      } : {})
     };
   }
 
@@ -657,6 +703,11 @@
         const v = viewFor(i);
         p.conn.rev = v.rev;
         p.conn.send({ t: 'view', v, st });
+      });
+      specs.forEach(sp => {                                 // spectators get the table, never the whole state
+        const v = viewFor(-1, sp);
+        sp.conn.rev = v.rev;
+        sp.conn.send({ t: 'view', v });
       });
     }
     view = viewFor(mySeat);
@@ -717,7 +768,7 @@
   }
 
   function draw(v) {
-    const me = v.players[v.seat];
+    const me = v.players[v.seat] || { score: 0, out: false };
     const myTurn = v.phase === 'play' && v.turn === v.seat && !v.busy;
     const hasMove = v.hand.some(c => c.ok);
     if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
@@ -730,7 +781,22 @@
     wasMyTurn = myTurn;
     $('roundNo').textContent = v.roundNo;
     document.body.dataset.back = v.back || 0;
-    $('roomTag').textContent = (v.room ? ' · комната ' + v.room : '') + ' · v' + VERSION;
+    $('roomTag').textContent = (v.room ? ' · комната ' + v.room : '') + (v.specN ? ' · зрителей: ' + v.specN : '') + ' · v' + VERSION;
+    // spectators ask to see the cards: every player decides for themselves
+    const ab = $('asks'); ab.innerHTML = '';
+    (v.asks || []).forEach(q => {
+      const row = document.createElement('div');
+      row.className = 'ask';
+      row.innerHTML = `<span>Зритель «${esc(q.name)}» просит показать ваши карты</span>`;
+      [['Показать', true], ['Нет', false]].forEach(([text, ok]) => {
+        const b = document.createElement('button');
+        b.textContent = text;
+        if (!ok) b.className = 'no';
+        onTap(b, () => { action({ t: 'show', sid: q.id, ok }); return true; });
+        row.appendChild(b);
+      });
+      ab.appendChild(row);
+    });
     // the room owner's device applies the rules, so a version mismatch matters
     const hv = v.ver || 0;
     $('warn').textContent = mode !== 'guest' || hv === VERSION ? ''
@@ -755,13 +821,16 @@
     }
 
     const o = $('opps'); o.innerHTML = '';
-    for (let k = 1; k < v.players.length; k++) {
-      const i = (v.seat + k) % v.players.length, p = v.players[i];
+    o.className = 'opps' + (v.players.length - (v.spec ? 0 : 1) > 3 ? ' many' : '');
+    for (let k = v.spec ? 0 : 1; k < v.players.length; k++) {
+      const i = (Math.max(v.seat, 0) + k) % v.players.length, p = v.players[i];
+      const open = v.open && v.open[i];
       const d = document.createElement('div');
       d.dataset.i = i;
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
       d.innerHTML = `<div class="name">${esc(p.name)}</div><div>${p.gone ? 'удалён' : p.out ? 'выбыл' : 'очки: ' + p.score}</div>` +
-        `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, 7))}</div>` +
+        (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${RANK_NAME[c.r]}<br>${c.s}</div>`).join('')}</div>`
+          : `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, o.classList.contains('many') ? 4 : 7))}</div>`) +
         `<div>карт: <span class="cnt">${p.count}</span></div>` +
         (p.lost ? '<div class="lost">нет связи</div>' : '');
       if (mode === 'host' && !p.out) {
@@ -820,7 +889,7 @@
       : !myTurn ? ''
       : v.pendingSix ? (hasMove ? ' · подкиньте шестёрку или берите карты' : ' · нажмите «Беру»')
       : hasMove ? ' · ваш ход' : v.drew ? ' · карта не подошла — нажмите «Пас»' : ' · нет карты — нажмите на стол, чтобы взять';
-    mb.textContent = `Ваши очки: ${me.score}${hint}`;
+    mb.textContent = v.spec ? 'Вы зритель' : `Ваши очки: ${me.score}${hint}`;
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
     // The compass needle turns to the player who is to move. While a six is waiting to be taken or
@@ -912,6 +981,16 @@
       b.className = 'btn'; b.textContent = 'Пас';
       onTap(b, () => { action({ t: 'pass' }); return true; });
       a.appendChild(b);
+    }
+    if (v.spec) {
+      const add = (text, msg, on) => {
+        const b = document.createElement('button');
+        b.className = 'btn sm'; b.textContent = text; b.disabled = !on;
+        if (on) onTap(b, () => { action(msg); return true; });
+        a.appendChild(b);
+      };
+      add(v.canAsk ? 'Попросить открыть карты' : 'Карты уже просили', { t: 'ask' }, v.canAsk);
+      add(v.sit ? 'Не садиться' : 'Сесть в новой игре', { t: 'sit', on: !v.sit }, true);
     }
 
     $('suitPick').classList.toggle('show', v.choose || localQueen !== null);
@@ -1062,7 +1141,7 @@
     let title, text;
     if (r.gameOver) {
       if (r.champion === v.seat) { title = 'Вы выиграли игру!'; text = 'Все соперники набрали перебор.'; }
-      else if (v.players[v.seat].out) { title = 'Вы проиграли'; text = 'У вас больше 101 очка.'; }
+      else if (v.seat >= 0 && v.players[v.seat].out) { title = 'Вы проиграли'; text = 'У вас больше 101 очка.'; }
       else { title = 'Игра окончена'; text = 'Победитель: ' + name(r.champion); }
     } else {
       title = r.w === v.seat ? 'Раунд за вами!' : r.w >= 0 ? 'Раунд выиграл: ' + name(r.w) : 'Ходов нет';
@@ -1238,17 +1317,21 @@
       try {
         if (mode === 'guest' && hostConn) hostConn.send({ t: 'bye' });
         // the room owner leaves for good: the room is closed for everybody
-        else if (mode === 'host' && peer.id === ownerId) conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
+        else if (mode === 'host' && peer.id === ownerId) {
+          conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
+          if (roomGroup) peer.send(groupTopic(roomGroup), { t: 'room', code: roomCode, gone: true });
+        }
       } catch {}
       try { peer.close(); } catch {}
     }
-    conns.clear(); kicked.clear(); gJoined = false; gSnap = null; term = 1; ownerId = '';
+    conns.clear(); kicked.clear(); specs.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
     animRound = 0; prevHand = null; flyingTop = null;
     $('warn').textContent = '';
     showOnly('setup');
     if (typeof checkVersion === 'function') checkVersion();
+    startWatch();
   }
 
   // ----- rooms -----
@@ -1268,7 +1351,8 @@
   function snapshot() {
     const me = peer ? peer.id : '';
     return {
-      term, owner: ownerId, hostSeat: mySeat, back: backNo,
+      term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup,
+      specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
         name: p.name, isBot: p.isBot, hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
         cid: p.isBot ? null : p.conn ? p.conn.id : i === mySeat ? me : null
@@ -1276,7 +1360,7 @@
       deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
       queen: pendingQueen ? { pi: pendingQueen.pi, id: pendingQueen.card.id } : null,
       result, evSeq, lastEv, viewRev,
-      log: log.map(f => players.map((_, i) => f(i)))
+      log: log.map(f => players.map((_, i) => f(i)).concat([f(-1)]))
     };
   }
   function restore(st) {
@@ -1288,16 +1372,21 @@
     roundNo = st.roundNo; phase = st.phase; pend = st.pend; busy = false; backNo = st.back || 0;
     pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
     result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
-    log = st.log.map(lines => me => lines[me]);
+    log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
   }
 
   // every few seconds: mark the players we have not heard from, and keep sending them the game
   function hostTimer(n, code) {
     clearInterval(netTimer);
     netTimer = setInterval(() => {
-      if (peer !== n || mode !== 'host' || !started) return;
+      if (peer !== n || mode !== 'host') return;
+      // friends with the same company code see this room in their list
+      if (roomGroup) n.send(groupTopic(roomGroup), { t: 'room', code, started, spec: specs.size,
+        names: started ? players.filter(p => !p.removed).map(p => p.name) : lobby ? lobby.map(x => x.name) : [] });
+      if (!started) return;
       const now = Date.now();
       let changed = false;
+      specs.forEach((sp, id) => { if (sp.conn.left || (sp.conn.last > 0 && now - sp.conn.last > LOST_MS)) { specs.delete(id); changed = true; } });
       conns.forEach(c => {
         const p = players.find(x => x.conn === c);
         const silent = c.left || (c.last > 0 && now - c.last > LOST_MS);
@@ -1400,6 +1489,13 @@
       conns.set(p.cid, p.conn);
       if (i === st.hostSeat) { p.conn.last = 1; p.lost = true; }      // silent until it answers again
     });
+    specs.clear(); roomGroup = st.group || '';
+    (st.specs || []).forEach(x => {
+      const c = mkConn(n, code, x.id);
+      c.last = Date.now();
+      conns.set(x.id, c);
+      specs.set(x.id, { ...x, conn: c });
+    });
     n.sub(hostTopic(code));
     hostTimer(n, code);
     const name = players[seat].name;
@@ -1413,7 +1509,7 @@
   // this device was the host, but the game went on without it: continue as a player
   function becomeGuest(n, code, d) {
     gameId++;
-    players = []; started = false; conns.clear(); kicked.clear();
+    players = []; started = false; conns.clear(); kicked.clear(); specs.clear();
     mode = 'guest';
     hostConn = { open: true, send: x => n.send(hostTopic(code), x) };
     gJoined = true; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null;
@@ -1424,6 +1520,7 @@
   // ----- host -----
   async function createRoom(attempt = 0) {
     netMsg('Создаём комнату…');
+    stopWatch();
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
     const code = String(Math.floor(1000 + Math.random() * 9000));
@@ -1437,7 +1534,7 @@
     });
     peer = n;
     if (!(await n.ready(8000))) {
-      if (peer === n) { n.close(); peer = null; netMsg('Нет связи с игровым сервером. Проверьте интернет.'); }
+      if (peer === n) { n.close(); peer = null; netMsg('Нет связи с игровым сервером. Проверьте интернет.'); startWatch(); }
       return;
     }
     if (peer !== n) return;
@@ -1449,7 +1546,7 @@
     if (peer !== n) return;
     if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
     conns.clear(); kicked.clear(); term = 1; ownerId = n.id;
-    mode = 'host'; mySeat = 0; started = false; roomCode = code;
+    mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
     lobby = [{ name: myName(), conn: null, isBot: false }];
     netMsg('');
     drawLobby();
@@ -1470,22 +1567,41 @@
       const v = viewFor(seat);
       conn.rev = v.rev;
       conn.send({ t: 'view', v, st: snapshot() });
+    } else if (specs.has(conn.id)) {
+      const sp = specs.get(conn.id);
+      if (d && d.rev && d.rev === conn.rev && d.term === term) { conn.send({ t: 'ok', term }); return; }
+      const v = viewFor(-1, sp);
+      conn.rev = v.rev;
+      conn.send({ t: 'view', v });
     } else conn.send({ t: 'kicked', term });                  // not a player of this game
   }
 
   function onHostData(conn, d) {
     if (!d || typeof d !== 'object') return;
     if (d.t === 'join') {
-      const member = (lobby && lobby.some(s => s.conn === conn)) || players.some(p => p.conn === conn);
+      const member = (lobby && lobby.some(s => s.conn === conn)) || players.some(p => p.conn === conn) || specs.has(conn.id);
       if (member) { resync(conn); return; }
-      if (started || !lobby || lobby.length >= MAX_PLAYERS) { conn.send({ t: 'full' }); return; }
+      if (started) {                                        // the game is on: come in as a spectator
+        specs.set(conn.id, { id: conn.id, name: String(d.name || 'Зритель').slice(0, 12), conn, asked: 0, sit: false, open: {}, wait: [] });
+        render();
+        return;
+      }
+      if (!lobby || lobby.length >= MAX_PLAYERS) { conn.send({ t: 'full' }); return; }
       lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false, ver: +d.ver || 0 });
       drawLobby();
       return;
     }
     if (!started) return;
     const seat = players.findIndex(p => p.conn === conn);
-    if (seat >= 0) act(seat, d);
+    if (seat >= 0) { act(seat, d); return; }
+    const sp = specs.get(conn.id);
+    if (!sp) return;
+    if (d.t === 'ask') {                                    // once a round: ask every player to show their cards
+      if (sp.asked === roundNo || phase !== 'play') return;
+      sp.asked = roundNo;
+      sp.wait = players.map((p, i) => (!p.out && !p.isBot ? i : -1)).filter(i => i >= 0);
+      render();
+    } else if (d.t === 'sit') { sp.sit = !!d.on; render(); }
   }
 
   // a guest pressed "Выйти": in the lobby they just disappear, in a game they are marked as gone
@@ -1496,8 +1612,45 @@
       drawLobby();
       return;
     }
+    if (specs.delete(conn.id)) { render(); return; }
     const p = players.find(x => x.conn === conn);
     if (p) { p.lost = true; render(); }
+  }
+
+  // ----- the company code: friends who share it see each other's rooms on the start screen -----
+  const groupTopic = g => TOPIC + 'g/' + g;
+  const normGroup = t => String(t || '').trim().toLowerCase().replace(/[^a-zа-яё0-9]/g, '').slice(0, 20);
+  const rooms = new Map();
+  let watch = null, watchT = null;
+  function drawRooms() {
+    const el = $('rooms');
+    if (!group) { el.innerHTML = ''; return; }
+    el.innerHTML = rooms.size ? [...rooms].map(([c, r]) => `<button class="room" data-c="${c}"><b>${esc(r.names.join(', '))}</b><span>` +
+      (r.started ? 'идёт игра' + (r.spec ? ', зрителей: ' + r.spec : '') + ' — смотреть' : r.names.length >= MAX_PLAYERS ? 'мест нет' : 'ждут игроков — войти') +
+      '</span></button>').join('') : '<p class="none">Сейчас никто не играет</p>';
+  }
+  function stopWatch() {
+    if (watch) { try { watch.close(); } catch {} watch = null; }
+    clearInterval(watchT);
+    rooms.clear();
+    drawRooms();
+  }
+  function startWatch() {
+    stopWatch();
+    if (!group) return;
+    const g = group;
+    watch = netOpen((topic, from, d) => {
+      if (topic !== groupTopic(g) || !d || d.t !== 'room' || !/^\d{4}$/.test(d.code)) return;
+      if (d.gone) rooms.delete(d.code);
+      else rooms.set(d.code, { names: (Array.isArray(d.names) ? d.names : []).slice(0, MAX_PLAYERS).map(x => String(x).slice(0, 18)),
+        started: !!d.started, spec: +d.spec || 0, t: Date.now() });
+      drawRooms();
+    });
+    watch.sub(groupTopic(g));
+    watchT = setInterval(() => {
+      rooms.forEach((r, c) => { if (Date.now() - r.t > 10000) rooms.delete(c); });
+      drawRooms();
+    }, 3000);
   }
 
   // only the device that runs the game can hand a player's seat to a bot
@@ -1564,7 +1717,7 @@
     const host = mode === 'host';
     const names = host ? lobbyNames() : lobby;
     $('lobCode').textContent = roomCode;
-    $('lobHint').textContent = host ? 'Скажите этот код друзьям. Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
+    $('lobHint').textContent = host ? (roomGroup ? 'Друзья с вашим кодом компании видят эту комнату в списке. ' : '') + 'Скажите этот код друзьям. Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
       : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
     $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
       (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
@@ -1580,6 +1733,7 @@
     const code = $('codeIn').value.trim();
     if (!/^\d{4}$/.test(code)) { netMsg('Введите код из 4 цифр'); return; }
     netMsg('Подключаемся…');
+    stopWatch();
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
     gName = myName();
@@ -1635,7 +1789,7 @@
     // what is under the finger now: the element that was touched may already have been redrawn
     const t = document.elementFromPoint(e.clientX, e.clientY);
     if (!t || !$('app').contains(t)) return false;
-    if (t.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, .opp .swap')) return false;
+    if (t.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, .opp .swap, #asks')) return false;
     const v = view;
     if (!v) return false;
     if (t.closest('#pile')) { $('history').classList.add('show'); return true; }
@@ -1647,6 +1801,7 @@
   window.addEventListener('resize', () => { if (view) draw(view); });
   document.querySelectorAll('[data-bots]').forEach(b => {
     b.onclick = () => {
+      stopWatch();
       mode = 'solo'; mySeat = 0; roomCode = '';
       const seats = [{ name: 'Игрок' }];
       for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: 'Бот ' + i, isBot: true });
@@ -1668,6 +1823,21 @@
   $('leaveBtn').onclick = leave;
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = testNet;
+  try { group = normGroup(localStorage.getItem('g101-group')); } catch {}
+  $('groupIn').value = group;
+  $('groupIn').onchange = () => {
+    group = normGroup($('groupIn').value);
+    $('groupIn').value = group;
+    try { localStorage.setItem('g101-group', group); } catch {}
+    startWatch();
+  };
+  $('rooms').onclick = e => {
+    const b = e.target.closest('.room');
+    if (!b) return;
+    $('codeIn').value = b.dataset.c;
+    joinRoom();
+  };
+  startWatch();
   $('newBtn').onclick = () => {
     if (mode !== 'solo' && !confirm('Выйти из комнаты?')) return;
     leave();
