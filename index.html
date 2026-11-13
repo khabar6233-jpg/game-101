@@ -37,8 +37,8 @@
   body {
     /* felt: a soft light in the middle and a fine weave, so it is calm but not flat */
     background:
-      repeating-linear-gradient(45deg, rgba(255,255,255,.045) 0 2px, transparent 2px 10px),
-      repeating-linear-gradient(-45deg, rgba(0,0,0,.09) 0 2px, transparent 2px 10px),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.04) 0 1.5px, transparent 1.5px 7px),
+      repeating-linear-gradient(-45deg, rgba(0,0,0,.075) 0 1.5px, transparent 1.5px 7px),
       radial-gradient(ellipse at 50% 42%, var(--felt) 0%, var(--felt-dark) 100%);
     background-color: var(--felt-dark);
     color: var(--text);
@@ -571,7 +571,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 58;              // keep in sync with www/version.txt
+  const VERSION = 59;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
