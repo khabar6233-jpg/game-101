@@ -319,7 +319,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 40;              // keep in sync with www/version.txt
+  const VERSION = 41;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1351,6 +1351,7 @@
       get lastEcho() { return lastEcho; },
       sub(t) { links.forEach(l => l.sub(t)); },
       send(t, d) { const text = JSON.stringify({ f: id, q: ++seq, d }); links.forEach(l => l.pub(t, text)); },
+      send1(t, d) { const l = links.find(x => x.up); if (l) l.pub(t, JSON.stringify({ f: id, q: ++seq, d })); },
       close() { links.forEach(l => l.close()); },
       reconnect() { links.forEach(l => l.reconnect()); },
       async ready(ms) {
@@ -1393,13 +1394,21 @@
   // straight from phone to phone (WebRTC); the relay servers only help the phones to find each other.
   const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302',
     'stun:stun.cloudflare.com:3478', 'stun:stun.sipnet.ru:3478', 'stun:stun.nextcloud.com:443'] }] };
-  const vPeers = new Map(), vIce = new Map();
+  const vPeers = new Map(), vIce = new Map(), vSeen = new Map();
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const vDirect = id => { const p = vPeers.get(id); return !!p && p.pc.connectionState === 'connected'; };
+  // Sound goes through the relay servers when two phones cannot be connected directly:
+  // always between two iPhones, and for anybody else when the direct connection is not there after 8 seconds.
+  const vViaRelay = id => {
+    const x = vSeen.get(id);
+    return !!x && Date.now() - x.t < 12000 && !vDirect(id) && ((IOS && x.ios) || Date.now() - x.t0 > 8000);
+  };
   let vMic = false, vSpk = false, vStream = null, vHello = null, vAuto = false;
   const vOn = () => vMic || vSpk;
   const vSend = (to, kind, data) => { if (peer && roomCode) peer.send(TOPIC + roomCode + '/v', { t: 'v', to, kind, data }); };
   function vDraw() {
     let live = 0;
-    vPeers.forEach(p => { if (p.pc.connectionState === 'connected') live++; });
+    vSeen.forEach((x, id) => { if (vDirect(id) || vViaRelay(id)) live++; });
     $('micBtn').className = 'btn-small voice ' + (vMic ? 'on' : 'off');
     $('spkBtn').className = 'btn-small voice ' + (vSpk ? 'on' : 'off');
     $('spkBtn').textContent = '🔊' + (vOn() ? ' ' + live : '');
@@ -1413,8 +1422,9 @@
     vPeers.forEach(p => { p.audio.muted = !vSpk; if (vSpk && p.audio.srcObject) p.audio.play().catch(() => {}); });
   };
   const vHelloOn = () => {
-    if (!vHello) vHello = setInterval(() => vSend(null, 'hello'), 4000);
-    vSend(null, 'hello');
+    if (!vHello) vHello = setInterval(() => { vSend(null, 'hello', { ios: IOS }); vDraw(); }, 4000);
+    vSend(null, 'hello', { ios: IOS });
+    aStart();
   };
   // my sound goes into a connection: the microphone track, or "listen only" when there is no microphone
   const vAttach = pc => {
@@ -1459,10 +1469,14 @@
   }
   async function voiceMsg(from, d) {
     if (!d || d.t !== 'v' || !peer || typeof RTCPeerConnection === 'undefined') return;
-    if (d.kind === 'bye') { vDrop(from); vIce.delete(from); return; }
+    if (d.kind === 'bye') { vDrop(from); vIce.delete(from); vSeen.delete(from); vDraw(); return; }
     if (!vOn()) return;
     try {
       if (d.kind === 'hello') {
+        const x = vSeen.get(from) || { t0: Date.now() };
+        x.t = Date.now(); x.ios = !!(d.data && d.data.ios);
+        vSeen.set(from, x);
+        if (IOS && x.ios) { vDraw(); return; }               // two iPhones talk through the relay servers
         const p = vPeers.get(from);
         if (p && p.pc.connectionState !== 'connected' && Date.now() - p.t > 15000) vDrop(from);    // stuck: try again
         if (!vPeers.has(from) && peer.id < from) vCall(from);                                     // one of the two calls
@@ -1496,15 +1510,94 @@
     const st = await vMicAsk();
     if (peer !== n || vOn() || vStream) { if (st) st.getTracks().forEach(t => t.stop()); return; }   // left, or switched by hand meanwhile
     vStream = st; vMic = !!st; vSpk = true;
+    aStop();
     vApply();
     vHelloOn();
     vDraw();
   }
+  // ----- sound through the relay servers: telephone quality, small pieces five times a second -----
+  let aCtx = null, aNode = null, aSrc = null, aSeq = 0, aHang = 0;
+  const aNext = new Map(), aLast = new Map();
+  const muEnc = v => { v = Math.max(-1, Math.min(1, v)); return Math.round((Math.sign(v) * Math.log(1 + 255 * Math.abs(v)) / Math.log(256) + 1) * 127.5); };
+  const muDec = b => { const x = b / 127.5 - 1; return Math.sign(x) * (Math.pow(256, Math.abs(x)) - 1) / 255; };
+  function aGet() {
+    if (!aCtx) {
+      const C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      try { aCtx = new C(); } catch { return null; }
+    }
+    if (aCtx.state === 'suspended') aCtx.resume().catch(() => {});
+    return aCtx;
+  }
+  function aStop() {
+    try { if (aNode) { aNode.onaudioprocess = null; aNode.disconnect(); } if (aSrc) aSrc.disconnect(); } catch {}
+    aNode = aSrc = null;
+    aNext.clear(); aLast.clear();
+  }
+  // my microphone: 8000 samples a second, sent only while I speak and only if somebody needs the relay
+  function aStart() {
+    const c = aGet();
+    if (!c || !vStream || aNode || !c.createScriptProcessor) return;
+    try {
+      aSrc = c.createMediaStreamSource(vStream);
+      aNode = c.createScriptProcessor(2048, 1, 1);
+      const mute = c.createGain();
+      mute.gain.value = 0;
+      aSrc.connect(aNode); aNode.connect(mute); mute.connect(c.destination);
+    } catch { aNode = aSrc = null; return; }
+    const ratio = c.sampleRate / 8000, buf = [];
+    let acc = 0, sum = 0, cnt = 0;
+    aNode.onaudioprocess = e => {
+      const now = Date.now();
+      let need = false;
+      if (vMic && peer && roomCode) vSeen.forEach((x, id) => { if (vViaRelay(id)) need = true; });
+      if (!need) { buf.length = 0; return; }
+      const x = e.inputBuffer.getChannelData(0);
+      for (let i = 0; i < x.length; i++) {
+        sum += x[i]; cnt++; acc++;
+        if (acc >= ratio) { acc -= ratio; buf.push(sum / cnt); sum = 0; cnt = 0; }
+      }
+      while (buf.length >= 1600) {
+        const ch = buf.splice(0, 1600);
+        let pow = 0;
+        for (let i = 0; i < 1600; i++) pow += ch[i] * ch[i];
+        if (Math.sqrt(pow / 1600) > 0.012) aHang = now + 600;       // somebody is speaking
+        if (now > aHang) continue;
+        let bin = '';
+        for (let i = 0; i < 1600; i++) bin += String.fromCharCode(muEnc(ch[i]));
+        peer.send1(TOPIC + roomCode + '/a', { t: 'a', n: ++aSeq, d: btoa(bin) });
+      }
+    };
+  }
+  function audioMsg(from, d) {
+    if (!vSpk || !d || d.t !== 'a' || typeof d.d !== 'string' || d.d.length > 4000 || !vViaRelay(from)) return;
+    const c = aGet();
+    if (!c) return;
+    const last = aLast.get(from) || 0;
+    if (d.n <= last && d.n > last - 100) return;             // late or repeated piece
+    aLast.set(from, d.n);
+    let bin;
+    try { bin = atob(d.d); } catch { return; }
+    const n = bin.length, buf = c.createBuffer(1, n * 6, 48000), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      const a = muDec(bin.charCodeAt(i)), b = i + 1 < n ? muDec(bin.charCodeAt(i + 1)) : a;
+      for (let k = 0; k < 6; k++) ch[i * 6 + k] = a + (b - a) * k / 6;
+    }
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.connect(c.destination);
+    let at = aNext.get(from) || 0;
+    if (at < c.currentTime + 0.04 || at > c.currentTime + 1.5) at = c.currentTime + 0.25;    // a small reserve against jitter
+    src.start(at);
+    aNext.set(from, at + buf.duration);
+  }
+
   function vStop(bye) {
     clearInterval(vHello); vHello = null;
     if (bye && vOn()) vSend(null, 'bye');
     [...vPeers.keys()].forEach(vDrop);
-    vIce.clear();
+    vIce.clear(); vSeen.clear();
+    aStop();
     if (vStream) { vStream.getTracks().forEach(t => t.stop()); vStream = null; }
     vMic = false; vSpk = false;
     vDraw();
@@ -1518,6 +1611,7 @@
       if (peer !== n) { if (st) st.getTracks().forEach(t => t.stop()); return; }
       if (!st) { $('warn').textContent = 'Нет доступа к микрофону: разрешите его для игры в настройках телефона.'; return; }
       vStream = st; vMic = true;
+      aStop();
       // the connections were made without a microphone: make them again
       if (vHello) vSend(null, 'bye');
       [...vPeers.keys()].forEach(vDrop);
@@ -1732,6 +1826,7 @@
       if (d.t === 'taken' && topic === topicOf(code, n.id)) { taken = true; return; }
       if (roomCode !== code) return;
       if (topic === TOPIC + code + '/v') { voiceMsg(from, d); return; }
+      if (topic === TOPIC + code + '/a') { audioMsg(from, d); return; }
       if (mode === 'host') hostMsg(n, code, topic, from, d);
       else if (mode === 'guest') guestMsg(n, code, topic, from, d);
     });
@@ -1744,6 +1839,7 @@
     n.sub(hostTopic(code));
     n.sub(topicOf(code, n.id));
     n.sub(TOPIC + code + '/v');
+    n.sub(TOPIC + code + '/a');
     await pause(400);
     n.send(hostTopic(code), { t: 'probe' });                // is this code already in use?
     await pause(1000);
@@ -1966,6 +2062,7 @@
     const n = netOpen((topic, from, d) => {
       if (peer !== n || !d || typeof d !== 'object' || roomCode !== code) return;
       if (topic === TOPIC + code + '/v') { voiceMsg(from, d); return; }
+      if (topic === TOPIC + code + '/a') { audioMsg(from, d); return; }
       if (mode === 'guest') guestMsg(n, code, topic, from, d);
       else if (mode === 'host') hostMsg(n, code, topic, from, d);
     });
@@ -1975,6 +2072,7 @@
     n.sub(topicOf(code, n.id));
     n.sub(TOPIC + code + '/s');
     n.sub(TOPIC + code + '/v');
+    n.sub(TOPIC + code + '/a');
     mode = 'guest'; roomCode = code;
     hostConn = { open: true, send: d => n.send(hostTopic(code), d) };
     gJoined = false; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now();
@@ -2055,7 +2153,7 @@
   $('micBtn').onclick = () => vToggle(true);
   $('spkBtn').onclick = () => vToggle(false);
   // a sound that the browser refused to start on its own starts with the next touch
-  document.addEventListener('pointerup', () => { if (vSpk) vPeers.forEach(p => { if (p.audio.paused && p.audio.srcObject) p.audio.play().catch(() => {}); }); });
+  document.addEventListener('pointerup', () => { if (vOn()) aGet(); if (vSpk) vPeers.forEach(p => { if (p.audio.paused && p.audio.srcObject) p.audio.play().catch(() => {}); }); });
   try { group = normGroup(localStorage.getItem('g101-group')); } catch {}
   $('groupIn').value = group; document.body.classList.toggle('grp', !!group);
   $('groupIn').onchange = () => {
