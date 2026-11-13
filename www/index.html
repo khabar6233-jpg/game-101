@@ -334,7 +334,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 43;              // keep in sync with www/version.txt
+  const VERSION = 44;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -376,8 +376,10 @@
     if (!players.length || !matchId || duelists().length !== 2 || (duel && duel.id === matchId) || (result && result.gameOver)) return;
     const [a, b] = duelists();
     const tot = p => p.score + (phase === 'roundEnd' ? 0 : handPoints(p));
-    if (tot(a) !== tot(b)) duel = { id: matchId, w: players.indexOf(tot(a) < tot(b) ? a : b) };
+    if (tot(a) !== tot(b)) duel = tot(a) < tot(b) ? { id: matchId, wk: duelK(a), lk: duelK(b) } : { id: matchId, wk: duelK(b), lk: duelK(a) };
   }
+  // who played: the result names both sides, so it cannot be written down against somebody else
+  const duelK = p => (p.isBot ? 'bot' : p.pid || 'name:' + p.name);
   const duelDb = () => {
     let db = null;
     try { db = JSON.parse(localStorage.getItem('g101-duels')); } catch {}
@@ -393,15 +395,15 @@
     return live.length === 2 && live.includes(v.seat) ? v.players[live.find(i => i !== v.seat)] : null;
   };
   // write a finished game down once
-  function duelNote(v, d) {
-    const opp = duelOpp(v);
-    if (!d || !d.id || !opp) return;
+  function duelNote(d) {
+    if (!d || !d.id || !d.wk || !d.lk || (d.wk !== myPid && d.lk !== myPid)) return;
+    const won = d.wk === myPid, key = won ? d.lk : d.wk;
     const db = duelDb();
     if (db.seen.includes(d.id)) return;
     db.seen.push(d.id);
     if (db.seen.length > 60) db.seen.shift();
-    const r = db.vs[duelKey(opp)] || (db.vs[duelKey(opp)] = { w: 0, l: 0 });
-    if (d.w === v.seat) r.w++; else r.l++;
+    const r = db.vs[key] || (db.vs[key] = { w: 0, l: 0 });
+    if (won) r.w++; else r.l++;
     try { localStorage.setItem('g101-duels', JSON.stringify(db)); } catch {}
   }
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
@@ -714,7 +716,10 @@
       if (players[starter].out) starter = nextIdx(starter);
     }
     result = { w, rows, gameOver, champion: left.length === 1 ? players.indexOf(left[0]) : -1 };
-    if (gameOver && result.champion >= 0 && duelists().length === 2) duel = { id: matchId, w: result.champion };
+    if (gameOver && result.champion >= 0 && duelists().length === 2) {
+      const win = players[result.champion], lose = duelists().find(x => x !== win);
+      if (lose) duel = { id: matchId, wk: duelK(win), lk: duelK(lose) };
+    }
     render();
   }
 
@@ -737,8 +742,12 @@
     const meP = players[mySeat];
     players = players.filter(p => !p.removed);
     specs.forEach((sp, id) => {                             // spectators who asked for a seat sit down now
-      if (!sp.sit || players.length >= MAX_PLAYERS) return;
-      players.push({ name: sp.name, isBot: false, conn: sp.conn, pid: sp.pid || '', hand: [], score: 0, out: false });
+      if (!sp.sit) return;
+      const seat = { name: sp.name, isBot: false, conn: sp.conn, pid: sp.pid || '', hand: [], score: 0, out: false };
+      const bi = players.findIndex(p => p.isBot);
+      if (bi >= 0) players[bi] = seat;                      // a bot gives up its place
+      else if (players.length < MAX_PLAYERS) players.push(seat);
+      else return;
       specs.delete(id);
     });
     mySeat = Math.max(players.indexOf(meP), 0);
@@ -868,7 +877,7 @@
 
   function draw(v) {
     const me = v.players[v.seat] || { score: 0, out: false };
-    duelNote(v, v.duel);
+    duelNote(v.duel);
     const rival = duelOpp(v), tally = rival ? duelDb().vs[duelKey(rival)] || { w: 0, l: 0 } : null;
     const myTurn = v.phase === 'play' && v.turn === v.seat && !v.busy;
     const hasMove = v.hand.some(c => c.ok);
@@ -899,14 +908,17 @@
       });
       ab.appendChild(row);
     });
-    if (v.sitters && v.sitters.length && v.phase !== 'roundEnd') {
+    if (mode === 'host' && v.canControl && v.phase !== 'roundEnd') {
       // the device that runs the game may stop it at any moment to let spectators sit down
       const row = document.createElement('div');
       row.className = 'ask';
-      row.innerHTML = `<span>За стол ${v.sitters.length > 1 ? 'хотят' : 'хочет'} сесть: ${esc(v.sitters.join(', '))}</span>`;
+      const wait = v.sitters || [];
+      if (wait.length) row.innerHTML = `<span>${wait.length > 1 ? 'Ждут' : 'Ждёт'} новую игру: ${esc(wait.join(', '))}</span>`;
+      else row.style.background = 'none';
       const b = document.createElement('button');
-      b.textContent = 'Прервать и начать новую игру';
-      b.onclick = () => { if (confirm('Прервать игру и начать новую? Очки у всех обнулятся.')) restartMatch(); };
+      b.textContent = 'Завершить игру и начать новую';
+      if (!wait.length) b.className = 'no';
+      b.onclick = () => { if (confirm('Завершить эту игру и начать новую? Очки у всех обнулятся.')) restartMatch(); };
       row.appendChild(b);
       ab.appendChild(row);
     }
@@ -1004,7 +1016,7 @@
       : !myTurn ? ''
       : v.pendingSix ? (hasMove ? ' · подкиньте шестёрку или берите карты' : ' · нажмите «Беру»')
       : hasMove ? ' · ваш ход' : v.drew ? ' · карта не подошла — нажмите «Пас»' : ' · нет карты — нажмите на стол, чтобы взять';
-    mb.textContent = v.spec ? 'Вы зритель' : `Ваши очки: ${me.score}${hint}`;
+    mb.textContent = v.spec ? (v.sit ? 'Вы за столом: ждём новую игру' : 'Вы зритель') : `Ваши очки: ${me.score}${hint}`;
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
     // The compass needle turns to the player who is to move. While a six is waiting to be taken or
@@ -1434,7 +1446,8 @@
         const st = gSnap, ps = st.players.filter(p => !p.removed);
         if (ps.length === 2 && st.matchId && !(st.result && st.result.gameOver) && !(st.duel && st.duel.id === st.matchId)) {
           const tot = p => p.score + (st.phase === 'roundEnd' ? 0 : p.hand.reduce((n, c) => n + POINTS(c.r), 0));
-          if (tot(ps[0]) !== tot(ps[1])) duelNote(view, { id: st.matchId, w: st.players.indexOf(tot(ps[0]) < tot(ps[1]) ? ps[0] : ps[1]) });
+          const k = q => (q.isBot ? 'bot' : q.pid || 'name:' + q.name), lo = tot(ps[0]) < tot(ps[1]) ? 0 : 1;
+          if (tot(ps[0]) !== tot(ps[1])) duelNote({ id: st.matchId, wk: k(ps[lo]), lk: k(ps[1 - lo]) });
         }
       }
     } catch (e) { console.error(e); }
@@ -1987,15 +2000,11 @@
           render();
           return;
         }
-        if (d.want !== 'watch') {
-          const bi = players.findIndex(x => x.isBot && !x.removed && !x.out);
-          if (bi >= 0) { seatHuman(bi, conn, pid, String(d.name || 'Игрок').slice(0, 12)); return; }
-        }
         const old = pid ? [...specs.values()].find(x => x.pid === pid) : null;
         if (old) { retire(old.conn); specs.delete(old.id); }
         // the game is on: come in as a spectator
         specs.set(conn.id, { id: conn.id, pid, name: String(d.name || 'Зритель').slice(0, 12), conn,
-          asked: old ? old.asked : 0, sit: old ? old.sit : false, open: old ? old.open : {}, wait: old ? old.wait : [] });
+          asked: old ? old.asked : 0, sit: old ? old.sit : d.want !== 'watch', open: old ? old.open : {}, wait: old ? old.wait : [] });
         render();
         return;
       }
@@ -2067,7 +2076,7 @@
       const full = !r.started && r.names.length >= MAX_PLAYERS;
       return `<div class="room"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` +
         (r.started ? 'идёт игра' + (r.spec ? ', зрителей: ' + r.spec : '') : full ? 'мест нет' : 'ждут игроков') + '</span></div>' +
-        (r.started ? (r.open ? `<button class="btn" data-c="${c}" data-w="seat">Играть</button>` : '') +
+        (r.started ? (r.open || r.names.length < MAX_PLAYERS ? `<button class="btn" data-c="${c}" data-w="seat">Играть</button>` : '') +
             `<button class="btn plain" data-c="${c}" data-w="watch">Смотреть</button>`
           : full ? '' : `<button class="btn" data-c="${c}" data-w="seat">Войти</button>`) + '</div>';
     }).join('') : who ? '' : '<p class="none">Сейчас никто не играет</p>');
@@ -2299,7 +2308,7 @@
     b.onclick = () => {
       stopWatch();
       mode = 'solo'; mySeat = 0; roomCode = '';
-      const seats = [{ name: 'Игрок' }];
+      const seats = [{ name: 'Игрок', pid: myPid }];
       for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: 'Бот ' + i, isBot: true });
       startMatch(seats);
     };
