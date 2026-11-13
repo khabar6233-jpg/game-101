@@ -192,11 +192,13 @@
   .zone-line { border-top-color: rgba(255,255,255,.16); transition: border-color .3s, box-shadow .3s; }
   body.myturn .zone-line { border-top-color: rgba(242,193,78,.7); box-shadow: 0 -1px 10px rgba(242,193,78,.35); }
   .btn {
-    background: var(--gold); color: #2a1d00; border: 0; border-radius: 12px;
-    padding: 0 22px; min-height: 46px; font-size: 17px; font-weight: 700;
-    box-shadow: 0 3px 0 #b88a1f; font-family: inherit;
+    background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); color: #fff;
+    border: 1.5px solid rgba(255,255,255,.5); border-radius: 12px;
+    padding: 0 22px; min-height: 46px; font-size: 17px; font-weight: 700; text-shadow: 0 1px 1px rgba(0,0,0,.25);
+    box-shadow: 0 3px 0 var(--felt-dark), 0 6px 16px rgba(0,0,0,.22); font-family: inherit;
   }
-  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #b88a1f; }
+  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--felt-dark); }
+  .btn.plain { text-shadow: none; border: 0; }
   .btn:disabled { background: #ddd; color: #888; box-shadow: none; }
   .btn.plain { background: #eee; color: #333; box-shadow: 0 3px 0 #ccc; }
 
@@ -285,7 +287,8 @@
   #asks:empty { display: none; }
   .ask { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--text);
     background: rgba(0,0,0,.25); border-radius: 10px; padding: 6px; margin-bottom: 4px; }
-  .ask button { border: 0; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-family: inherit; background: var(--gold); color: #222; font-weight: 700; }
+  .ask button { border: 1.5px solid rgba(255,255,255,.5); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-family: inherit;
+    background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); color: #fff; font-weight: 700; }
   .ask button.no { background: rgba(255,255,255,.2); color: var(--text); }
   .actions .btn.sm { font-size: 14px; padding: 8px 10px; }
   .room { display: flex; align-items: center; gap: 8px; text-align: left; background: #e9f3ec; border-radius: 10px;
@@ -300,7 +303,8 @@
   .voice.on { background: var(--gold); color: #222; }
   #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60; max-width: 92vw; display: none;
     background: #fff; color: #222; border-radius: 12px; padding: 10px 16px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
-  #toast.show { display: block; }
+  #toast.show { display: block; animation: toastIn .35s ease; }
+  @keyframes toastIn { from { transform: translate(-50%, -20px); opacity: 0; } }
   /* ----- the start screen ----- */
   #setup { background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.08) 0%, transparent 45%), radial-gradient(ellipse at 50% 30%, var(--felt) 0%, var(--felt-dark) 100%); align-items: flex-start; padding: 0; overflow-y: auto; }
   .home { width: 100%; max-width: 420px; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) 16px 28px; display: flex; flex-direction: column; gap: 14px; color: var(--text); }
@@ -332,7 +336,7 @@
   #groupList:empty { display: none; }
   .chip { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); color: var(--text); border-radius: 18px; padding: 8px 16px; font-size: 15px;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
-  .chip.on { background: var(--gold); border-color: var(--gold); color: #2a1d00; font-weight: 700; }
+  .chip.on { background: linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,.1)), var(--felt); border: 1.5px solid rgba(255,255,255,.6); color: #fff; font-weight: 700; }
   /* somebody is playing in this company right now */
   .chip.live { background: #2e9e5b; border-color: #7fe0a4; color: #fff; font-weight: 700; }
   .chip.live::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c8ffd9; margin-right: 8px; vertical-align: 1px;
@@ -549,7 +553,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 55;              // keep in sync with www/version.txt
+  const VERSION = 56;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2261,7 +2265,6 @@
   // ----- host -----
   async function createRoom(attempt = 0) {
     netMsg('Создаём комнату…');
-    stopWatch();
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
     const code = String(Math.floor(1000 + Math.random() * 9000));
@@ -2387,7 +2390,9 @@
   let groups = [];
 
   // a short message on top of the screen; when the game is not on the screen, also a phone notification
-  function notifyUser(text, code) {
+  let toastGroup = '';
+  function notifyUser(text, code, g) {
+    toastGroup = g || group;
     const el = $('toast');
     el.textContent = text;
     el.classList.add('show');
@@ -2421,14 +2426,20 @@
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
   }
   function stopWatch() {
+    watchKey = '';
     if (watch) { try { watch.close(); } catch {} watch = null; }
     clearInterval(watchT); clearInterval(hereT);
-    rooms.clear(); online.clear(); liveRooms.clear();
+    rooms.clear(); online.clear(); liveRooms.clear(); onlineAll.clear();
     drawRooms();
   }
+  let watchKey = '';
+  const onlineAll = new Map();
   function startWatch() {
-    stopWatch();
     const all = [...new Set([group, ...groups].filter(Boolean))];
+    const key = all.join('|') + '#' + group + '#' + lite;
+    if (watch && key === watchKey) { drawRooms(); drawGroups(); return; }        // already listening
+    stopWatch();
+    watchKey = key;
     if (!all.length) return;
     const g = group;
     watchAt = Date.now();
@@ -2438,16 +2449,23 @@
       // every saved company: is somebody playing there?
       const tg = all.find(x => groupTopic(x) === topic);
       if (tg && d.t === 'room' && /^\d{4}$/.test(d.code)) {
-        const k = tg + '/' + d.code;
+        const k = tg + '/' + d.code, fresh = !liveRooms.has(k);
         if (d.gone) liveRooms.delete(k); else liveRooms.set(k, Date.now());
+        const mineRoom = d.code === roomCode || (Array.isArray(d.pids) && d.pids.includes(myPid));
+        const who = Array.isArray(d.names) && d.names[0] ? String(d.names[0]).slice(0, 12) : 'Друг';
+        if (!d.gone && fresh && settled() && !mineRoom) notifyUser(`${who} зовёт играть · «${tg}»`, d.code, tg);
         drawGroups();
+      }
+      if (tg && d.t === 'here' && typeof d.pid === 'string' && d.pid !== myPid) {
+        const k = tg + '/' + d.pid, name = String(d.name || 'Игрок').slice(0, 12);
+        if (!onlineAll.has(k) && settled()) notifyUser(`${name} в сети · «${tg}»`);
+        onlineAll.set(k, Date.now());
       }
       if (!g || topic !== groupTopic(g)) return;
       if (d.t === 'here') {                                 // a friend has the game open
         if (typeof d.pid !== 'string' || d.pid === myPid) return;
-        const name = String(d.name || 'Игрок').slice(0, 12), fresh = !online.has(d.pid);
+        const name = String(d.name || 'Игрок').slice(0, 12);
         online.set(d.pid, { name, t: Date.now() });
-        if (fresh && settled()) notifyUser(`${name} в игре`);
         drawRooms();
         return;
       }
@@ -2458,7 +2476,6 @@
         const names = (Array.isArray(d.names) ? d.names : []).slice(0, MAX_PLAYERS).map(x => String(x).slice(0, 18));
         rooms.set(d.code, { names, started: !!d.started, spec: +d.spec || 0, open: +d.open || 0, t: Date.now(),
           mine: Array.isArray(d.pids) && d.pids.includes(myPid) });
-        if (fresh && settled()) notifyUser(`${names[0] || 'Друг'} зовёт играть`, d.code);
       }
       drawRooms();
     });
@@ -2469,6 +2486,7 @@
     watchT = setInterval(() => {
       rooms.forEach((r, c) => { if (Date.now() - r.t > 10000) rooms.delete(c); });
       online.forEach((x, id) => { if (Date.now() - x.t > 16000) online.delete(id); });
+      onlineAll.forEach((t, k) => { if (Date.now() - t > 16000) onlineAll.delete(k); });
       liveRooms.forEach((t, k) => { if (Date.now() - t > 10000) liveRooms.delete(k); });
       drawRooms(); drawGroups();
     }, 3000);
@@ -2583,7 +2601,6 @@
     const code = $('codeIn').value.trim();
     if (!/^\d{4}$/.test(code)) { netMsg('Введите код из 4 цифр'); return; }
     netMsg('Подключаемся…');
-    stopWatch();
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
     gName = myName();
@@ -2681,7 +2698,6 @@
   window.addEventListener('resize', () => { if (view) draw(view); });
   document.querySelectorAll('[data-bots]').forEach(b => {
     b.onclick = () => {
-      stopWatch();
       mode = 'solo'; mySeat = 0; roomCode = '';
       const seats = [{ name: 'Игрок', pid: myPid }];
       for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: 'Бот ' + i, isBot: true });
@@ -2858,7 +2874,10 @@
   }
   $('toast').onclick = () => {
     $('toast').classList.remove('show');
-    if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) { $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom(); }
+    if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) {
+      if (toastGroup && toastGroup !== group) setGroup(toastGroup);
+      $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom();
+    }
   };
   $('rooms').onclick = e => {
     const b = e.target.closest('[data-c]');
