@@ -69,10 +69,30 @@ public class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient());
+        web.addJavascriptInterface(new Bridge(), "App101");
         root.addView(web, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
         web.loadUrl(SITE);
+    }
+
+    /** Lets the page buzz the phone: "your move". */
+    public class Bridge {
+        @android.webkit.JavascriptInterface
+        public void vibrate(int ms) {
+            try {
+                android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (v == null) return;
+                ms = Math.max(20, Math.min(ms, 1000));
+                if (Build.VERSION.SDK_INT >= 26) {
+                    v.vibrate(android.os.VibrationEffect.createOneShot(ms, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+                } else {
+                    v.vibrate(ms);
+                }
+            } catch (Exception e) {
+                // no vibration motor or it is switched off
+            }
+        }
     }
 
     @Override

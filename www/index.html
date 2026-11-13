@@ -308,7 +308,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 35;              // keep in sync with www/version.txt
+  const VERSION = 36;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -784,7 +784,7 @@
     const hasMove = v.hand.some(c => c.ok);
     if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
     if (myTurn && !wasMyTurn) {
-      try { if (navigator.vibrate) navigator.vibrate(150); } catch {}      // "your move"
+      try { if (window.App101) window.App101.vibrate(250); else if (navigator.vibrate) navigator.vibrate(250); } catch {}      // "your move"
       // the table was tapped while the previous card was still landing: take the card now
       if (Date.now() - drawWish < 900 && !v.drew && !v.pendingSix) setTimeout(() => action({ t: 'draw' }), 0);
     }
