@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="101">
-<link rel="icon" type="image/png" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png?2">
+<link rel="apple-touch-icon" href="icon-180.png?2">
 <link rel="manifest" href="manifest.webmanifest">
 <title>101</title>
 <style>
@@ -431,7 +431,7 @@
 <div class="overlay show" id="setup">
   <div class="home">
     <div class="brand">
-      <img src="icon-192.png" alt="">
+      <img src="icon-192.png?2" alt="">
       <div class="title"><h1>101</h1><span id="ver"></span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
     </div>
@@ -574,7 +574,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 60;              // keep in sync with www/version.txt
+  const VERSION = 61;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
