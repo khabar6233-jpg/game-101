@@ -89,7 +89,13 @@
   .spread { text-align: center; color: var(--text); font-size: 14px; }
   .spread .cards { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 440px; margin-top: 12px; }
   .spread .card:last-child { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); }
-  .actions { display: flex; justify-content: center; gap: 10px; min-height: 46px; }
+  .actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-height: 46px; }
+  .below { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 46px; }
+  #turnNote { visibility: hidden; flex: none; color: var(--gold); font-weight: 800; font-size: 17px; padding-left: 4px; transform-origin: left center; }
+  #turnNote.on { visibility: visible; animation: turnPulse 2.4s ease-in-out infinite; }
+  @keyframes turnPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.13); } }
+  #syncBtn { font-size: 22px; line-height: 1; padding: 4px 12px; }
+  .opp .duel { color: var(--text); font-size: 12px; margin-top: 2px; }
   .btn {
     background: var(--gold); color: #2a1d00; border: 0; border-radius: 12px;
     padding: 0 22px; min-height: 46px; font-size: 17px; font-weight: 700;
@@ -142,15 +148,10 @@
     border: 2px solid currentColor; outline: 1px solid currentColor; outline-offset: 3px; opacity: .45;
   }
   .back { background: var(--bk); border: 3px solid #fff; }
-  /* card backs: every new game gets another one */
-  body { --bk: repeating-linear-gradient(45deg, #7a1f2b 0 6px, #942836 6px 12px); }
-  body[data-back="1"] { --bk: repeating-linear-gradient(45deg, rgba(255,255,255,.16) 0 2px, transparent 2px 9px),
-    repeating-linear-gradient(-45deg, rgba(255,255,255,.16) 0 2px, transparent 2px 9px), #1f4f8f; }
-  body[data-back="2"] { --bk: radial-gradient(circle, rgba(255,255,255,.34) 1.5px, transparent 2px) 0 0 / 9px 9px, #5b2a86; }
-  body[data-back="3"] { --bk: repeating-conic-gradient(#26262b 0 25%, #4a4130 0 50%) 0 0 / 12px 12px; }
-  body[data-back="4"] { --bk: repeating-linear-gradient(90deg, #b3541e 0 5px, #cf7430 5px 10px); }
-  body[data-back="5"] { --bk: repeating-linear-gradient(0deg, rgba(255,255,255,.14) 0 1px, transparent 1px 8px),
-    repeating-linear-gradient(90deg, rgba(255,255,255,.14) 0 1px, transparent 1px 8px), #0f6f7a; }
+  /* card backs are photos of real decks; every new game gets another one */
+  body { --bk: #1b2a6b url(backs/atlas.jpg) center / 112% 109% no-repeat; }
+  body[data-back="1"] { --bk: #b5651d url(backs/rus.jpg) center / 110% 108% no-repeat; }
+  body[data-back="2"] { --bk: #b8873f url(backs/swiss.jpg) center / 108% 106% no-repeat; }
   .empty-slot { width: var(--cw); height: var(--ch); border: 2px dashed rgba(255,255,255,.25); border-radius: 8px; }
 
   .overlay {
@@ -234,7 +235,7 @@
   </div>
 
   <div class="status" id="status"></div>
-  <div class="actions" id="actions"></div>
+  <div class="below"><div id="turnNote">Ваш ход</div><div class="actions" id="actions"></div></div>
   <div class="zone-line"></div>
   <div class="me-bar" id="meBar"></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
@@ -319,7 +320,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 41;              // keep in sync with www/version.txt
+  const VERSION = 42;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -334,7 +335,7 @@
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
   let evSeq = 0, lastEv = null, viewRev = 0;
   let emptySeq = 0;               // order in which players ran out of cards
-  const BACKS = 6;
+  const BACKS = 3;
   let backNo = Math.floor(Math.random() * BACKS);   // which card back this game uses
   let pend = null;                // what the engine timer is about to do (so another device can carry on)
   let pendingSix = 0;             // 3+ players: cards the current player must take unless they add a six   // the last card event (who played / who drew), so screens can animate it
@@ -352,6 +353,43 @@
   } catch {}
   if (!myPid) myPid = Math.random().toString(36).slice(2, 12);
   const banned = new Set();
+  // one game "to 101" between two players; its result goes to both devices
+  let matchId = '', duel = null;
+  const newMatch = () => { matchId = Math.random().toString(36).slice(2, 10); };
+  const duelists = () => players.filter(p => !p.removed);
+  // the game was not finished: the one with fewer points wins, cards in hand included
+  function duelAbort() {
+    if (!players.length || !matchId || duelists().length !== 2 || (duel && duel.id === matchId) || (result && result.gameOver)) return;
+    const [a, b] = duelists();
+    const tot = p => p.score + (phase === 'roundEnd' ? 0 : handPoints(p));
+    if (tot(a) !== tot(b)) duel = { id: matchId, w: players.indexOf(tot(a) < tot(b) ? a : b) };
+  }
+  const duelDb = () => {
+    let db = null;
+    try { db = JSON.parse(localStorage.getItem('g101-duels')); } catch {}
+    if (!db || typeof db !== 'object') db = {};
+    if (!Array.isArray(db.seen)) db.seen = [];
+    if (!db.vs || typeof db.vs !== 'object') db.vs = {};
+    return db;
+  };
+  const duelKey = p => p.pid || 'name:' + p.name;
+  const duelOpp = v => {
+    if (v.spec || v.seat < 0) return null;
+    const live = v.players.map((p, i) => i).filter(i => !v.players[i].gone);
+    return live.length === 2 && live.includes(v.seat) ? v.players[live.find(i => i !== v.seat)] : null;
+  };
+  // write a finished game down once
+  function duelNote(v, d) {
+    const opp = duelOpp(v);
+    if (!d || !d.id || !opp) return;
+    const db = duelDb();
+    if (db.seen.includes(d.id)) return;
+    db.seen.push(d.id);
+    if (db.seen.length > 60) db.seen.shift();
+    const r = db.vs[duelKey(opp)] || (db.vs[duelKey(opp)] = { w: 0, l: 0 });
+    if (d.w === v.seat) r.w++; else r.l++;
+    try { localStorage.setItem('g101-duels', JSON.stringify(db)); } catch {}
+  }
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
@@ -396,6 +434,7 @@
   // ================= ENGINE =================
   function startMatch(seats) {
     gameId++;
+    newMatch();
     players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, pid: s.pid || '', hand: [], score: 0, out: false }));
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = []; result = null;
@@ -661,12 +700,14 @@
       if (players[starter].out) starter = nextIdx(starter);
     }
     result = { w, rows, gameOver, champion: left.length === 1 ? players.indexOf(left[0]) : -1 };
+    if (gameOver && result.champion >= 0 && duelists().length === 2) duel = { id: matchId, w: result.champion };
     render();
   }
 
   // stop the game right now and start a new one (spectators who asked for a seat sit down)
   function restartMatch() {
     if (mode !== 'host' || !started || !players.length) return;
+    duelAbort();
     gameId++; busy = false; pend = null; pendingQueen = null;
     phase = 'roundEnd';
     result = { w: -1, rows: [], gameOver: true, champion: -1 };
@@ -678,6 +719,7 @@
     if (!result.gameOver) { startRound(); return; }
     if (mode === 'solo') { leave(); return; }
     // same room, fresh match
+    newMatch();
     const meP = players[mySeat];
     players = players.filter(p => !p.removed);
     specs.forEach((sp, id) => {                             // spectators who asked for a seat sit down now
@@ -708,7 +750,9 @@
       hist: pile.slice(-HISTORY).map(face),
       deckCount: deck.length, pileCount: pile.length,
       canDraw: deck.length > 0 || pile.length > 1,
-      players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length, lost: !!p.lost, remote: !!p.conn, gone: !!p.removed })),
+      players: players.map(p => ({ name: p.name, score: p.score, out: p.out, count: p.hand.length, lost: !!p.lost, remote: !!p.conn, gone: !!p.removed,
+        pid: p.isBot ? 'bot' : p.pid || '' })),
+      duel,
       hand: me ? me.hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })) : [],
       asks: me ? [...specs.values()].filter(x => x.asked === roundNo && x.wait.includes(seat)).map(x => ({ id: x.id, name: x.name })) : [],
       specN: specs.size,
@@ -770,6 +814,7 @@
         '<path d="M30 0h4v3h3v4h-3v4h-4V7h-3V3h3z"/><circle cx="4" cy="12" r="3"/><circle cx="60" cy="12" r="3"/></svg>'
   };
   for (let r = 11; r <= 13; r++) for (let i = 0; i < 4; i++) new Image().src = `cards/${r}_${i}.png`;   // load ahead
+  ['atlas', 'rus', 'swiss'].forEach(n => { new Image().src = `backs/${n}.jpg`; });
   function cardEl(c, extra = '') {
     const el = document.createElement('div');
     el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
@@ -809,6 +854,8 @@
 
   function draw(v) {
     const me = v.players[v.seat] || { score: 0, out: false };
+    duelNote(v, v.duel);
+    const rival = duelOpp(v), tally = rival ? duelDb().vs[duelKey(rival)] || { w: 0, l: 0 } : null;
     const myTurn = v.phase === 'play' && v.turn === v.seat && !v.busy;
     const hasMove = v.hand.some(c => c.ok);
     if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
@@ -884,6 +931,7 @@
         (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${RANK_NAME[c.r]}<br>${c.s}</div>`).join('')}</div>`
           : `<div class="minis">${'<div class="mini"></div>'.repeat(Math.min(p.count, o.classList.contains('many') ? 4 : 7))}</div>`) +
         `<div>карт: <span class="cnt">${p.count}</span></div>` +
+        (p === rival ? `<div class="duel">ваши победы: ${tally.w} · поражения: ${tally.l}</div>` : '') +
         (p.lost ? '<div class="lost">нет связи</div>' : '');
       if (mode === 'host' && !p.out) {
         // the device that runs the game can hand a seat to a bot or remove the player (or bot) altogether
@@ -1020,6 +1068,7 @@
       if (box) for (let k = 0; k < Math.min(ev.k, 4); k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 150, s1: 0.4 });
     }
 
+    $('turnNote').className = myTurn ? 'on' : '';
     const a = $('actions'); a.innerHTML = '';
     if (myTurn && v.pendingSix) {
       const left = v.pendingSix - (v.drew ? 1 : 0);
@@ -1363,6 +1412,17 @@
   }
 
   function leave() {
+    // one on one, the game is not finished: it is counted by points
+    try {
+      if (mode !== 'guest' && players.length && phase !== 'setup') { duelAbort(); if (duel && duel.id === matchId) render(); }
+      else if (mode === 'guest' && gSnap && view) {
+        const st = gSnap, ps = st.players.filter(p => !p.removed);
+        if (ps.length === 2 && st.matchId && !(st.result && st.result.gameOver) && !(st.duel && st.duel.id === st.matchId)) {
+          const tot = p => p.score + (st.phase === 'roundEnd' ? 0 : p.hand.reduce((n, c) => n + POINTS(c.r), 0));
+          if (tot(ps[0]) !== tot(ps[1])) duelNote(view, { id: st.matchId, w: st.players.indexOf(tot(ps[0]) < tot(ps[1]) ? ps[0] : ps[1]) });
+        }
+      }
+    } catch (e) { console.error(e); }
     vStop(true);
     gameId++;
     phase = 'setup';
@@ -1592,6 +1652,24 @@
     aNext.set(from, at + buf.duration);
   }
 
+  function vRestart() {
+    if (!vOn() || !peer) return;
+    const mic = vMic, spk = vSpk, n = peer;
+    if (vHello) vSend(null, 'bye');
+    [...vPeers.keys()].forEach(vDrop);
+    vIce.clear();
+    aStop();
+    if (aCtx) { try { aCtx.close(); } catch {} aCtx = null; }
+    if (vStream) { vStream.getTracks().forEach(t => t.stop()); vStream = null; }
+    aGet();                                                 // started by this touch, so the phone lets it play
+    vMicAsk().then(st => {
+      if (peer !== n || vStream) { if (st) st.getTracks().forEach(t => t.stop()); return; }
+      vStream = st; vMic = mic && !!st; vSpk = spk || !vMic;
+      vApply();
+      vHelloOn();
+      vDraw();
+    });
+  }
   function vStop(bye) {
     clearInterval(vHello); vHello = null;
     if (bye && vOn()) vSend(null, 'bye');
@@ -1640,7 +1718,7 @@
   function snapshot() {
     const me = peer ? peer.id : '';
     return {
-      term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup,
+      term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup, matchId, duel,
       specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
         name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
@@ -1659,6 +1737,7 @@
     deck = st.deck; pile = st.pile; suit = st.suit; turn = st.turn; drew = st.drew; sixRun = st.sixRun;
     pendingSix = st.pendingSix; emptySeq = st.emptySeq; passStreak = st.passStreak; starter = st.starter;
     roundNo = st.roundNo; phase = st.phase; pend = st.pend; busy = false; backNo = st.back || 0;
+    matchId = st.matchId || ''; duel = st.duel || null;
     pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
     result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
     log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
@@ -1930,7 +2009,7 @@
     }
     if (specs.delete(conn.id)) { render(); return; }
     const p = players.find(x => x.conn === conn);
-    if (p) { p.lost = true; render(); }
+    if (p) { p.lost = true; duelAbort(); render(); }        // one on one: leaving ends the game
   }
 
   // ----- the company code: friends who share it see each other's rooms on the start screen -----
@@ -2099,6 +2178,7 @@
   $('syncBtn').onclick = async () => {
     const n = peer;
     if (!n) return;
+    vRestart();
     $('warn').textContent = 'Обновляем связь…';
     n.reconnect();
     const ok = await n.ready(8000);
