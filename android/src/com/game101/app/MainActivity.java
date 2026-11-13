@@ -20,6 +20,7 @@ public class MainActivity extends Activity {
     private static final String SITE = "https://khabar6233-jpg.github.io/game-101/";
     private static final String BUNDLED = "file:///android_asset/index.html";
     private WebView web;
+    private android.webkit.PermissionRequest pendingMic;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -48,6 +49,7 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        s.setMediaPlaybackRequiresUserGesture(false);     // the voices of other players start by themselves
         // Load the newest game from the site; without internet fall back to the copy inside the APK.
         web.setWebViewClient(new WebViewClient() {
             private boolean usedBundled;
@@ -68,12 +70,40 @@ public class MainActivity extends Activity {
                 if (req.isForMainFrame()) useBundled(v);
             }
         });
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            // the voice chat asks for the microphone: pass the question on to Android
+            @Override
+            public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+                boolean audio = false;
+                for (String r : request.getResources()) {
+                    if (android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) audio = true;
+                }
+                if (!audio) { request.deny(); return; }
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                        == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    request.grant(new String[] { android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE });
+                } else {
+                    pendingMic = request;
+                    requestPermissions(new String[] { android.Manifest.permission.RECORD_AUDIO }, 1);
+                }
+            }
+        });
         web.addJavascriptInterface(new Bridge(), "App101");
         root.addView(web, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
         web.loadUrl(SITE);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code != 1 || pendingMic == null) return;
+        if (results.length > 0 && results[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            pendingMic.grant(new String[] { android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE });
+        } else {
+            pendingMic.deny();
+        }
+        pendingMic = null;
     }
 
     /** Lets the page buzz the phone: "your move". */
