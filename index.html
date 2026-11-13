@@ -37,8 +37,8 @@
   body {
     /* felt: a soft light in the middle and a fine weave, so it is calm but not flat */
     background:
-      repeating-linear-gradient(45deg, rgba(255,255,255,.018) 0 2px, transparent 2px 5px),
-      repeating-linear-gradient(-45deg, rgba(0,0,0,.035) 0 2px, transparent 2px 5px),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.045) 0 2px, transparent 2px 10px),
+      repeating-linear-gradient(-45deg, rgba(0,0,0,.09) 0 2px, transparent 2px 10px),
       radial-gradient(ellipse at 50% 42%, var(--felt) 0%, var(--felt-dark) 100%);
     background-color: var(--felt-dark);
     color: var(--text);
@@ -549,7 +549,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 54;              // keep in sync with www/version.txt
+  const VERSION = 55;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1190,12 +1190,15 @@
     const pl = $('pile'); pl.innerHTML = '';
     // the last few cards lie in a loose stack, newest on top, like on a real table
     const tail = v.tail || (v.hist ? v.hist.slice(-PILE_SHOWN) : v.top ? [v.top] : []);
-    pl.style.width = `calc(var(--cw) + ${Math.max(tail.length - 1, 0) * PILE_STEP}px)`;
+    const cwNow = $('deck').offsetWidth || 62;
+    const free = pl.closest('.middle').clientWidth - cwNow * 2.74 - 60;     // what the deck, the suit tile and the gaps leave
+    const pStep = Math.max(8, Math.min(PILE_STEP, free / Math.max(tail.length - 1, 1)));
+    pl.style.width = `calc(var(--cw) + ${Math.max(tail.length - 1, 0) * pStep}px)`;
     tail.forEach((c, i) => {
       const isTop = i === tail.length - 1;
       const el = cardEl(c, isTop && c.id !== lastTopId && !(ev && ev.type === 'play') ? 'pop' : '');
       if (flyingTop === c.id) el.style.opacity = '0';
-      el.style.left = i * PILE_STEP + 'px';
+      el.style.left = i * pStep + 'px';
       el.style.top = ((c.id * 29) % 9) - 4 + 'px';
       el.style.transform = `rotate(${((c.id * 37) % 13) - 6}deg)`;
       if (!isTop) el.style.filter = 'brightness(.9)';
@@ -2750,7 +2753,7 @@
     let pos = null, holdT = null, drag = null, sx = 0, sy = 0, eatUp = false;
     try { pos = JSON.parse(localStorage.getItem('g101-btnpos')); } catch {}
     const place = () => {
-      if (!pos) { box.classList.remove('placed'); box.style.left = box.style.top = ''; $('turnNote').style.translate = ''; return; }
+      if (!pos) { box.classList.remove('placed'); box.style.left = box.style.top = ''; noteAside(); return; }
       box.classList.add('placed');
       const w = box.offsetWidth || 90, h = box.offsetHeight || 46;
       box.style.left = Math.max(4, Math.min(innerWidth - w - 4, pos.x * innerWidth)) + 'px';
@@ -2764,7 +2767,7 @@
       const was = n.style.translate;
       n.style.translate = 'none';
       const r = n.getBoundingClientRect();
-      if (!pos || !hit(r)) { n.style.translate = ''; return; }
+      if (!hit(r)) { n.style.translate = ''; return; }
       const d = $('deck').getBoundingClientRect(), dx = Math.round(d.left + d.width / 2 - (r.left + r.width / 2));
       const moved = { left: r.left + dx, right: r.right + dx, top: r.top, bottom: r.bottom };
       n.style.translate = was;
