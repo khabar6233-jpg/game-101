@@ -339,7 +339,24 @@
   .chip.on { background: linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,.1)), var(--felt); border: 1.5px solid rgba(255,255,255,.6); color: #fff; font-weight: 700; }
   /* somebody is playing in this company right now */
   #friendList { display: flex; flex-wrap: wrap; gap: 8px; }
-  #friendList:empty, #tgRow:empty { display: none; }
+  #friendList:empty, #tgRow:empty, #friendNew:empty { display: none; }
+  .dialog.fr { text-align: left; }
+  .dialog.fr h2 { text-align: center; }
+  #friendList, #friendNew { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .frow { display: flex; align-items: center; gap: 10px; background: #f2f2f7; border-radius: 14px; padding: 8px 8px 8px 12px; }
+  .frow .dot { width: 10px; height: 10px; border-radius: 50%; background: #c7c7cc; flex: none; }
+  .frow .dot.on { background: #34c759; }
+  .frow .dot.play { background: #34c759; box-shadow: 0 0 0 3px rgba(52,199,89,.3); }
+  .frow .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .frow .nm b { font-size: 16px; color: #1c1c1e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .frow .nm span { font-size: 12px; color: #8e8e93; }
+  .frow .btn { min-height: 38px; padding: 0 14px; font-size: 15px; }
+  .frow .x { border: 0; background: none; color: #8e8e93; font-size: 18px; padding: 4px 6px; }
+  .fsub { font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: 1px; margin: 4px 0 2px; }
+  .fhint { font-size: 13px; color: #8e8e93; }
+  #friendsScr #tgRow { margin-bottom: 12px; }
+  #friendsScr .tgok { color: #3a3a3c; }
+  #friendsScr .addf { border-color: #c7c7cc; background: #f2f2f7; color: #3a3a3c; }
   #tgRow { display: flex; align-items: center; gap: 8px; }
   .tgok { font-size: 13px; color: var(--muted); }
   .fchip { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
@@ -452,13 +469,7 @@
       <div class="msg" id="netMsg"></div>
     </section>
 
-    <section class="panel" id="friendsPanel">
-      <h3>Друзья</h3>
-      <div id="friendList"></div>
-      <div id="tgRow"></div>
-      <div class="hint" id="friendHint">Добавить друга: нажмите «＋» у имени в строке «В сети» или «☰» на его панели в игре.
-        О друзьях приходит уведомление, когда они заходят в игру и садятся за стол. Удерживайте имя — удалить.</div>
-    </section>
+    <button class="btn wide" id="friendsBtn">Друзья</button>
 
     <section class="panel">
       <h3>С ботами</h3>
@@ -485,6 +496,7 @@
         <button class="vbtn off" id="spkBtn" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Звук</span></button>
       </div>
       <button class="btn" id="newGameBtn">Новая игра</button>
+      <button class="btn plain" id="gearFriends">Друзья</button>
       <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопки «Пас» / «Беру» на место</button>
       <div class="gl">Фон стола</div>
       <div class="bgs" id="bgs"></div>
@@ -499,6 +511,18 @@
     <table id="oiTable"></table>
     <div class="col" id="oiTools"></div>
     <button class="btn plain" id="oiClose" style="width:100%;margin-top:10px">Закрыть</button>
+  </div>
+</div>
+
+<div class="overlay" id="friendsScr">
+  <div class="dialog fr">
+    <h2>Друзья</h2>
+    <div id="tgRow"></div>
+    <div id="friendList"></div>
+    <div id="friendNew"></div>
+    <p class="fhint">Добавить друга: «＋» у имени в строке «В сети» на стартовом экране или ☰ на его панели в игре.
+      «Пригласить» зовёт друга за ваш стол: в игре и сообщением в Telegram.</p>
+    <button class="btn plain" id="friendsClose" style="width:100%">Закрыть</button>
   </div>
 </div>
 
@@ -574,7 +598,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 62;              // keep in sync with www/version.txt
+  const VERSION = 63;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2488,17 +2512,50 @@
     saveFriends();
     notifyUser(`${friends[id]} теперь в друзьях`);
   }
-  function dropFriend(id) { delete friends[id]; friendSeen.delete(id); unfollowed.add(id); saveFriends(); }
+  function dropFriend(id) { delete friends[id]; friendSeen.delete(id); friendChat.delete(id); saveFriends(); }
   function drawFriends() {
     const ids = Object.keys(friends);
+    const seen = id => { const f = friendSeen.get(id); return f && Date.now() - f.t < 16000 ? f : null; };
+    ids.sort((a, b) => (seen(b) ? 1 : 0) - (seen(a) ? 1 : 0) || friends[a].localeCompare(friends[b]));
     const html = ids.map(id => {
-      const f = friendSeen.get(id), on = f && Date.now() - f.t < 16000;
-      const st = !on ? '' : f.room ? (f.started ? 'играет' : 'ждёт за столом') : 'в сети';
-      return `<span class="fchip${on ? ' on' : ''}${on && f.room ? ' play' : ''}" data-fr="${esc(id)}"><i></i>${esc(friends[id])}${st ? `<small>${st}</small>` : ''}</span>`;
+      const f = seen(id);
+      const st = !f ? 'не в сети' : f.room ? (f.started ? 'играет' : 'ждёт за столом') : 'в сети';
+      return `<div class="frow"><i class="dot${f ? ' on' : ''}${f && f.room ? ' play' : ''}"></i>` +
+        `<div class="nm"><b>${esc(friends[id])}</b><span>${st}${friendChat.get(id) ? ' · Telegram' : ''}</span></div>` +
+        `<button class="btn" data-inv="${esc(id)}">Пригласить</button><button class="x" data-del="${esc(id)}" aria-label="Удалить">✕</button></div>`;
     }).join('');
     const el = $('friendList');
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+    // people online right now who are not friends yet
+    const others = [...online].filter(([id]) => !isFriend(id) && id !== myPid);
+    const nh = others.length ? '<div class="fsub">Сейчас в сети</div>' + others.map(([id, x]) =>
+      `<div class="frow"><i class="dot on"></i><div class="nm"><b>${esc(x.name)}</b><span>в вашей компании</span></div>` +
+      `<button class="btn" data-af="${esc(id)}" data-n="${esc(x.name)}">＋ В друзья</button></div>`).join('') : '';
+    if ($('friendNew').dataset.h !== nh) { $('friendNew').dataset.h = nh; $('friendNew').innerHTML = nh; }
+    const n = ids.filter(seen).length;
+    $('friendsBtn').textContent = 'Друзья' + (ids.length ? ` · ${n} в сети` : '');
   }
+
+  // invite one friend to my table: a message in their game and, if they connected it, in Telegram
+  const friendChat = new Map();
+  async function inviteFriend(id) {
+    if (!isFriend(id)) return;
+    if (mode === 'solo' && phase !== 'setup') {
+      if (!confirm('Закончить игру с ботами и позвать друга за новый стол?')) return;
+      leave();
+    }
+    if (mode === 'solo' || !roomCode) {
+      $('friendsScr').classList.remove('show');
+      createRoom();
+      for (let k = 0; k < 40 && !(mode === 'host' && roomCode); k++) await pause(400);
+      if (!roomCode) { notifyUser('Не получилось создать комнату'); return; }
+    }
+    const name = $('nick').value.trim().slice(0, 12) || 'Друг', chat = friendChat.get(id);
+    if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid });
+    if (chat) tgSay(chat, `${name} зовёт вас играть в «101». Войти за стол: ${SITE}?join=${roomCode}`);
+    notifyUser(`Приглашение отправлено: ${friends[id]}${chat ? ' (и в Telegram)' : ''}`);
+  }
+
   // ----- Telegram: a bot writes to you when a friend comes in or sits at a table, even if the game is closed -----
   // Without a server: the game that comes online writes to the Telegram chats of the people who follow it.
   // Each follower leaves "my chat" on the relay servers (a kept message), so the friend's game can find it.
@@ -2509,10 +2566,6 @@
   const tgApi = (m, q) => fetch(`https://api.telegram.org/bot${TG_TOKEN}/${m}?` + new URLSearchParams(q)).then(r => r.json()).catch(() => null);
   const tgSay = (chat, text) => tgApi('sendMessage', { chat_id: chat, text, disable_web_page_preview: true });
   const followTopic = (who, me) => TOPIC + 'u/' + who + '/f/' + me;
-  function tgTell(text) {                                   // to everybody who follows me
-    if (!TG_TOKEN) return;
-    followers.forEach(chat => tgSay(chat, text));
-  }
   function drawTg() {
     const el = $('tgRow');
     if (!TG_TOKEN) { el.innerHTML = ''; return; }
@@ -2534,7 +2587,7 @@
       clearInterval(tgPoll);
       tgChat = hit.chat.id;
       try { localStorage.setItem('g101-tg', tgChat); } catch {}
-      tgSay(tgChat, 'Готово! Сюда будут приходить уведомления, когда ваши друзья заходят в игру «101».');
+      tgSay(tgChat, 'Готово! Сюда будут приходить приглашения друзей в игру «101».');
       drawTg();
       startWatch(true);
     }, 3000);
@@ -2561,10 +2614,15 @@
     const settled = () => Date.now() - watchAt > 6000;      // what is there already when I come is not news
     const w = watch = netOpen((topic, from, d) => {
       if (!d) return;
-      if (d.t === 'follow' && topic.startsWith(TOPIC + 'u/' + myPid + '/f/')) {
-        const who = topic.slice((TOPIC + 'u/' + myPid + '/f/').length);
-        if (who === myPid) return;
-        if (d.chat) followers.set(who, d.chat); else followers.delete(who);
+      // a friend's Telegram chat (kept on the relay servers), so an invitation can reach it
+      if (d.t === 'chat' && topic.startsWith(TOPIC + 'u/') && topic.endsWith('/c')) {
+        const id = topic.slice((TOPIC + 'u/').length, -2);
+        if (isFriend(id)) { if (d.chat) friendChat.set(id, d.chat); else friendChat.delete(id); drawFriends(); }
+        return;
+      }
+      // somebody invites me to their table
+      if (d.t === 'invite' && topic === TOPIC + 'u/' + myPid + '/in' && /^\d{4}$/.test(d.room)) {
+        if (d.room !== roomCode) notifyUser(`✉️ ${String(d.name || 'Друг').slice(0, 12)} зовёт вас за стол`, d.room, '');
         return;
       }
       // a friend's game: online, sitting at a table, playing
@@ -2575,8 +2633,8 @@
         const room = /^\d{4}$/.test(d.room) ? d.room : '';
         friendSeen.set(id, { t: Date.now(), room, started: !!d.started });
         if (settled()) {
-          if (!was) notifyUser(room ? `${name} за столом — нажмите, чтобы войти` : `${name} в сети`, room && room !== roomCode ? room : '', '');
-          else if (room && room !== prev.room && room !== roomCode) notifyUser(`${name} за столом — нажмите, чтобы войти`, room, '');
+          if (!was) notifyUser(room ? `🃏 ${name} за столом` : `🟢 ${name} в сети`, room && room !== roomCode ? room : '', '');
+          else if (room && room !== prev.room && room !== roomCode) notifyUser(`🃏 ${name} за столом`, room, '');
         }
         drawFriends();
         return;
@@ -2616,32 +2674,18 @@
     });
     all.forEach(x => w.sub(groupTopic(x)));
     fr.forEach(id => w.sub(myTopic(id)));
-    w.sub(TOPIC + 'u/' + myPid + '/f/+');
-    // tell each friend's game where my Telegram is (or that I do not follow any more)
-    const follow = () => {
-      fr.forEach(id => w.keep(followTopic(id, myPid), { t: 'follow', chat: tgChat || 0 }));
-      unfollowed.forEach(id => w.keep(followTopic(id, myPid), { t: 'follow', chat: 0 }));
-      unfollowed.clear();
-    };
-    setTimeout(() => { if (watch === w) follow(); }, 2500);
-    setTimeout(() => { if (watch === w) follow(); }, 15000);
-    // the people who follow me hear that I am in the game (once in a while, not on every reload)
-    setTimeout(() => {
-      if (watch !== w) return;
-      let last = 0;
-      try { last = +localStorage.getItem('g101-tgsent') || 0; } catch {}
-      if (Date.now() - last < 20 * 60000) return;
-      try { localStorage.setItem('g101-tgsent', Date.now()); } catch {}
-      tgTell(`${$('nick').value.trim().slice(0, 12) || 'Друг'} в игре «101»: ${SITE}`);
-    }, 6000);
+    w.sub(TOPIC + 'u/' + myPid + '/in');                    // invitations to me
+    fr.forEach(id => w.sub(TOPIC + 'u/' + id + '/c'));       // my friends' Telegram chats
+    // my Telegram chat, kept for my friends (0 when it is not connected)
+    const pubChat = () => { if (watch === w && TG_TOKEN) w.keep(TOPIC + 'u/' + myPid + '/c', { t: 'chat', chat: tgChat || 0 }); };
+    setTimeout(pubChat, 2500);
+    setTimeout(pubChat, 15000);
     const here = () => {
       const name = $('nick').value.trim().slice(0, 12) || 'Игрок';
       if (g) w.send(groupTopic(g), { t: 'here', pid: myPid, name });
       // for my friends: where am I
       const room = mode !== 'solo' && roomCode ? roomCode : '';
       w.send(myTopic(myPid), { t: 'me', name, room, started: !!started });
-      if (room && room !== tgRoomSent) { tgRoomSent = room; tgTell(`${name} за столом. Войти: ${SITE}?join=${room}`); }
-      if (!room) tgRoomSent = '';
     };
     hereT = setInterval(here, 5000);
     setTimeout(() => { if (watch === w) here(); }, 1500);
@@ -3045,6 +3089,7 @@
   }
   $('toast').onclick = () => {
     $('toast').classList.remove('show');
+    if (toastCode && mode === 'solo' && phase !== 'setup' && confirm('Закончить игру с ботами и перейти за стол друга?')) leave();
     if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) {
       if (toastGroup && toastGroup !== group) setGroup(toastGroup);
       $('codeRow').style.display = '';
@@ -3060,27 +3105,15 @@
     $('codeIn').value = b.dataset.c;
     joinRoom();
   };
-  {
-    let holdT = null, held = false;
-    const fl = $('friendList'), stop = () => { clearTimeout(holdT); holdT = null; };
-    fl.addEventListener('pointerdown', e => {
-      const c = e.target.closest('[data-fr]');
-      stop(); held = false;
-      if (c) holdT = setTimeout(() => {
-        held = true;
-        if (confirm(`Удалить «${friends[c.dataset.fr]}» из друзей?`)) dropFriend(c.dataset.fr);
-      }, 550);
-    });
-    fl.addEventListener('pointerup', e => {
-      const c = e.target.closest('[data-fr]');
-      stop();
-      if (!c || held) return;
-      const f = friendSeen.get(c.dataset.fr);
-      if (f && f.room && Date.now() - f.t < 16000 && mode === 'solo' && !peer) { $('codeIn').value = f.room; joinWant = 'seat'; joinRoom(); }
-    });
-    fl.addEventListener('pointercancel', stop);
-    fl.addEventListener('contextmenu', e => e.preventDefault());
-  }
+  $('friendsBtn').onclick = () => { drawFriends(); $('friendsScr').classList.add('show'); };
+  $('gearFriends').onclick = () => { $('gear').classList.remove('show'); drawFriends(); $('friendsScr').classList.add('show'); };
+  $('friendsClose').onclick = () => $('friendsScr').classList.remove('show');
+  $('friendsScr').onclick = e => {
+    const inv = e.target.closest('[data-inv]'), del = e.target.closest('[data-del]'), af = e.target.closest('[data-af]');
+    if (inv) inviteFriend(inv.dataset.inv);
+    else if (del && confirm(`Удалить «${friends[del.dataset.del]}» из друзей?`)) dropFriend(del.dataset.del);
+    else if (af) addFriend(af.dataset.af, af.dataset.n);
+  };
   drawFriends();
   drawTg();
   $('tgRow').onclick = e => { if (e.target.id === 'tgOn') tgLink(); else if (e.target.id === 'tgOff') tgUnlink(); };
