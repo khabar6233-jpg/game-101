@@ -193,6 +193,7 @@
     padding: 8px 10px; margin-bottom: 6px; font-family: inherit; font-size: 14px; color: #222; }
   .room span { font-size: 12px; color: #13603a; }
   #rooms .none { font-size: 13px; color: #888; margin: 0; }
+  body.grp #codeRow, body.grp #lobCodeP, body.grp #lobCode { display: none; }
   .suits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .suits button { font-size: 40px; height: 76px; border-radius: 12px; border: 2px solid #ddd; background: #fafafa; color: #1b1b1b; }
   .suits button.red { color: var(--red); }
@@ -251,7 +252,7 @@
       <input id="groupIn" maxlength="20" placeholder="Код компании (один на всех друзей)" autocomplete="off">
       <div id="rooms"></div>
       <button class="btn" id="hostBtn">Создать комнату</button>
-      <div class="row">
+      <div class="row" id="codeRow">
         <input id="codeIn" maxlength="4" inputmode="numeric" placeholder="Код" autocomplete="off">
         <button class="btn" id="joinBtn">Войти</button>
       </div>
@@ -264,7 +265,7 @@
 
 <div class="overlay" id="lobby">
   <div class="dialog">
-    <p>Код комнаты</p>
+    <p id="lobCodeP">Код комнаты</p>
     <div class="code" id="lobCode"></div>
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
@@ -307,7 +308,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 33;              // keep in sync with www/version.txt
+  const VERSION = 34;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -781,7 +782,7 @@
     wasMyTurn = myTurn;
     $('roundNo').textContent = v.roundNo;
     document.body.dataset.back = v.back || 0;
-    $('roomTag').textContent = (v.room ? ' · комната ' + v.room : '') + (v.specN ? ' · зрителей: ' + v.specN : '') + ' · v' + VERSION;
+    $('roomTag').textContent = (v.room && !group ? ' · комната ' + v.room : '') + (v.specN ? ' · зрителей: ' + v.specN : '') + ' · v' + VERSION;
     // spectators ask to see the cards: every player decides for themselves
     const ab = $('asks'); ab.innerHTML = '';
     (v.asks || []).forEach(q => {
@@ -1717,7 +1718,7 @@
     const host = mode === 'host';
     const names = host ? lobbyNames() : lobby;
     $('lobCode').textContent = roomCode;
-    $('lobHint').textContent = host ? (roomGroup ? 'Друзья с вашим кодом компании видят эту комнату в списке. ' : '') + 'Скажите этот код друзьям. Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
+    $('lobHint').textContent = host ? (roomGroup ? 'Друзья с вашим кодом компании видят эту комнату в списке и входят одним нажатием.' : 'Скажите этот код друзьям.') + ' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
       : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
     $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
       (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
@@ -1824,10 +1825,10 @@
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = testNet;
   try { group = normGroup(localStorage.getItem('g101-group')); } catch {}
-  $('groupIn').value = group;
+  $('groupIn').value = group; document.body.classList.toggle('grp', !!group);
   $('groupIn').onchange = () => {
     group = normGroup($('groupIn').value);
-    $('groupIn').value = group;
+    $('groupIn').value = group; document.body.classList.toggle('grp', !!group);
     try { localStorage.setItem('g101-group', group); } catch {}
     startWatch();
   };
