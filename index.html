@@ -308,7 +308,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 36;              // keep in sync with www/version.txt
+  const VERSION = 37;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -645,6 +645,15 @@
     render();
   }
 
+  // stop the game right now and start a new one (spectators who asked for a seat sit down)
+  function restartMatch() {
+    if (mode !== 'host' || !started || !players.length) return;
+    gameId++; busy = false; pend = null; pendingQueen = null;
+    phase = 'roundEnd';
+    result = { w: -1, rows: [], gameOver: true, champion: -1 };
+    afterResult();
+  }
+
   function afterResult() {
     if (!result) return;
     if (!result.gameOver) { startRound(); return; }
@@ -684,6 +693,7 @@
       hand: me ? me.hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })) : [],
       asks: me ? [...specs.values()].filter(x => x.asked === roundNo && x.wait.includes(seat)).map(x => ({ id: x.id, name: x.name })) : [],
       specN: specs.size,
+      sitters: seat === mySeat && mode === 'host' ? [...specs.values()].filter(x => x.sit).map(x => x.name) : [],
       log: log.slice(-2).map(f => f(seat)),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
       result, canControl: seat === mySeat,
@@ -808,6 +818,17 @@
       });
       ab.appendChild(row);
     });
+    if (v.sitters && v.sitters.length && v.phase !== 'roundEnd') {
+      // the device that runs the game may stop it at any moment to let spectators sit down
+      const row = document.createElement('div');
+      row.className = 'ask';
+      row.innerHTML = `<span>За стол ${v.sitters.length > 1 ? 'хотят' : 'хочет'} сесть: ${esc(v.sitters.join(', '))}</span>`;
+      const b = document.createElement('button');
+      b.textContent = 'Прервать и начать новую игру';
+      b.onclick = () => { if (confirm('Прервать игру и начать новую? Очки у всех обнулятся.')) restartMatch(); };
+      row.appendChild(b);
+      ab.appendChild(row);
+    }
     // the room owner's device applies the rules, so a version mismatch matters
     const hv = v.ver || 0;
     $('warn').textContent = mode !== 'guest' || hv === VERSION ? ''
