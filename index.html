@@ -203,6 +203,17 @@
   .voice.off { opacity: .55; }
   .voice.off::after { content: ''; position: absolute; left: 5px; right: 5px; top: 50%; height: 2px; background: #fff; transform: rotate(-45deg); }
   .voice.on { background: var(--gold); color: #222; }
+  #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60; max-width: 92vw; display: none;
+    background: #fff; color: #222; border-radius: 12px; padding: 10px 16px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+  #toast.show { display: block; }
+  #groupList { display: flex; flex-wrap: wrap; gap: 6px; }
+  #groupList:empty { display: none; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; background: #eee; color: #333; border-radius: 16px; padding: 6px 6px 6px 12px; font-size: 14px; }
+  .chip.on { background: #13603a; color: #fff; }
+  .chip b { display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; border-radius: 50%; background: rgba(0,0,0,.14); font-size: 12px; }
+  #specRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  #specRow:empty { display: none; }
+  #specRow span { background: rgba(0,0,0,.2); color: var(--text); border-radius: 12px; padding: 2px 10px; font-size: 12px; }
   body.grp #codeRow, body.grp #lobCodeP, body.grp #lobCode { display: none; }
   .suits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .suits button { font-size: 40px; height: 76px; border-radius: 12px; border: 2px solid #ddd; background: #fafafa; color: #1b1b1b; }
@@ -226,6 +237,7 @@
   <div class="warn" id="warn"></div>
   <div id="asks"></div>
   <div class="opps" id="opps"></div>
+  <div id="specRow"></div>
 
   <div class="middle">
     <svg id="compass" viewBox="0 0 22 34"><path d="M11 0 20 22H2z"/><circle cx="11" cy="28" r="4"/></svg>
@@ -241,6 +253,7 @@
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
 
+<div id="toast"></div>
 <div class="overlay show" id="setup">
   <div class="dialog">
     <h2>101</h2>
@@ -262,6 +275,7 @@
     <div class="col">
       <input id="nick" maxlength="12" placeholder="Ваше имя" autocomplete="off">
       <input id="groupIn" maxlength="20" placeholder="Код компании (один на всех друзей)" autocomplete="off">
+      <div id="groupList"></div>
       <div id="rooms"></div>
       <button class="btn" id="hostBtn">Создать комнату</button>
       <div class="row" id="codeRow">
@@ -320,7 +334,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 42;              // keep in sync with www/version.txt
+  const VERSION = 43;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -755,7 +769,7 @@
       duel,
       hand: me ? me.hand.map(c => ({ s: c.s, r: c.r, id: c.id, ok: !!t && canPlay(c) })) : [],
       asks: me ? [...specs.values()].filter(x => x.asked === roundNo && x.wait.includes(seat)).map(x => ({ id: x.id, name: x.name })) : [],
-      specN: specs.size,
+      specN: specs.size, specNames: [...specs.values()].map(x => x.name),
       sitters: seat === mySeat && mode === 'host' ? [...specs.values()].filter(x => x.sit).map(x => x.name) : [],
       log: log.slice(-2).map(f => f(seat)),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
@@ -868,7 +882,8 @@
     wasMyTurn = myTurn;
     $('roundNo').textContent = v.roundNo;
     document.body.dataset.back = v.back || 0;
-    $('roomTag').textContent = (v.room && !group ? ' · комната ' + v.room : '') + (v.specN ? ' · зрителей: ' + v.specN : '') + ' · v' + VERSION;
+    $('roomTag').textContent = (v.room && !group ? ' · комната ' + v.room : '') + ' · v' + VERSION;
+    $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
     // spectators ask to see the cards: every player decides for themselves
     const ab = $('asks'); ab.innerHTML = '';
     (v.asks || []).forEach(q => {
@@ -1750,6 +1765,7 @@
       if (peer !== n || mode !== 'host') return;
       // friends with the same company code see this room in their list
       if (roomGroup) n.send(groupTopic(roomGroup), { t: 'room', code, started, spec: specs.size,
+        open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0,
         names: started ? players.filter(p => !p.removed).map(p => p.name) : lobby ? lobby.map(x => x.name) : [] });
       if (!started) return;
       const now = Date.now();
@@ -1829,7 +1845,7 @@
       lastTick = Date.now();
       if (!gJoined) {
         if (Date.now() - gT0 > 25000) { quit('Комната не отвечает: неверный код или нет связи с игровыми серверами'); return; }
-        hostConn.send({ t: 'join', name: gName, ver: VERSION, pid: myPid });      // repeated until the room answers
+        hostConn.send({ t: 'join', name: gName, ver: VERSION, pid: myPid, want: joinWant });      // repeated until the room answers
         return;
       }
       const silent = Date.now() - gHeard;
@@ -1971,6 +1987,10 @@
           render();
           return;
         }
+        if (d.want !== 'watch') {
+          const bi = players.findIndex(x => x.isBot && !x.removed && !x.out);
+          if (bi >= 0) { seatHuman(bi, conn, pid, String(d.name || 'Игрок').slice(0, 12)); return; }
+        }
         const old = pid ? [...specs.values()].find(x => x.pid === pid) : null;
         if (old) { retire(old.conn); specs.delete(old.id); }
         // the game is on: come in as a spectator
@@ -2015,41 +2035,109 @@
   // ----- the company code: friends who share it see each other's rooms on the start screen -----
   const groupTopic = g => TOPIC + 'g/' + g;
   const normGroup = t => String(t || '').trim().toLowerCase().replace(/[^a-zа-яё0-9]/g, '').slice(0, 20);
-  const rooms = new Map();
-  let watch = null, watchT = null;
+  const rooms = new Map(), online = new Map();
+  let watch = null, watchT = null, hereT = null, watchAt = 0, joinWant = 'seat', toastT = null, toastCode = '';
+  let groups = [];
+
+  // a short message on top of the screen; when the game is not on the screen, also a phone notification
+  function notifyUser(text, code) {
+    const el = $('toast');
+    el.textContent = text;
+    el.classList.add('show');
+    toastCode = code || '';
+    clearTimeout(toastT);
+    toastT = setTimeout(() => el.classList.remove('show'), 8000);
+    try {
+      if (window.App101 && window.App101.note) { if (document.hidden) window.App101.note('101', text); else window.App101.vibrate(120); }
+      else if (document.hidden && window.Notification && Notification.permission === 'granted') new Notification('101', { body: text, icon: 'icon-192.png' });
+    } catch {}
+  }
+  function askNotify() {
+    try {
+      if (window.App101 && window.App101.askNotify) window.App101.askNotify();
+      else if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
+    } catch {}
+  }
+
   function drawRooms() {
     const el = $('rooms');
     if (!group) { el.innerHTML = ''; el.dataset.h = ''; return; }
-    const html = rooms.size ? [...rooms].map(([c, r]) => {
+    const who = online.size ? `<p class="none">В сети: ${esc([...online.values()].map(x => x.name).join(', '))}</p>` : '';
+    const html = who + (rooms.size ? [...rooms].map(([c, r]) => {
       const full = !r.started && r.names.length >= MAX_PLAYERS;
       return `<div class="room"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` +
         (r.started ? 'идёт игра' + (r.spec ? ', зрителей: ' + r.spec : '') : full ? 'мест нет' : 'ждут игроков') + '</span></div>' +
-        (full ? '' : `<button class="btn" data-c="${c}">${r.started ? 'Смотреть' : 'Войти'}</button>`) + '</div>';
-    }).join('') : '<p class="none">Сейчас никто не играет</p>';
+        (r.started ? (r.open ? `<button class="btn" data-c="${c}" data-w="seat">Играть</button>` : '') +
+            `<button class="btn plain" data-c="${c}" data-w="watch">Смотреть</button>`
+          : full ? '' : `<button class="btn" data-c="${c}" data-w="seat">Войти</button>`) + '</div>';
+    }).join('') : who ? '' : '<p class="none">Сейчас никто не играет</p>');
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
   }
   function stopWatch() {
     if (watch) { try { watch.close(); } catch {} watch = null; }
-    clearInterval(watchT);
-    rooms.clear();
+    clearInterval(watchT); clearInterval(hereT);
+    rooms.clear(); online.clear();
     drawRooms();
   }
   function startWatch() {
     stopWatch();
     if (!group) return;
     const g = group;
-    watch = netOpen((topic, from, d) => {
-      if (topic !== groupTopic(g) || !d || d.t !== 'room' || !/^\d{4}$/.test(d.code)) return;
+    watchAt = Date.now();
+    const settled = () => Date.now() - watchAt > 6000;      // what is there already when I come is not news
+    const w = watch = netOpen((topic, from, d) => {
+      if (topic !== groupTopic(g) || !d) return;
+      if (d.t === 'here') {                                 // a friend has the game open
+        if (typeof d.pid !== 'string' || d.pid === myPid) return;
+        const name = String(d.name || 'Игрок').slice(0, 12), fresh = !online.has(d.pid);
+        online.set(d.pid, { name, t: Date.now() });
+        if (fresh && settled()) notifyUser(`${name} в игре`);
+        drawRooms();
+        return;
+      }
+      if (d.t !== 'room' || !/^\d{4}$/.test(d.code)) return;
       if (d.gone) rooms.delete(d.code);
-      else rooms.set(d.code, { names: (Array.isArray(d.names) ? d.names : []).slice(0, MAX_PLAYERS).map(x => String(x).slice(0, 18)),
-        started: !!d.started, spec: +d.spec || 0, t: Date.now() });
+      else {
+        const fresh = !rooms.has(d.code);
+        const names = (Array.isArray(d.names) ? d.names : []).slice(0, MAX_PLAYERS).map(x => String(x).slice(0, 18));
+        rooms.set(d.code, { names, started: !!d.started, spec: +d.spec || 0, open: +d.open || 0, t: Date.now() });
+        if (fresh && settled()) notifyUser(`${names[0] || 'Друг'} зовёт играть`, d.code);
+      }
       drawRooms();
     });
-    watch.sub(groupTopic(g));
+    w.sub(groupTopic(g));
+    const here = () => w.send(groupTopic(g), { t: 'here', pid: myPid, name: $('nick').value.trim().slice(0, 12) || 'Игрок' });
+    hereT = setInterval(here, 5000);
+    setTimeout(() => { if (watch === w) here(); }, 1500);
     watchT = setInterval(() => {
       rooms.forEach((r, c) => { if (Date.now() - r.t > 10000) rooms.delete(c); });
+      online.forEach((x, id) => { if (Date.now() - x.t > 16000) online.delete(id); });
       drawRooms();
     }, 3000);
+  }
+
+  // the company codes this device has used: one tap to choose, a cross to forget
+  function drawGroups() {
+    $('groupList').innerHTML = groups.map(g => `<span class="chip${g === group ? ' on' : ''}" data-g="${esc(g)}">${esc(g)}<b data-x="${esc(g)}">✕</b></span>`).join('');
+  }
+  function setGroup(g) {
+    group = normGroup(g);
+    $('groupIn').value = group;
+    document.body.classList.toggle('grp', !!group);
+    if (group && !groups.includes(group)) groups.unshift(group);
+    groups = groups.slice(0, 8);
+    try { localStorage.setItem('g101-group', group); localStorage.setItem('g101-groups', JSON.stringify(groups)); } catch {}
+    drawGroups();
+    startWatch();
+  }
+
+  // a player who comes while the game is on sits down in a bot's place, with its cards and points
+  function seatHuman(i, conn, pid, name) {
+    const p = players[i], old = p.name;
+    p.isBot = false; p.conn = conn; p.pid = pid; p.name = name; p.lost = false;
+    say(me => (me === i ? 'Вы сели за стол вместо бота' : `${name} садится за стол вместо бота «${old}»`));
+    if (phase === 'play' && turn === i && pend && pend.k === 'bot') { gameId++; busy = false; pend = null; }   // the bot was about to move
+    render();
   }
 
   // only the device that runs the game can hand a player's seat to a bot
@@ -2124,7 +2212,8 @@
       (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
     $('addBotBtn').style.display = host && names.length < MAX_PLAYERS ? '' : 'none';
     $('startBtn').style.display = host ? '' : 'none';
-    $('startBtn').disabled = names.length < 2;
+    $('startBtn').disabled = false;
+    $('startBtn').textContent = names.length < 2 ? 'Играть с ботом, пока ждём друзей' : 'Начать игру';
     showOnly('lobby');
     if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION }); });
   }
@@ -2216,14 +2305,15 @@
     };
   });
   $('hostBtn').onclick = () => createRoom();
-  $('joinBtn').onclick = joinRoom;
+  $('joinBtn').onclick = () => { joinWant = 'seat'; joinRoom(); };
   $('addBotBtn').onclick = () => {
     if (mode !== 'host' || lobby.length >= MAX_PLAYERS) return;
     lobby.push({ name: 'Бот ' + (lobby.filter(s => s.isBot).length + 1), isBot: true, conn: null });
     drawLobby();
   };
   $('startBtn').onclick = () => {
-    if (mode !== 'host' || lobby.length < 2) return;
+    if (mode !== 'host' || !lobby) return;
+    if (lobby.length < 2) lobby.push({ name: 'Бот 1', isBot: true, conn: null });   // a friend who comes later takes this seat
     started = true;
     startMatch(lobby);
   };
@@ -2234,17 +2324,29 @@
   $('spkBtn').onclick = () => vToggle(false);
   // a sound that the browser refused to start on its own starts with the next touch
   document.addEventListener('pointerup', () => { if (vOn()) aGet(); if (vSpk) vPeers.forEach(p => { if (p.audio.paused && p.audio.srcObject) p.audio.play().catch(() => {}); }); });
-  try { group = normGroup(localStorage.getItem('g101-group')); } catch {}
+  try { group = normGroup(localStorage.getItem('g101-group')); groups = JSON.parse(localStorage.getItem('g101-groups')) || []; } catch {}
+  if (!Array.isArray(groups)) groups = [];
+  groups = groups.map(normGroup).filter(Boolean);
+  if (group && !groups.includes(group)) groups.unshift(group);
   $('groupIn').value = group; document.body.classList.toggle('grp', !!group);
-  $('groupIn').onchange = () => {
-    group = normGroup($('groupIn').value);
-    $('groupIn').value = group; document.body.classList.toggle('grp', !!group);
-    try { localStorage.setItem('g101-group', group); } catch {}
-    startWatch();
+  drawGroups();
+  if (group) askNotify();
+  $('groupIn').onchange = () => { setGroup($('groupIn').value); askNotify(); };
+  $('groupList').onclick = e => {
+    const x = e.target.closest('[data-x]'), c = e.target.closest('[data-g]');
+    if (x) {
+      groups = groups.filter(g => g !== x.dataset.x);
+      setGroup(group === x.dataset.x ? '' : group);
+    } else if (c) { setGroup(c.dataset.g); askNotify(); }
+  };
+  $('toast').onclick = () => {
+    $('toast').classList.remove('show');
+    if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) { $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom(); }
   };
   $('rooms').onclick = e => {
     const b = e.target.closest('[data-c]');
     if (!b) return;
+    joinWant = b.dataset.w || 'seat';
     $('codeIn').value = b.dataset.c;
     joinRoom();
   };
