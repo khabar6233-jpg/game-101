@@ -108,6 +108,52 @@ public class MainActivity extends Activity {
 
     /** Lets the page buzz the phone: "your move". */
     public class Bridge {
+        /** A friend is online or calls to play while the game is not on the screen. */
+        @android.webkit.JavascriptInterface
+        public void note(String title, String text) {
+            try {
+                android.app.NotificationManager nm =
+                        (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                if (nm == null) return;
+                android.app.Notification.Builder b;
+                if (Build.VERSION.SDK_INT >= 26) {
+                    nm.createNotificationChannel(new android.app.NotificationChannel(
+                            "game", "101", android.app.NotificationManager.IMPORTANCE_HIGH));
+                    b = new android.app.Notification.Builder(MainActivity.this, "game");
+                } else {
+                    b = new android.app.Notification.Builder(MainActivity.this);
+                }
+                android.content.Intent open = new android.content.Intent(MainActivity.this, MainActivity.class);
+                open.setFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                android.app.PendingIntent pi = android.app.PendingIntent.getActivity(MainActivity.this, 0, open,
+                        android.app.PendingIntent.FLAG_IMMUTABLE | android.app.PendingIntent.FLAG_UPDATE_CURRENT);
+                b.setSmallIcon(getApplicationInfo().icon).setContentTitle(title).setContentText(text)
+                        .setAutoCancel(true).setContentIntent(pi);
+                nm.notify(1, b.build());
+            } catch (Exception e) {
+                // notifications are switched off
+            }
+        }
+
+        /** Android 13+ asks the user once whether the game may show notifications. */
+        @android.webkit.JavascriptInterface
+        public void askNotify() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (Build.VERSION.SDK_INT >= 33
+                                && checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            requestPermissions(new String[] { "android.permission.POST_NOTIFICATIONS" }, 2);
+                        }
+                    } catch (Exception e) {
+                        // not available
+                    }
+                }
+            });
+        }
+
         @android.webkit.JavascriptInterface
         public void vibrate(int ms) {
             try {
