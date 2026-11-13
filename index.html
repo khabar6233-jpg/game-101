@@ -339,7 +339,9 @@
   .chip.on { background: linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,.1)), var(--felt); border: 1.5px solid rgba(255,255,255,.6); color: #fff; font-weight: 700; }
   /* somebody is playing in this company right now */
   #friendList { display: flex; flex-wrap: wrap; gap: 8px; }
-  #friendList:empty { display: none; }
+  #friendList:empty, #tgRow:empty { display: none; }
+  #tgRow { display: flex; align-items: center; gap: 8px; }
+  .tgok { font-size: 13px; color: var(--muted); }
   .fchip { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
     color: var(--text); border-radius: 18px; padding: 8px 14px; font-size: 15px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .fchip i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.25); }
@@ -453,6 +455,7 @@
     <section class="panel" id="friendsPanel">
       <h3>Друзья</h3>
       <div id="friendList"></div>
+      <div id="tgRow"></div>
       <div class="hint" id="friendHint">Добавить друга: нажмите «＋» у имени в строке «В сети» или «☰» на его панели в игре.
         О друзьях приходит уведомление, когда они заходят в игру и садятся за стол. Удерживайте имя — удалить.</div>
     </section>
@@ -571,7 +574,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 59;              // keep in sync with www/version.txt
+  const VERSION = 60;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1667,11 +1670,11 @@
       get up() { return up; },
       get acks() { return acks; },
       sub(t) { subs.add(t); if (up) sendSub(t); },
-      pub(t, text, plain) {
+      pub(t, text, plain, keep) {
         if (!up || ws.readyState !== 1) return;
-        if (plain) { ws.send(packet(0x30, [...str(t), ...enc.encode(text)])); return; }
+        if (plain) { ws.send(packet(0x30 | (keep ? 1 : 0), [...str(t), ...enc.encode(text)])); return; }
         pid = pid % 65000 + 1;
-        ws.send(packet(0x32, [...str(t), pid >> 8, pid & 255, ...enc.encode(text)]));
+        ws.send(packet(0x32 | (keep ? 1 : 0), [...str(t), pid >> 8, pid & 255, ...enc.encode(text)]));
       },
       reconnect: restart,
       close() {
@@ -1704,7 +1707,7 @@
       out.forEach(m => {
         if (m.sentIn === sess) return;
         if (!m.pid) { pid = pid % 65000 + 1; m.pid = pid; }
-        ws.send(packet(m.sentIn ? 0x3A : 0x32, [...str(m.t), m.pid >> 8, m.pid & 255, ...enc.encode(m.text)]));
+        ws.send(packet((m.sentIn ? 0x3A : 0x32) | (m.keep ? 1 : 0), [...str(m.t), m.pid >> 8, m.pid & 255, ...enc.encode(m.text)]));
         m.sentIn = sess;
       });
     };
@@ -1771,7 +1774,7 @@
       get up() { return ever; },
       get acks() { return acks; },
       sub(t) { subs.add(t); subbed = false; },
-      pub(t, text) { out.push({ t, text, pid: 0, sentIn: 0 }); if (out.length > 40) out.shift(); flush(); },
+      pub(t, text, plain, keep) { out.push({ t, text, keep, pid: 0, sentIn: 0 }); if (out.length > 40) out.shift(); flush(); },
       reconnect: hangUp,
       close() { alive = false; live = false; clearTimeout(t1); clearTimeout(t2); try { ws.onclose = null; ws.close(); } catch {} }
     };
@@ -1800,6 +1803,7 @@
       get lastEcho() { return lastEcho; },
       sub(t) { links.forEach(l => l.sub(t)); },
       send(t, d) { const text = JSON.stringify({ f: id, q: ++seq, d }); links.forEach(l => l.pub(t, text)); },
+      keep(t, d) { const text = JSON.stringify({ f: id, q: ++seq, d }); links.forEach(l => l.pub(t, text, true, true)); },
       send1(t, d) { const l = links.find(x => x.up); if (l) l.pub(t, JSON.stringify({ f: id, q: ++seq, d }), true); },
       close() { links.forEach(l => l.close()); },
       reconnect() { links.forEach(l => l.reconnect()); },
@@ -2484,7 +2488,7 @@
     saveFriends();
     notifyUser(`${friends[id]} теперь в друзьях`);
   }
-  function dropFriend(id) { delete friends[id]; friendSeen.delete(id); saveFriends(); }
+  function dropFriend(id) { delete friends[id]; friendSeen.delete(id); unfollowed.add(id); saveFriends(); }
   function drawFriends() {
     const ids = Object.keys(friends);
     const html = ids.map(id => {
@@ -2495,13 +2499,60 @@
     const el = $('friendList');
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
   }
-  let watchKey = '';
-  const onlineAll = new Map();
-  function startWatch() {
+  // ----- Telegram: a bot writes to you when a friend comes in or sits at a table, even if the game is closed -----
+  // Without a server: the game that comes online writes to the Telegram chats of the people who follow it.
+  // Each follower leaves "my chat" on the relay servers (a kept message), so the friend's game can find it.
+  const TG_TOKEN = '', TG_BOT = '';
+  let tgChat = 0, tgPoll = null;
+  try { tgChat = +localStorage.getItem('g101-tg') || 0; } catch {}
+  const followers = new Map();                              // pid -> Telegram chat of a person who follows me
+  const tgApi = (m, q) => fetch(`https://api.telegram.org/bot${TG_TOKEN}/${m}?` + new URLSearchParams(q)).then(r => r.json()).catch(() => null);
+  const tgSay = (chat, text) => tgApi('sendMessage', { chat_id: chat, text, disable_web_page_preview: true });
+  const followTopic = (who, me) => TOPIC + 'u/' + who + '/f/' + me;
+  function tgTell(text) {                                   // to everybody who follows me
+    if (!TG_TOKEN) return;
+    followers.forEach(chat => tgSay(chat, text));
+  }
+  function drawTg() {
+    const el = $('tgRow');
+    if (!TG_TOKEN) { el.innerHTML = ''; return; }
+    el.innerHTML = tgChat
+      ? `<span class="tgok">Telegram подключён ✓</span><button class="addf" id="tgOff">отключить</button>`
+      : `<button class="btn" id="tgOn" style="width:100%">Подключить Telegram</button>`;
+  }
+  function tgLink() {
+    if (!TG_TOKEN || !TG_BOT) return;
+    window.open(`https://t.me/${TG_BOT}?start=${encodeURIComponent(myPid)}`, '_blank');
+    $('tgRow').innerHTML = '<span class="tgok">Нажмите «Start» в Telegram и вернитесь сюда…</span>';
+    clearInterval(tgPoll);
+    const t0 = Date.now();
+    tgPoll = setInterval(async () => {
+      if (Date.now() - t0 > 180000) { clearInterval(tgPoll); drawTg(); return; }
+      const r = await tgApi('getUpdates', { limit: 100 });
+      const hit = r && r.ok && r.result.map(u => u.message).find(m => m && m.text === '/start ' + myPid);
+      if (!hit) return;
+      clearInterval(tgPoll);
+      tgChat = hit.chat.id;
+      try { localStorage.setItem('g101-tg', tgChat); } catch {}
+      tgSay(tgChat, 'Готово! Сюда будут приходить уведомления, когда ваши друзья заходят в игру «101».');
+      drawTg();
+      startWatch(true);
+    }, 3000);
+  }
+  function tgUnlink() {
+    tgChat = 0;
+    try { localStorage.removeItem('g101-tg'); } catch {}
+    drawTg();
+    startWatch(true);
+  }
+
+  let watchKey = '', tgRoomSent = '';
+  const onlineAll = new Map(), unfollowed = new Set();
+  function startWatch(force) {
     const all = [...new Set([group, ...groups].filter(Boolean))];
     const fr = Object.keys(friends);
-    const key = all.join('|') + '#' + group + '#' + lite + '#' + fr.join(',');
-    if (watch && key === watchKey) { drawRooms(); drawGroups(); return; }        // already listening
+    const key = all.join('|') + '#' + group + '#' + lite + '#' + fr.join(',') + '#' + tgChat;
+    if (watch && key === watchKey && !force) { drawRooms(); drawGroups(); return; }        // already listening
     stopWatch();
     watchKey = key;
 
@@ -2510,6 +2561,12 @@
     const settled = () => Date.now() - watchAt > 6000;      // what is there already when I come is not news
     const w = watch = netOpen((topic, from, d) => {
       if (!d) return;
+      if (d.t === 'follow' && topic.startsWith(TOPIC + 'u/' + myPid + '/f/')) {
+        const who = topic.slice((TOPIC + 'u/' + myPid + '/f/').length);
+        if (who === myPid) return;
+        if (d.chat) followers.set(who, d.chat); else followers.delete(who);
+        return;
+      }
       // a friend's game: online, sitting at a table, playing
       if (d.t === 'me' && topic.startsWith(TOPIC + 'u/')) {
         const id = topic.slice((TOPIC + 'u/').length);
@@ -2559,11 +2616,32 @@
     });
     all.forEach(x => w.sub(groupTopic(x)));
     fr.forEach(id => w.sub(myTopic(id)));
+    w.sub(TOPIC + 'u/' + myPid + '/f/+');
+    // tell each friend's game where my Telegram is (or that I do not follow any more)
+    const follow = () => {
+      fr.forEach(id => w.keep(followTopic(id, myPid), { t: 'follow', chat: tgChat || 0 }));
+      unfollowed.forEach(id => w.keep(followTopic(id, myPid), { t: 'follow', chat: 0 }));
+      unfollowed.clear();
+    };
+    setTimeout(() => { if (watch === w) follow(); }, 2500);
+    setTimeout(() => { if (watch === w) follow(); }, 15000);
+    // the people who follow me hear that I am in the game (once in a while, not on every reload)
+    setTimeout(() => {
+      if (watch !== w) return;
+      let last = 0;
+      try { last = +localStorage.getItem('g101-tgsent') || 0; } catch {}
+      if (Date.now() - last < 20 * 60000) return;
+      try { localStorage.setItem('g101-tgsent', Date.now()); } catch {}
+      tgTell(`${$('nick').value.trim().slice(0, 12) || 'Друг'} в игре «101»: ${SITE}`);
+    }, 6000);
     const here = () => {
       const name = $('nick').value.trim().slice(0, 12) || 'Игрок';
       if (g) w.send(groupTopic(g), { t: 'here', pid: myPid, name });
       // for my friends: where am I
-      w.send(myTopic(myPid), { t: 'me', name, room: mode !== 'solo' && roomCode ? roomCode : '', started: !!started });
+      const room = mode !== 'solo' && roomCode ? roomCode : '';
+      w.send(myTopic(myPid), { t: 'me', name, room, started: !!started });
+      if (room && room !== tgRoomSent) { tgRoomSent = room; tgTell(`${name} за столом. Войти: ${SITE}?join=${room}`); }
+      if (!room) tgRoomSent = '';
     };
     hereT = setInterval(here, 5000);
     setTimeout(() => { if (watch === w) here(); }, 1500);
@@ -3004,7 +3082,17 @@
     fl.addEventListener('contextmenu', e => e.preventDefault());
   }
   drawFriends();
+  drawTg();
+  $('tgRow').onclick = e => { if (e.target.id === 'tgOn') tgLink(); else if (e.target.id === 'tgOff') tgUnlink(); };
   startWatch();
+  // a link from a Telegram message: ...?join=1234 goes straight to that table
+  {
+    const j = new URLSearchParams(location.search).get('join');
+    if (/^\d{4}$/.test(j || '')) {
+      try { history.replaceState(null, '', location.pathname); } catch {}
+      setTimeout(() => { if (mode === 'solo' && !peer) { $('codeIn').value = j; joinWant = 'seat'; joinRoom(); } }, 300);
+    }
+  }
   $('newBtn').onclick = () => {
     if (mode !== 'solo' && !confirm('Выйти из комнаты?')) return;
     leave();
