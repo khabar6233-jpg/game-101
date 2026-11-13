@@ -167,6 +167,11 @@
   .suit-now:empty { background: none; box-shadow: none; }
   /* the move buttons can be moved by each player: long press, drag, let go */
   #actions { touch-action: none; }
+  /* the move buttons take the colour of the chosen table, a little lighter, with a light edge */
+  #actions .btn { background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); color: #fff;
+    border: 1.5px solid rgba(255,255,255,.5); box-shadow: 0 3px 0 var(--felt-dark), 0 6px 16px rgba(0,0,0,.3); text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+  #actions .btn:active { box-shadow: 0 1px 0 var(--felt-dark); }
+  #turnNote { font-size: 24px; letter-spacing: .3px; transition: translate .35s ease; }
   #actions.moving .btn { outline: 3px dashed rgba(255,255,255,.8); outline-offset: 3px; transform: scale(1.06); }
   #actions.placed { position: fixed; z-index: 6; }
   .vbtn:active { transform: scale(.97); }
@@ -455,7 +460,7 @@
         <button class="vbtn off" id="spkBtn" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Звук</span></button>
       </div>
       <button class="btn" id="newGameBtn">Новая игра</button>
-      <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопку «Пас» на место</button>
+      <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопки «Пас» / «Беру» на место</button>
       <div class="gl">Фон стола</div>
       <div class="bgs" id="bgs"></div>
       <button class="btn plain" id="gearClose">Закрыть</button>
@@ -544,7 +549,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 53;              // keep in sync with www/version.txt
+  const VERSION = 54;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2745,11 +2750,25 @@
     let pos = null, holdT = null, drag = null, sx = 0, sy = 0, eatUp = false;
     try { pos = JSON.parse(localStorage.getItem('g101-btnpos')); } catch {}
     const place = () => {
-      if (!pos) { box.classList.remove('placed'); box.style.left = box.style.top = ''; return; }
+      if (!pos) { box.classList.remove('placed'); box.style.left = box.style.top = ''; $('turnNote').style.translate = ''; return; }
       box.classList.add('placed');
       const w = box.offsetWidth || 90, h = box.offsetHeight || 46;
       box.style.left = Math.max(4, Math.min(innerWidth - w - 4, pos.x * innerWidth)) + 'px';
       box.style.top = Math.max(4, Math.min(innerHeight - h - 4, pos.y * innerHeight)) + 'px';
+      noteAside();
+    };
+    // "Ваш ход" stays under the discard pile; if the buttons cover it, it goes under the deck (and back)
+    const noteAside = () => {
+      const n = $('turnNote'), a = box.getBoundingClientRect();
+      const hit = r => a.width > 0 && a.left < r.right + 6 && a.right > r.left - 6 && a.top < r.bottom + 6 && a.bottom > r.top - 6;
+      const was = n.style.translate;
+      n.style.translate = 'none';
+      const r = n.getBoundingClientRect();
+      if (!pos || !hit(r)) { n.style.translate = ''; return; }
+      const d = $('deck').getBoundingClientRect(), dx = Math.round(d.left + d.width / 2 - (r.left + r.width / 2));
+      const moved = { left: r.left + dx, right: r.right + dx, top: r.top, bottom: r.bottom };
+      n.style.translate = was;
+      n.style.translate = hit(moved) ? '' : dx + 'px 0';
     };
     window.placeActions = place;
     place();
