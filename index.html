@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="101">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>101</title>
 <style>
   :root {
@@ -189,9 +192,11 @@
   .ask button { border: 0; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-family: inherit; background: var(--gold); color: #222; font-weight: 700; }
   .ask button.no { background: rgba(255,255,255,.2); color: var(--text); }
   .actions .btn.sm { font-size: 14px; padding: 8px 10px; }
-  .room { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: #e9f3ec; border: 0; border-radius: 10px;
-    padding: 8px 10px; margin-bottom: 6px; font-family: inherit; font-size: 14px; color: #222; }
+  .room { display: flex; align-items: center; gap: 8px; text-align: left; background: #e9f3ec; border-radius: 10px;
+    padding: 8px 10px; margin-bottom: 6px; font-size: 14px; color: #222; }
+  .room .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .room span { font-size: 12px; color: #13603a; }
+  .room .btn { flex: none; padding: 8px 14px; font-size: 15px; }
   #rooms .none { font-size: 13px; color: #888; margin: 0; }
   .voice { position: relative; }
   .voice.off { opacity: .55; }
@@ -314,7 +319,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 38;              // keep in sync with www/version.txt
+  const VERSION = 39;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -853,6 +858,7 @@
       pendingPlay.ghost.remove();
       pendingPlay = null;
     }
+    vAutoOn();
     $('syncBtn').style.display = $('micBtn').style.display = $('spkBtn').style.display = mode === 'solo' ? 'none' : '';
     // what just happened, so the right card can be animated
     const roundChanged = v.roundNo !== animRound;
@@ -1371,6 +1377,7 @@
       } catch {}
       try { peer.close(); } catch {}
     }
+    vAuto = false;
     conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
@@ -1387,7 +1394,7 @@
   const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302',
     'stun:stun.cloudflare.com:3478', 'stun:stun.sipnet.ru:3478', 'stun:stun.nextcloud.com:443'] }] };
   const vPeers = new Map(), vIce = new Map();
-  let vMic = false, vSpk = false, vStream = null, vHello = null;
+  let vMic = false, vSpk = false, vStream = null, vHello = null, vAuto = false;
   const vOn = () => vMic || vSpk;
   const vSend = (to, kind, data) => { if (peer && roomCode) peer.send(TOPIC + roomCode + '/v', { t: 'v', to, kind, data }); };
   function vDraw() {
@@ -1467,6 +1474,24 @@
         else { if (!vIce.has(from)) vIce.set(from, []); vIce.get(from).push(d.data); }
       }
     } catch (e) { console.error(e); }
+  }
+  // in a room the sound and the microphone are switched on from the start; each can be switched off
+  async function vAutoOn() {
+    if (vAuto || mode === 'solo' || !peer) return;
+    vAuto = true;
+    if (typeof RTCPeerConnection === 'undefined') return;
+    const n = peer;
+    vSpk = true;
+    if (!vHello) vHello = setInterval(() => vSend(null, 'hello'), 4000);
+    vSend(null, 'hello');
+    vDraw();
+    let st = null;
+    try { st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch {}
+    if (!st) return;
+    if (peer !== n || !vSpk || vStream) { st.getTracks().forEach(t => t.stop()); return; }   // left the room or switched off meanwhile
+    vStream = st; vMic = true;
+    vPeers.forEach(vTrack);
+    vDraw();
   }
   function vStop(bye) {
     clearInterval(vHello); vHello = null;
@@ -1811,10 +1836,14 @@
   let watch = null, watchT = null;
   function drawRooms() {
     const el = $('rooms');
-    if (!group) { el.innerHTML = ''; return; }
-    el.innerHTML = rooms.size ? [...rooms].map(([c, r]) => `<button class="room" data-c="${c}"><b>${esc(r.names.join(', '))}</b><span>` +
-      (r.started ? 'идёт игра' + (r.spec ? ', зрителей: ' + r.spec : '') + ' — смотреть' : r.names.length >= MAX_PLAYERS ? 'мест нет' : 'ждут игроков — войти') +
-      '</span></button>').join('') : '<p class="none">Сейчас никто не играет</p>';
+    if (!group) { el.innerHTML = ''; el.dataset.h = ''; return; }
+    const html = rooms.size ? [...rooms].map(([c, r]) => {
+      const full = !r.started && r.names.length >= MAX_PLAYERS;
+      return `<div class="room"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` +
+        (r.started ? 'идёт игра' + (r.spec ? ', зрителей: ' + r.spec : '') : full ? 'мест нет' : 'ждут игроков') + '</span></div>' +
+        (full ? '' : `<button class="btn" data-c="${c}">${r.started ? 'Смотреть' : 'Войти'}</button>`) + '</div>';
+    }).join('') : '<p class="none">Сейчас никто не играет</p>';
+    if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
   }
   function stopWatch() {
     if (watch) { try { watch.close(); } catch {} watch = null; }
@@ -2028,7 +2057,7 @@
     startWatch();
   };
   $('rooms').onclick = e => {
-    const b = e.target.closest('.room');
+    const b = e.target.closest('[data-c]');
     if (!b) return;
     $('codeIn').value = b.dataset.c;
     joinRoom();
