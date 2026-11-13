@@ -571,7 +571,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 57;              // keep in sync with www/version.txt
+  const VERSION = 58;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1178,10 +1178,10 @@
     animRound = v.roundNo;
     const ev = v.ev && v.ev.seq !== lastEvSeq && !roundChanged ? v.ev : null;
     if (v.ev) lastEvSeq = v.ev.seq;
-    let playFrom = null;
+    let playFrom = null, playRot = jitter(10);
     if (ev && ev.type === 'play' && ev.pi === v.seat && v.top) {
       const old = $('myHand').querySelector(`[data-id="${v.top.id}"]`);
-      if (old) playFrom = dropFrom || old.getBoundingClientRect();   // where the card was (or where it was dropped)
+      if (old) { playFrom = dropFrom || old.getBoundingClientRect(); playRot = dropFrom ? 0 : rotOf(old); }   // where the card was (or where it was dropped)
       dropFrom = null;
     }
 
@@ -1292,7 +1292,7 @@
       flyFromDeck(v.hand.map(c => c.id), v, false, 90);
       v.players.forEach((p, i) => {
         const box = i !== v.seat && !p.out && oppBox(i);
-        if (box) for (let k = 0; k < 3; k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 110, s1: 0.4 });
+        if (box) for (let k = 0; k < 3; k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 110, s1: 0.4, r1: jitter(10) });
       });
     } else if (fresh.length) flyFromDeck(fresh, v, true, 180);
 
@@ -1314,7 +1314,7 @@
         flyingTop = id;
         topEl.style.opacity = '0';
         fly(cardEl(v.top), from, topEl.getBoundingClientRect(), {
-          s0: fromOpp ? 0.4 : 1,
+          s0: fromOpp ? 0.4 : 1, r0: playRot, r1: rotOf(topEl), dur: 540,
           done: () => {
             if (flyingTop === id) flyingTop = null;
             const cur = $('pile').lastElementChild;
@@ -1325,7 +1325,7 @@
     } else if (ev && ev.type === 'draw' && ev.pi !== v.seat) {
       // an opponent takes cards: backs fly from the deck to their panel
       const box = oppBox(ev.pi);
-      if (box) for (let k = 0; k < Math.min(ev.k, 4); k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 150, s1: 0.4 });
+      if (box) for (let k = 0; k < Math.min(ev.k, 4); k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 150, s1: 0.4, r1: jitter(10) });
     }
 
     $('turnNote').className = myTurn ? 'on' : '';
@@ -1454,17 +1454,32 @@
     el.className = 'card back';
     return el;
   }
+  // how much a card on the table or in the hand is turned (degrees)
+  function rotOf(el) {
+    if (!el) return 0;
+    const m = /(-?[\d.]+)deg/.exec(el.style.rotate || el.style.transform || '');
+    return m ? +m[1] : 0;
+  }
+  const jitter = k => (Math.random() * 2 - 1) * k;
+  // A card flies from one place to another. Rectangles are matched by their centres, so a turned card
+  // (its box is bigger) lands exactly where it lies; it turns on the way and lands already at its angle.
   function fly(node, from, to, opt = {}) {
-    const { delay = 0, s0 = 1, s1 = 1, dur = 450, done } = opt;
+    const { delay = 0, s0 = 1, s1 = 1, dur = 520, done, r0 = jitter(7), r1 = 0 } = opt;
+    const W = $('deck').offsetWidth || 62, H = $('deck').offsetHeight || 93;
+    const norm = r => (r.width != null ? { left: r.left + r.width / 2 - W / 2, top: r.top + r.height / 2 - H / 2 } : r);
+    from = norm(from); to = norm(to);
     let ended = false;
     const end = () => { if (ended) return; ended = true; node.remove(); if (done) done(); };
     if (!node.animate) { if (done) done(); return; }
     node.style.cssText += `;position:fixed;left:${from.left}px;top:${from.top}px;margin:0;z-index:5;pointer-events:none`;
     document.body.appendChild(node);
+    const dx = to.left - from.left, dy = to.top - from.top, lift = Math.min(28, Math.hypot(dx, dy) * .12);
+    const rm = (r0 + r1) / 2 + jitter(9);                    // a little careless twist on the way
     const a = node.animate(
-      [{ transform: `translate(0,0) scale(${s0})` },
-       { transform: `translate(${to.left - from.left}px,${to.top - from.top}px) scale(${s1})` }],
-      { duration: dur, delay, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' });
+      [{ transform: `translate(0,0) rotate(${r0}deg) scale(${s0})` },
+       { transform: `translate(${dx * .55}px,${dy * .55 - lift}px) rotate(${rm}deg) scale(${(s0 + s1) / 2 * 1.04})`, offset: .55 },
+       { transform: `translate(${dx}px,${dy}px) rotate(${r1}deg) scale(${s1})` }],
+      { duration: dur, delay, easing: 'cubic-bezier(.3,.6,.35,1)', fill: 'both' });
     a.onfinish = end;
     a.oncancel = end;
     setTimeout(end, dur + delay + 250);        // safety net if the animation is paused (hidden tab)
@@ -1485,7 +1500,7 @@
       flying.add(id);
       el.style.opacity = '0';
       fly(cardEl(c, mark ? 'new' : ''), from, el.getBoundingClientRect(), {
-        delay: i * step, dur: 500, s0: 1.1,
+        delay: i * step, dur: 560, s0: 1.05, r0: jitter(4), r1: rotOf(el),
         done: () => {
           flying.delete(id);
           const cur = $('myHand').querySelector(`[data-id="${id}"]`);
