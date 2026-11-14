@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 77;              // keep in sync with www/version.txt
+  const VERSION = 78;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -3267,16 +3267,25 @@
   };
   $('oiClose').onclick = () => $('oppInfo').classList.remove('show');
   {
-    let holdT = null, held = false;
+    // the whole frame of a player is the button: a tap anywhere on it opens the player's window
+    let holdT = null, held = false, at = null;
     const ops = $('opps'), stop = () => { clearTimeout(holdT); holdT = null; };
+    const other = e => e.target.closest('[data-kick], .swap, .tools');     // buttons of their own inside the frame
     ops.addEventListener('pointerdown', e => {
-      stop(); held = false;
-      const m = e.target.closest('[data-m]');
-      if (m) return;
-      const d = e.target.closest('.opp');
-      if (d) holdT = setTimeout(() => { held = true; openOpp(+d.dataset.i); }, 500);
+      stop(); held = false; at = null;
+      if (other(e)) return;
+      const d = e.target.closest('.opp[data-i]');
+      if (!d) return;
+      at = { x: e.clientX, y: e.clientY, i: +d.dataset.i };
+      holdT = setTimeout(() => { held = true; openOpp(at.i); }, 500);
     });
-    ops.addEventListener('pointerup', e => { stop(); const m = e.target.closest('[data-m]'); if (m) openOpp(+m.dataset.m); });
+    ops.addEventListener('pointerup', e => {
+      stop();
+      const a = at; at = null;
+      if (!a || held || other(e) || Math.hypot(e.clientX - a.x, e.clientY - a.y) > 12) return;
+      const d = e.target.closest('.opp[data-i]');
+      if (d && +d.dataset.i === a.i) openOpp(a.i);
+    });
     ops.addEventListener('pointercancel', stop);
     ops.addEventListener('pointerleave', stop);
     ops.addEventListener('contextmenu', e => e.preventDefault());
