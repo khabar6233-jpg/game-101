@@ -102,7 +102,7 @@
   .spread .card:last-child { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); }
   .actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-height: 46px; }
   /* right under the cards on the table: "your move" in the middle, the buttons to the right of it */
-  .below { position: absolute; left: 0; right: 0; top: calc(50% + var(--ch) / 2 + 18px); display: grid; grid-template-columns: 1fr auto 1fr;
+  .below { position: absolute; left: 0; right: 0; top: calc(50% + var(--ch) / 2 + 70px); display: grid; grid-template-columns: 1fr auto 1fr;
     align-items: center; gap: 8px; min-height: 46px; }
   .below .actions { grid-column: 3; min-height: 0; }
   #turnNote { grid-column: 2; visibility: hidden; color: var(--gold); font-weight: 800; font-size: 17px; }
@@ -186,11 +186,10 @@
   .status div { color: var(--text); }
   .status .old { color: var(--muted); }
   .me-bar { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; border: 0; padding: 4px 0; font-size: 14px; }
-  .me-bar.turn { border: 0; }
+  .me-bar, .me-bar.turn { border: 0; min-height: 28px; }   /* the same height on every move: nothing below it jumps */
   .me-pts b { color: var(--text); font-size: 16px; }
   .me-hint { background: rgba(242,193,78,.16); color: var(--gold); border-radius: 10px; padding: 3px 10px; font-size: 13px; }
   .zone-line { border-top-color: rgba(255,255,255,.16); transition: border-color .3s, box-shadow .3s; }
-  body.myturn .zone-line { border-top-color: rgba(242,193,78,.7); box-shadow: 0 -1px 10px rgba(242,193,78,.35); }
   .btn {
     background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); color: #fff;
     border: 1.5px solid rgba(255,255,255,.5); border-radius: 12px;
@@ -428,10 +427,14 @@
   <div id="specRow"></div>
 
   <div class="middle">
-    <svg id="compass" viewBox="0 0 22 72"><defs><linearGradient id="ndl" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".45" stop-color="#fff" stop-opacity=".22"/>
-      <stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
-      <path d="M11 0 19 24 12.4 72H9.6L3 24z" fill="url(#ndl)"/></svg>
+    <svg id="compass" viewBox="0 0 22 72"><defs>
+      <linearGradient id="ndlSide" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#fff" stop-opacity=".2"/><stop offset=".38" stop-color="#fff" stop-opacity=".75"/>
+        <stop offset=".55" stop-color="#fff" stop-opacity=".4"/><stop offset="1" stop-color="#fff" stop-opacity=".08"/></linearGradient>
+      <linearGradient id="ndlFade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <mask id="ndlMask"><rect width="22" height="72" fill="url(#ndlFade)"/></mask></defs>
+      <path d="M11 1.5C11.6 1.5 17.4 60 17.6 66.5 17.8 70 4.2 70 4.4 66.5 4.6 60 10.4 1.5 11 1.5z" fill="url(#ndlSide)" mask="url(#ndlMask)"/></svg>
     <div class="slot"><div id="deck"></div><span>Колода: <span id="deckCount">0</span></span></div>
     <div class="slot"><div id="pile"></div><span>Сброс: <span id="pileCount">0</span></span></div>
     <div class="slot"><div class="suit-now" id="suitNow"></div><span>Масть</span></div>
@@ -598,7 +601,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 63;              // keep in sync with www/version.txt
+  const VERSION = 64;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1241,13 +1244,14 @@
     const tail = v.tail || (v.hist ? v.hist.slice(-PILE_SHOWN) : v.top ? [v.top] : []);
     const cwNow = $('deck').offsetWidth || 62;
     const free = pl.closest('.middle').clientWidth - cwNow * 2.74 - 60;     // what the deck, the suit tile and the gaps leave
-    const pStep = Math.max(8, Math.min(PILE_STEP, free / Math.max(tail.length - 1, 1)));
-    pl.style.width = `calc(var(--cw) + ${Math.max(tail.length - 1, 0) * pStep}px)`;
+    const pStep = Math.max(8, Math.min(PILE_STEP, free / (PILE_SHOWN - 1)));
+    pl.style.width = `calc(var(--cw) + ${(PILE_SHOWN - 1) * pStep}px)`;
+    const shift = PILE_SHOWN - tail.length;                 // fewer cards: they lie to the right, under the newest
     tail.forEach((c, i) => {
       const isTop = i === tail.length - 1;
       const el = cardEl(c, isTop && c.id !== lastTopId && !(ev && ev.type === 'play') ? 'pop' : '');
       if (flyingTop === c.id) el.style.opacity = '0';
-      el.style.left = i * pStep + 'px';
+      el.style.left = (i + shift) * pStep + 'px';
       el.style.top = ((c.id * 29) % 9) - 4 + 'px';
       el.style.transform = `rotate(${((c.id * 37) % 13) - 6}deg)`;
       if (!isTop) el.style.filter = 'brightness(.9)';
