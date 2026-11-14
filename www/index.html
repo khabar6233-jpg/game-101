@@ -186,6 +186,9 @@
     -webkit-background-clip: text; background-clip: text; color: transparent; }
   #actions.moving .btn { outline: 3px dashed rgba(255,255,255,.8); outline-offset: 3px; transform: scale(1.06); }
   #actions.placed { position: fixed; z-index: 6; }
+  #actions, #suitPick .dialog { transform-origin: 0 0; }
+  #suitPick .dialog { touch-action: none; }
+  #suitPick .dialog.moving { outline: 3px dashed rgba(255,255,255,.85); outline-offset: 4px; }
   .vbtn:active { transform: scale(.97); }
   .gl { font-size: 13px; color: #666; margin-top: 4px; }
   .bgs { display: flex; justify-content: center; gap: 10px; }
@@ -530,7 +533,7 @@
       </div>
       <button class="btn" id="newGameBtn">Новая игра</button>
       <button class="btn plain" id="gearFriends">Друзья</button>
-      <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопки «Пас» / «Беру» на место</button>
+      <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопки и окно масти на место</button>
       <div class="gl">Фон стола</div>
       <div class="bgs" id="bgs"></div>
       <button class="btn plain" id="gearClose">Закрыть</button>
@@ -634,7 +637,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 70;              // keep in sync with www/version.txt
+  const VERSION = 71;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1439,6 +1442,7 @@
 
     if (window.placeActions) window.placeActions();
     $('suitPick').classList.toggle('show', v.choose || localQueen !== null);
+    if (window.placeSuit && $('suitPick').classList.contains('show')) window.placeSuit();
     $('suitCancel').style.display = localQueen !== null ? '' : 'none';
     drawResult(v);
   }
@@ -3061,15 +3065,70 @@
     ops.addEventListener('pointerleave', stop);
     ops.addEventListener('contextmenu', e => e.preventDefault());
   }
-  // The move buttons ("Пас", "Беру"…): a long press lifts them, the finger moves them, and they stay there.
+  // Something on the screen that each player can arrange for themselves: a long press lifts it and the finger
+  // moves it; two fingers pinch it bigger or smaller. The place and the size stay on this device.
+  function adjustable(box, key, apply, canStart) {
+    let st = null, holdT = null, mode = null, used = false;
+    const pts = new Map(), g = {};
+    try { st = JSON.parse(localStorage.getItem(key)); } catch {}
+    const save = () => { try { localStorage.setItem(key, JSON.stringify(st)); } catch {} };
+    box.addEventListener('pointerdown', e => {
+      if (canStart && !canStart()) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 1) {
+        used = false; g.sx = e.clientX; g.sy = e.clientY;
+        clearTimeout(holdT);
+        holdT = setTimeout(() => {
+          const r = box.getBoundingClientRect();
+          mode = 'drag'; used = true;
+          g.dx = g.sx - r.left; g.dy = g.sy - r.top;
+          try { box.setPointerCapture(e.pointerId); } catch {}
+          box.classList.add('moving');
+          try { if (window.App101) window.App101.vibrate(40); else if (navigator.vibrate) navigator.vibrate(40); } catch {}
+        }, 450);
+      } else if (pts.size === 2) {
+        clearTimeout(holdT); holdT = null;
+        const [p, q] = [...pts.values()];
+        mode = 'pinch'; used = true;
+        g.d0 = Math.hypot(p.x - q.x, p.y - q.y) || 1; g.s0 = (st && st.s) || 1;
+        box.classList.add('moving');
+      }
+    }, true);
+    box.addEventListener('pointermove', e => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (mode === 'drag') {
+        st = Object.assign({}, st, { x: (e.clientX - g.dx) / innerWidth, y: (e.clientY - g.dy) / innerHeight });
+        apply(st); e.preventDefault();
+      } else if (mode === 'pinch' && pts.size >= 2) {
+        const [p, q] = [...pts.values()];
+        st = Object.assign({}, st, { s: Math.max(.6, Math.min(1.8, g.s0 * Math.hypot(p.x - q.x, p.y - q.y) / g.d0)) });
+        apply(st); e.preventDefault();
+      } else if (holdT && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) > 10) { clearTimeout(holdT); holdT = null; }
+    }, true);
+    const up = e => {
+      if (!pts.has(e.pointerId)) return;
+      pts.delete(e.pointerId);
+      clearTimeout(holdT); holdT = null;
+      if (used) { e.stopPropagation(); eatClickUntil = Date.now() + 400; }     // arranging is not pressing
+      if (!pts.size) { if (mode) { box.classList.remove('moving'); save(); apply(st); } mode = null; }
+    };
+    box.addEventListener('pointerup', up, true);
+    box.addEventListener('pointercancel', up, true);
+    return { reset() { st = null; try { localStorage.removeItem(key); } catch {} apply(null); }, get: () => st };
+  }
+
+  // The move buttons ("Пас", "Беру"…)
   {
     const box = $('actions');
-    let pos = null, holdT = null, drag = null, sx = 0, sy = 0, eatUp = false;
-    try { pos = JSON.parse(localStorage.getItem('g101-btnpos')); } catch {}
-    const place = () => {
-      if (!pos) { box.classList.remove('placed'); box.style.left = box.style.top = ''; noteAside(); return; }
+    let pos = null;
+    const place = (p = pos) => {
+      pos = p;
+      if (pos && pos.s) pos.s = Math.min(pos.s, (innerWidth - 8) / (box.offsetWidth || 90));
+      box.style.scale = pos && pos.s ? pos.s : '';
+      if (!pos || pos.x == null) { box.classList.remove('placed'); box.style.left = box.style.top = ''; noteAside(); return; }
       box.classList.add('placed');
-      const w = box.offsetWidth || 90, h = box.offsetHeight || 46;
+      const sc = pos.s || 1, w = (box.offsetWidth || 90) * sc, h = (box.offsetHeight || 46) * sc;
       box.style.left = Math.max(4, Math.min(innerWidth - w - 4, pos.x * innerWidth)) + 'px';
       box.style.top = Math.max(4, Math.min(innerHeight - h - 4, pos.y * innerHeight)) + 'px';
       noteAside();
@@ -3087,44 +3146,27 @@
       n.style.translate = was;
       n.style.translate = hit(moved) ? '' : dx + 'px 0';
     };
-    window.placeActions = place;
+    const adj = adjustable(box, 'g101-btnpos', p => place(p), () => !!box.querySelector('.btn'));
+    pos = adj.get();
+    window.placeActions = () => place();
     place();
-    addEventListener('resize', place);
-    box.addEventListener('pointerdown', e => {
-      if (!box.querySelector('.btn')) return;
-      sx = e.clientX; sy = e.clientY; eatUp = false;
-      clearTimeout(holdT);
-      holdT = setTimeout(() => {
-        const r = box.getBoundingClientRect();
-        drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
-        try { box.setPointerCapture(e.pointerId); } catch {}
-        box.classList.add('moving', 'placed');
-        box.style.left = r.left + 'px'; box.style.top = r.top + 'px';
-        try { if (window.App101) window.App101.vibrate(40); else if (navigator.vibrate) navigator.vibrate(40); } catch {}
-      }, 450);
-    }, true);
-    box.addEventListener('pointermove', e => {
-      if (drag) {
-        box.style.left = e.clientX - drag.dx + 'px';
-        box.style.top = e.clientY - drag.dy + 'px';
-        e.preventDefault();
-      } else if (holdT && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) { clearTimeout(holdT); holdT = null; }
-    }, true);
-    const end = e => {
-      clearTimeout(holdT); holdT = null;
-      if (!drag) return;
-      const r = box.getBoundingClientRect();
-      pos = { x: r.left / innerWidth, y: r.top / innerHeight };
-      try { localStorage.setItem('g101-btnpos', JSON.stringify(pos)); } catch {}
-      drag = null; eatUp = true;
-      box.classList.remove('moving');
-      place();
-      e.stopPropagation();                                  // moving the button is not pressing it
-      eatClickUntil = Date.now() + 400;
+    addEventListener('resize', () => place());
+
+    // the suit picker (after a queen) can be moved and resized in the same way
+    const sp = $('suitPick').querySelector('.dialog');
+    const placeSuit = p => {
+      if (p && p.s) p.s = Math.min(p.s, (innerWidth - 8) / (sp.offsetWidth || 300), (innerHeight - 8) / (sp.offsetHeight || 300));
+      sp.style.scale = p && p.s ? p.s : '';
+      if (!p || p.x == null) { sp.style.position = sp.style.left = sp.style.top = ''; return; }
+      const sc = p.s || 1, w = sp.offsetWidth * sc, h = sp.offsetHeight * sc;
+      sp.style.position = 'fixed';
+      sp.style.left = Math.max(4, Math.min(innerWidth - w - 4, p.x * innerWidth)) + 'px';
+      sp.style.top = Math.max(4, Math.min(innerHeight - h - 4, p.y * innerHeight)) + 'px';
     };
-    box.addEventListener('pointerup', end, true);
-    box.addEventListener('pointercancel', end, true);
-    $('btnReset').onclick = () => { pos = null; try { localStorage.removeItem('g101-btnpos'); } catch {} place(); };
+    const adjSuit = adjustable(sp, 'g101-suitpos', placeSuit);
+    placeSuit(adjSuit.get());
+    window.placeSuit = () => placeSuit(adjSuit.get());
+    $('btnReset').onclick = () => { adj.reset(); adjSuit.reset(); };
   }
   [-24, -8, 8, 24].forEach((a, k) => {
     const c = cardEl({ s: SUITS[k], r: 6, id: -1 - k });
