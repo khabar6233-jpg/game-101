@@ -60,6 +60,15 @@ public class MainActivity extends Activity {
                 v.loadUrl(BUNDLED);
             }
 
+            // Anything that is not the game itself (Telegram, a messenger, another site) opens in its own app
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
+                String u = req.getUrl().toString();
+                if (u.startsWith(SITE) || u.startsWith("file:///android_asset/")) return false;
+                openOutside(u);
+                return true;
+            }
+
             @Override
             public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError err) {
                 if (req.isForMainFrame()) useBundled(v);
@@ -106,8 +115,29 @@ public class MainActivity extends Activity {
         pendingMic = null;
     }
 
+    /** Hands a link to the app that knows it: Telegram, the browser. */
+    private void openOutside(String url) {
+        try {
+            android.content.Intent i = new android.content.Intent(
+                    android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url));
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Exception e) {
+            // nothing on the phone opens this link
+        }
+    }
+
     /** Lets the page buzz the phone: "your move". */
     public class Bridge {
+        /** The page asks to open a link outside the game (Telegram). */
+        @android.webkit.JavascriptInterface
+        public void open(final String url) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() { openOutside(url); }
+            });
+        }
+
         /** A friend is online or calls to play while the game is not on the screen. */
         @android.webkit.JavascriptInterface
         public void note(String title, String text) {
