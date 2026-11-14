@@ -534,6 +534,7 @@
       <div class="vrow" id="voiceRow">
         <button class="vbtn off" id="micBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Мик</span></button>
         <button class="vbtn off" id="spkBtn" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Звук</span></button>
+        <button class="vbtn off" id="vibBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="18" rx="2.2"/><path d="M4.5 8.5v7M1.8 10.5v3M19.5 8.5v7M22.2 10.5v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Вибро</span></button>
       </div>
       <button class="btn" id="newGameBtn">Новая игра</button>
       <button class="btn plain" id="gearFriends">Друзья</button>
@@ -641,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 75;              // keep in sync with www/version.txt
+  const VERSION = 76;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -719,6 +720,14 @@
   }
   let sortOn = false;
   try { sortOn = localStorage.getItem('g101-sort') === '1'; } catch {}
+  // vibration ("your move" and so on) is off until the player turns it on in the settings
+  const canVib = !!(window.App101 || navigator.vibrate);
+  let vibOn = false;
+  try { vibOn = localStorage.getItem('g101-vib') === '1'; } catch {}
+  function buzz(ms) {
+    if (!vibOn) return;
+    try { if (window.App101) window.App101.vibrate(ms); else if (navigator.vibrate) navigator.vibrate(ms); } catch {}
+  }
   let suitHide = false, resHide = false;      // put aside with a tap outside; a tap on the table brings it back
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Map();
@@ -1196,7 +1205,7 @@
     const hasMove = v.hand.some(c => c.ok);
     if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
     if (myTurn && !wasMyTurn) {
-      try { if (window.App101) window.App101.vibrate(250); else if (navigator.vibrate) navigator.vibrate(250); } catch {}      // "your move"
+      buzz(250);      // "your move"
       // the table was tapped while the previous card was still landing: take the card now
       if (Date.now() - drawWish < 900 && !v.drew && !v.pendingSix) setTimeout(() => action({ t: 'draw' }), 0);
     }
@@ -1241,7 +1250,7 @@
       pendingPlay = null;
     }
     vAutoOn();
-    $('voiceRow').classList.toggle('none', mode === 'solo' || lite);
+    $('voiceRow').classList.toggle('none', (mode === 'solo' || lite) && !canVib);
     $('newGameBtn').style.display = mode === 'guest' || (v.spec && mode !== 'host') ? 'none' : '';
     $('syncBtn').style.display = $('micBtn').style.display = $('spkBtn').style.display = mode === 'solo' ? 'none' : '';
     if (lite) $('micBtn').style.display = $('spkBtn').style.display = 'none';
@@ -2623,7 +2632,7 @@
     clearTimeout(toastT);
     toastT = setTimeout(() => el.classList.remove('show'), 8000);
     try {
-      if (window.App101 && window.App101.note) { if (document.hidden) window.App101.note('101', text); else window.App101.vibrate(120); }
+      if (window.App101 && window.App101.note) { if (document.hidden) window.App101.note('101', text); else buzz(120); }
       else if (document.hidden && window.Notification && Notification.permission === 'granted') new Notification('101', { body: text, icon: 'icon-192.png' });
     } catch {}
   }
@@ -3206,7 +3215,7 @@
       layer.addEventListener('pointerup', up);
       layer.addEventListener('pointercancel', up);
       document.body.appendChild(layer);
-      try { if (window.App101) window.App101.vibrate(40); else if (navigator.vibrate) navigator.vibrate(40); } catch {}
+      buzz(40);
     };
     const finish = () => {
       clearTimeout(endT); endT = null;
@@ -3330,6 +3339,14 @@
   });
   $('micBtn').onclick = () => vToggle(true);
   $('spkBtn').onclick = () => vToggle(false);
+  $('vibBtn').style.display = canVib ? '' : 'none';
+  $('vibBtn').className = 'vbtn ' + (vibOn ? 'on' : 'off');
+  $('vibBtn').onclick = () => {
+    vibOn = !vibOn;
+    try { localStorage.setItem('g101-vib', vibOn ? '1' : '0'); } catch {}
+    $('vibBtn').className = 'vbtn ' + (vibOn ? 'on' : 'off');
+    buzz(60);
+  };
   // a sound that the browser refused to start on its own starts with the next touch
   document.addEventListener('pointerup', () => { if (vOn()) aGet(); if (vSpk) vPeers.forEach(p => { if (p.audio.paused && p.audio.srcObject) p.audio.play().catch(() => {}); }); });
   try { group = normGroup(localStorage.getItem('g101-group')); groups = JSON.parse(localStorage.getItem('g101-groups')) || []; } catch {}
