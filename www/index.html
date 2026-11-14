@@ -500,9 +500,9 @@
       <div id="groupList"></div>
       <div class="hint" id="groupHint">Нажмите на код, чтобы войти. Удерживайте — меню. Зелёный — там сейчас играют.</div>
       <div id="rooms"></div>
-      <button class="btn wide" id="hostBtn">Создать комнату</button>
-      <div class="row" id="codeRow">
-        <input id="codeIn" maxlength="4" inputmode="numeric" placeholder="Код комнаты" autocomplete="off">
+      <button class="btn wide" id="hostBtn" style="display:none">Создать комнату</button>
+      <div class="row" id="codeRow" style="display:none">
+        <input id="codeIn" maxlength="10" inputmode="numeric" placeholder="Код комнаты" autocomplete="off">
         <button class="btn" id="joinBtn">Войти</button>
       </div>
       <label class="sw"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее и без голоса</span></label>
@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 76;              // keep in sync with www/version.txt
+  const VERSION = 77;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1495,6 +1495,12 @@
   // Looking through a big hand: while a finger is held on the hand or slides along it, a wave runs under the
   // finger: the card there rises above the finger, the ones beside it rise less and move apart. The wave follows
   // the finger softly and settles when the finger is lifted. Cards are played by a tap or a swipe up only.
+  let dragAbort = null, dragAt = 0, handAbort = null;
+  // a new touch or leaving the game ends whatever was left hanging by a lost "finger up"
+  addEventListener('pointerdown', () => { if (dragAbort && Date.now() - dragAt > 80) dragAbort(); }, true);
+  const dropHanging = () => { if (dragAbort) dragAbort(); if (handAbort) handAbort(); };
+  document.addEventListener('visibilitychange', dropHanging);
+  addEventListener('blur', dropHanging);
   let wave = null;                               // { x: finger, cx: where the wave is now, amp: 0..1, on }
   function waveApply() {
     const mh = $('myHand'), els = [...mh.querySelectorAll('[data-id]')];
@@ -1504,7 +1510,7 @@
     const left = els.map(el => off + el.offsetLeft), cw = els[0].offsetWidth, ch = els[0].offsetHeight;
     const step = els.length > 1 ? Math.max(8, left[1] - left[0]) : cw, n = els.length;
     const x = Math.max(left[0] + step / 2, Math.min(left[n - 1] + step / 2, wave.cx));    // the end cards rise fully too
-    const S = Math.max(6, Math.min(cw - step, cw * .5) * .8) * wave.amp, L = ch * .55 * wave.amp;
+    const S = Math.max(5, Math.min(cw - step, cw * .42) * .62) * wave.amp, L = ch * .1 * wave.amp;      // a slight lift, the neighbours step aside
     let top = 0, best = 1e9;
     els.forEach((el, k) => {
       const d = (left[k] + step / 2 - x) / step, ty = +el.dataset.ty || 0;       // distance from the finger, in cards
@@ -1512,15 +1518,15 @@
       let sh = S * 1.65 * d * Math.exp(-d * d / 2);                                // 0 under the finger, most one card away
       // nothing leaves the screen
       sh = sh > 0 ? Math.max(0, Math.min(sh, box.right - 4 - (left[k] + cw))) : -Math.max(0, Math.min(-sh, left[k] - box.left - 4));
-      el.style.translate = `${sh.toFixed(1)}px ${(ty - L * Math.exp(-d * d / 1.6)).toFixed(1)}px`;
+      el.style.translate = `${sh.toFixed(1)}px ${(ty - L * Math.exp(-d * d / .9)).toFixed(1)}px`;
     });
     wave.idx = top;
     els.forEach((el, k) => { el.style.zIndex = k === top && wave.amp > .15 ? 3 : ''; });
   }
   function waveTick() {
     if (!wave) return;
-    wave.amp += ((wave.on ? 1 : 0) - wave.amp) * .16;
-    wave.cx += (wave.x - wave.cx) * .3;
+    wave.amp += ((wave.on ? 1 : 0) - wave.amp) * .12;
+    wave.cx += (wave.x - wave.cx) * .22;
     if (!wave.on && wave.amp < .01) {
       wave = null;
       $('myHand').querySelectorAll('[data-id]').forEach(el => { el.style.zIndex = ''; el.style.translate = `0 ${+el.dataset.ty || 0}px`; });
@@ -1530,7 +1536,8 @@
     requestAnimationFrame(waveTick);
   }
   function handDown(e) {
-    if (e.button > 0 || (wave && wave.on)) return;
+    if (e.button > 0) return;
+    if (handAbort) handAbort();                              // the previous touch never ended: forget it
     const el0 = e.target.closest('[data-id]');
     if (!el0) return;
     const id = el0.dataset.id, pid = e.pointerId, sx = e.clientX, sy = e.clientY;
@@ -1545,10 +1552,13 @@
     let holdT = setTimeout(startWave, 260);
     const off = () => {
       clearTimeout(holdT); holdT = null;
+      if (handAbort === abort) handAbort = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
     };
+    const abort = () => { off(); if (mine && wave) wave.on = false; };
+    handAbort = abort;
     const move = ev => {
       if (ev.pointerId !== pid) return;
       lastX = ev.clientX;
@@ -1588,6 +1598,10 @@
   // Swipe a card up out of the hand to throw it on the pile.
   function startDrag(e, el, c) {
     if (e.button > 0) return;
+    if (dragAbort) dragAbort();                              // a throw that never ended (the lift of the finger was lost)
+    let idleT = null;
+    const abort = () => end({ type: 'pointercancel', pointerId: e.pointerId, clientX: 0, clientY: 0 });
+    dragAbort = abort; dragAt = Date.now();
     const sx = e.clientX, sy = e.clientY, r = el.getBoundingClientRect();
     let ghost = null;
     const move = ev => {
@@ -1601,6 +1615,7 @@
         el.style.opacity = '.25';
       }
       ghost.style.transform = `translate(${dx}px,${dy}px) rotate(${dx / 20}deg)`;
+      clearTimeout(idleT); idleT = setTimeout(abort, 6000);    // nobody holds a card still this long
       if (ev.cancelable) ev.preventDefault();
     };
     const end = ev => {
@@ -1608,6 +1623,8 @@
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
+      clearTimeout(idleT);
+      if (dragAbort === abort) dragAbort = null;
       if (!ghost) {                                                  // it was a plain tap
         if (ev.type === 'pointerup' && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 12) {
           eatClickUntil = Date.now() + 400;
@@ -1630,6 +1647,7 @@
       if (sent === 'sent' && mode === 'guest') {
         // the room has not answered yet: the card stays where it was dropped instead of jumping back
         const id = c.id;
+        if (pendingPlay) pendingPlay.ghost.remove();
         pendingPlay = { id, ghost, t: Date.now() };
         const cur = $('myHand').querySelector(`[data-id="${id}"]`);
         if (cur) cur.style.opacity = '0';
@@ -2309,6 +2327,7 @@
   const TAKE_MS = 12000, TAKE_STEP = 6000;
   const conns = new Map(), kicked = new Map();
   let term = 1, ownerId = '';       // term grows with every change of host; the newest host wins
+  let gHostSeen = false;
   let gJoined = false, gHeard = 0, gRev = 0, gTerm = 0, gSnap = null, gT0 = 0, gName = '';
   const hostTopic = code => TOPIC + code + '/h';
   const topicOf = (code, id) => TOPIC + code + '/c/' + id;
@@ -2344,15 +2363,51 @@
   }
 
   // every few seconds: mark the players we have not heard from, and keep sending them the game
+  let hostBorn = 0, annT = null, annAt = 0;
+  const humansHere = () => (started ? players.filter(p => !p.isBot && !p.removed) : lobby ? lobby.filter(x => !x.isBot) : []).length;
+  function hostAnnounce(n, code) {
+    annAt = Date.now();
+    // friends with the same company code see this room on their start screen
+    if (roomGroup) n.send(groupTopic(roomGroup), { t: 'room', code, started, spec: specs.size,
+      open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0,
+      names: started ? players.filter(p => !p.removed).map(p => p.name) : lobby ? lobby.map(x => x.name) : [],
+      pids: (started ? players.filter(p => !p.removed) : lobby || []).map(p => p.pid || '').filter(Boolean) });
+    n.send(hostTopic(code), { t: 'host', term, started: !!started, hn: humansHere(), born: hostBorn });
+  }
+  // Two devices opened the same empty room at the same moment: one of them stays the host, the other one
+  // (and everybody who had joined it) sits down at its table. Both sides decide by the same rule.
+  function rivalHost(n, code, from, d) {
+    const mine = [started ? 1 : 0, term, humansHere(), -hostBorn], theirs = [d.started ? 1 : 0, +d.term || 0, +d.hn || 0, -(+d.born || 0)];
+    let win = 0;
+    for (let i = 0; i < 4 && !win; i++) win = Math.sign(mine[i] - theirs[i]);
+    if (!win) win = n.id < from ? 1 : -1;
+    if (win > 0) { if (Date.now() - annAt > 800) hostAnnounce(n, code); return; }
+    conns.forEach(c => { if (!c.left) c.send({ t: 'rejoin', term }); });
+    clearInterval(annT);
+    gameId++;
+    players = []; started = false; lobby = null; waiting = false; conns.clear(); kicked.clear(); specs.clear();
+    mode = 'guest'; gName = myName();
+    hostConn = { open: true, send: x => n.send(hostTopic(code), x) };
+    gJoined = false; gHostSeen = true; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now();
+    guestTimer(n, code);
+  }
+  // nobody answered in this room: I am the first one here, so my device keeps the table
+  function becomeRoomHost(n, code) {
+    n.sub(hostTopic(code));
+    conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
+    mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
+    lobby = [{ name: myName(), conn: null, isBot: false, pid: myPid }];
+    netMsg('');
+    drawLobby();
+    hostTimer(n, code);
+  }
   function hostTimer(n, code) {
+    clearInterval(annT);
+    annT = setInterval(() => { if (peer !== n || mode !== 'host') { clearInterval(annT); return; } hostAnnounce(n, code); }, lite ? 3000 : 2000);
+    hostAnnounce(n, code);
     clearInterval(netTimer);
     netTimer = setInterval(() => {
       if (peer !== n || mode !== 'host') return;
-      // friends with the same company code see this room in their list
-      if (roomGroup) n.send(groupTopic(roomGroup), { t: 'room', code, started, spec: specs.size,
-        open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0,
-        names: started ? players.filter(p => !p.removed).map(p => p.name) : lobby ? lobby.map(x => x.name) : [],
-        pids: (started ? players.filter(p => !p.removed) : lobby || []).map(p => p.pid || '').filter(Boolean) });
       if (!started) return;
       const now = Date.now();
       let changed = false;
@@ -2378,6 +2433,7 @@
       return;
     }
     if (topic !== hostTopic(code)) return;
+    if (d.t === 'host') { if (from !== n.id) rivalHost(n, code, from, d); return; }
     if (d.t === 'probe') { n.send(topicOf(code, from), { t: 'taken' }); return; }
     let conn = conns.get(from);
     if (!conn) { conn = mkConn(n, code, from); conns.set(from, conn); }
@@ -2403,6 +2459,8 @@
       return;
     }
     if (topic !== topicOf(code, n.id)) return;
+    gHostSeen = true;
+    if (d.t === 'rejoin') { if ((d.term || 0) >= gTerm && gJoined) { gJoined = false; gT0 = Date.now(); gTerm = 0; gRev = 0; gSnap = null; } return; }
     if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
     else if (d.t === 'view' && d.v) {
       const t = d.v.term || 0;
@@ -2456,7 +2514,7 @@
     if (seat < 0) return;
     restore(st);
     term = Math.floor(st.term || 1) + 1 + (9 - seat) / 10;   // two devices can never get the same term
-    mode = 'host'; mySeat = seat; started = true; lobby = null; hostConn = null; ownerId = st.owner || '';
+    mode = 'host'; mySeat = seat; started = true; lobby = null; hostConn = null; ownerId = st.owner || ''; hostBorn = Date.now();
     conns.clear(); kicked.clear();
     players.forEach((p, i) => {
       if (!p.cid || i === seat) return;
@@ -2525,7 +2583,7 @@
     await pause(1000);
     if (peer !== n) return;
     if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
-    conns.clear(); kicked.clear(); term = 1; ownerId = n.id;
+    conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
     mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
     lobby = [{ name: myName(), conn: null, isBot: false, pid: myPid }];
     netMsg('');
@@ -2615,6 +2673,14 @@
 
   // ----- the company code: friends who share it see each other's rooms on the start screen -----
   const groupTopic = g => TOPIC + 'g/' + g;
+  // One company code is one table: the room's address is worked out from the code, so two people can never
+  // open two different rooms under the same code.
+  const ROOM_RE = /^\d{4,10}$/;
+  function roomOf(g) {
+    let h = 2166136261;
+    for (const ch of 'room:' + g) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
+    return String(100000000 + h % 900000000);
+  }
   const normGroup = t => String(t || '').trim().toLowerCase().replace(/[^a-zа-яё0-9]/g, '').slice(0, 20);
   const rooms = new Map(), online = new Map(), liveRooms = new Map();
   const groupLive = g => [...liveRooms.keys()].some(k => k.startsWith(g + '/'));
@@ -2645,17 +2711,24 @@
 
   function drawRooms() {
     const el = $('rooms');
-    if (!group) { el.innerHTML = ''; el.dataset.h = ''; return; }
+    if (!group) { el.dataset.h = ''; el.innerHTML = '<p class="none">Введите код компании. По нему вы с друзьями попадаете за один стол.</p>'; return; }
     const who = online.size ? `<p class="none">В сети: ${[...online].map(([id, x]) => isFriend(id) ? `<span class="addf">★ ${esc(x.name)}</span>`
       : `<button class="addf" data-af="${esc(id)}" data-n="${esc(x.name)}">${esc(x.name)} ＋</button>`).join('')}</p>` : '';
-    const html = who + (rooms.size ? [...rooms].map(([c, r]) => {
+    // one company is one table; it is always there: with people or empty, the button is "Войти"
+    const r = rooms.get(roomOf(group));
+    let row;
+    if (!r) {
+      row = `<div class="room"><div class="who"><b>Стол «${esc(group)}»</b><span>${Date.now() - watchAt < 2500 ? 'проверяем…' : 'за столом никого'}</span></div>` +
+        '<button class="btn" data-w="seat">Войти</button></div>';
+    } else {
       const full = !r.started && r.names.length >= MAX_PLAYERS;
-      return `<div class="room${r.mine ? ' mine' : ''}"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` + (r.mine ? 'вы играете здесь · ' : '') +
+      row = `<div class="room${r.mine ? ' mine' : ''}"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` + (r.mine ? 'вы играете здесь · ' : '') +
         (r.started ? 'идёт игра' + (r.spec ? ', зрителей: ' + r.spec : '') : full ? 'мест нет' : 'ждут игроков') + '</span></div>' +
-        (r.started ? (r.open || r.names.length < MAX_PLAYERS ? `<button class="btn" data-c="${c}" data-w="seat">Играть</button>` : '') +
-            `<button class="btn plain" data-c="${c}" data-w="watch">Смотреть</button>`
-          : full ? '' : `<button class="btn" data-c="${c}" data-w="seat">Войти</button>`) + '</div>';
-    }).join('') : who ? '' : '<p class="none">Сейчас никто не играет</p>');
+        (r.started ? (r.open || r.names.length < MAX_PLAYERS ? '<button class="btn" data-w="seat">Играть</button>' : '') +
+            '<button class="btn plain" data-w="watch">Смотреть</button>'
+          : full ? '' : '<button class="btn" data-w="seat">Войти</button>') + '</div>';
+    }
+    const html = who + row;
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
   }
   function stopWatch() {
@@ -2717,9 +2790,9 @@
     }
     if (mode === 'solo' || !roomCode) {
       $('friendsScr').classList.remove('show');
-      createRoom();
-      for (let k = 0; k < 40 && !(mode === 'host' && roomCode); k++) await pause(400);
-      if (!roomCode) { notifyUser('Не получилось создать комнату'); return; }
+      if (group) enterRoom('seat'); else createRoom();
+      for (let k = 0; k < 40 && !(roomCode && (mode === 'host' || (mode === 'guest' && gJoined))); k++) await pause(400);
+      if (!roomCode || mode === 'solo') { notifyUser('Не получилось войти в комнату'); return; }
     }
     const name = $('nick').value.trim().slice(0, 12) || 'Друг', chat = friendChat.get(id);
     if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid });
@@ -2792,7 +2865,7 @@
         return;
       }
       // somebody invites me to their table
-      if (d.t === 'invite' && topic === TOPIC + 'u/' + myPid + '/in' && /^\d{4}$/.test(d.room)) {
+      if (d.t === 'invite' && topic === TOPIC + 'u/' + myPid + '/in' && ROOM_RE.test(d.room)) {
         if (d.room !== roomCode) notifyUser(`✉️ ${String(d.name || 'Друг').slice(0, 12)} зовёт вас за стол`, d.room, '');
         return;
       }
@@ -2801,7 +2874,7 @@
         const id = topic.slice((TOPIC + 'u/').length);
         if (!isFriend(id) || id === myPid) return;
         const name = friends[id], prev = friendSeen.get(id), was = prev && Date.now() - prev.t < 16000;
-        const room = /^\d{4}$/.test(d.room) ? d.room : '';
+        const room = ROOM_RE.test(d.room) ? d.room : '';
         friendSeen.set(id, { t: Date.now(), room, started: !!d.started });
         if (settled()) {
           if (!was) notifyUser(room ? `🃏 ${name} за столом` : `🟢 ${name} в сети`, room && room !== roomCode ? room : '', '');
@@ -2812,7 +2885,7 @@
       }
       // every saved company: is somebody playing there?
       const tg = all.find(x => groupTopic(x) === topic);
-      if (tg && d.t === 'room' && /^\d{4}$/.test(d.code)) {
+      if (tg && d.t === 'room' && ROOM_RE.test(d.code)) {
         const k = tg + '/' + d.code, fresh = !liveRooms.has(k);
         if (d.gone) liveRooms.delete(k); else liveRooms.set(k, Date.now());
         const mineRoom = d.code === roomCode || (Array.isArray(d.pids) && d.pids.includes(myPid));
@@ -2833,7 +2906,7 @@
         drawRooms();
         return;
       }
-      if (d.t !== 'room' || !/^\d{4}$/.test(d.code)) return;
+      if (d.t !== 'room' || !ROOM_RE.test(d.code)) return;
       if (d.gone) rooms.delete(d.code);
       else {
         const fresh = !rooms.has(d.code);
@@ -2858,16 +2931,17 @@
       const room = mode !== 'solo' && roomCode ? roomCode : '';
       w.send(myTopic(myPid), { t: 'me', name, room, started: !!started });
     };
-    hereT = setInterval(here, 5000);
+    hereT = setInterval(here, 3000);
     setTimeout(() => { if (watch === w) here(); }, 1500);
     watchT = setInterval(() => {
-      rooms.forEach((r, c) => { if (Date.now() - r.t > 10000) rooms.delete(c); });
-      online.forEach((x, id) => { if (Date.now() - x.t > 16000) online.delete(id); });
-      onlineAll.forEach((t, k) => { if (Date.now() - t > 16000) onlineAll.delete(k); });
+      const gone = lite ? 10000 : 6500;
+      rooms.forEach((r, c) => { if (Date.now() - r.t > gone) rooms.delete(c); });
+      online.forEach((x, id) => { if (Date.now() - x.t > 10000) online.delete(id); });
+      onlineAll.forEach((t, k) => { if (Date.now() - t > 10000) onlineAll.delete(k); });
       drawFriends();
-      liveRooms.forEach((t, k) => { if (Date.now() - t > 10000) liveRooms.delete(k); });
+      liveRooms.forEach((t, k) => { if (Date.now() - t > gone) liveRooms.delete(k); });
       drawRooms(); drawGroups();
-    }, 3000);
+    }, 1500);
   }
 
   // the company codes this device has used: one tap to choose, a cross to forget
@@ -3001,9 +3075,17 @@
   }
 
   // ----- guest -----
-  async function joinRoom() {
+  // Enter the company's table. If somebody keeps it already, sit down there; if nobody answers, it is empty
+  // and this device starts keeping it.
+  function enterRoom(want) {
+    if (!group) { netMsg('Введите код компании'); return; }
+    joinWant = want || 'seat';
+    $('codeIn').value = roomOf(group);
+    return joinRoom(true);
+  }
+  async function joinRoom(orHost) {
     const code = $('codeIn').value.trim();
-    if (!/^\d{4}$/.test(code)) { netMsg('Введите код из 4 цифр'); return; }
+    if (!ROOM_RE.test(code)) { netMsg('Неверный код комнаты'); return; }
     netMsg('Подключаемся…');
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
@@ -3024,8 +3106,15 @@
     if (!lite) n.sub(TOPIC + code + '/a');
     mode = 'guest'; roomCode = code;
     hostConn = { open: true, send: d => n.send(hostTopic(code), d) };
-    gJoined = false; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now();
+    gJoined = false; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now(); gHostSeen = false;
     guestTimer(n, code);
+    if (orHost === true) {
+      setTimeout(() => { if (peer === n && mode === 'guest' && !gJoined) n.send(hostTopic(code), { t: 'probe' }); }, 400);
+      const empty = () => peer === n && mode === 'guest' && roomCode === code && !gJoined && !gHostSeen;
+      // the start screen has just seen this room alive: then its host only needs more time to answer
+      const wait = rooms.has(code) ? 9000 : lite ? 7000 : 3000;
+      setTimeout(() => { if (empty()) becomeRoomHost(n, code); }, wait);
+    }
   }
 
   // details about an opponent (long press on the panel or its ☰): points, cards, one-on-one score, host tools
@@ -3394,18 +3483,14 @@
     if (toastCode && mode === 'solo' && phase !== 'setup' && confirm('Закончить игру с ботами и перейти за стол друга?')) leave();
     if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) {
       if (toastGroup && toastGroup !== group) setGroup(toastGroup);
-      $('codeRow').style.display = '';
       $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom();
     }
   };
   $('rooms').onclick = e => {
     const f = e.target.closest('[data-af]');
     if (f) { addFriend(f.dataset.af, f.dataset.n); drawRooms(); return; }
-    const b = e.target.closest('[data-c]');
-    if (!b) return;
-    joinWant = b.dataset.w || 'seat';
-    $('codeIn').value = b.dataset.c;
-    joinRoom();
+    const b = e.target.closest('[data-w]');
+    if (b) enterRoom(b.dataset.w);
   };
   $('friendsBtn').onclick = () => { drawFriends(); $('friendsScr').classList.add('show'); };
   $('gearFriends').onclick = () => { $('gear').classList.remove('show'); drawFriends(); $('friendsScr').classList.add('show'); };
@@ -3423,7 +3508,7 @@
   // a link from a Telegram message: ...?join=1234 goes straight to that table
   {
     const j = new URLSearchParams(location.search).get('join');
-    if (/^\d{4}$/.test(j || '')) {
+    if (ROOM_RE.test(j || '')) {
       try { history.replaceState(null, '', location.pathname); } catch {}
       setTimeout(() => { if (mode === 'solo' && !peer) { $('codeIn').value = j; joinWant = 'seat'; joinRoom(); } }, 300);
     }
@@ -3451,7 +3536,11 @@
   }
   checkVersion();
   setInterval(checkVersion, 5 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    checkVersion();
+    if ($('setup').classList.contains('show') && mode === 'solo') startWatch(true);      // the phone was asleep: ask again who is where
+  });
 })();
 </script>
 </body>
