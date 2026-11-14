@@ -244,7 +244,7 @@
   /* the whole hand always fits the screen: the cards overlap as much as needed (see draw) */
   .hand-me { display: flex; padding: 18px 4px 6px; min-height: calc(var(--ch) + 26px); }
   .hand-me .inner { display: flex; margin: 0 auto; }
-  .hand-me .card { transition: transform .15s, translate .22s cubic-bezier(.22,.61,.36,1), box-shadow .22s; touch-action: none; }
+  .hand-me .card { transition: transform .15s; touch-action: none; }
   .hand-me .card.picked { box-shadow: 0 14px 26px rgba(0,0,0,.5); }
   .hand-me .card.ok { transform: translateY(-14px); cursor: pointer; }   /* playable cards are only lifted */
 
@@ -641,7 +641,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 74;              // keep in sync with www/version.txt
+  const VERSION = 75;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1366,9 +1366,9 @@
       mh.appendChild(el);
     });
     mh.onpointerdown = handDown;                 // tap: play; hold or slide: look through the cards; swipe up: throw
-    if (pick) setPick(pick.x);
+    if (wave) waveApply();
     // FLIP: every card that was already in the hand starts where it was and glides to its new place
-    if (before.size && !pick && Element.prototype.animate) mh.querySelectorAll('[data-id]').forEach(el => {
+    if (before.size && !wave && Element.prototype.animate) mh.querySelectorAll('[data-id]').forEach(el => {
       const b = before.get(el.dataset.id);
       if (!b || el.style.opacity === '0') return;
       const r = el.getBoundingClientRect(), dx = b.x - (r.left + r.width / 2), dy = b.y - (r.top + r.height / 2), rot = rotOf(el);
@@ -1483,50 +1483,57 @@
     return 'sent';
   }
 
-  // Looking through a big hand: while a finger is held on the hand or slides along it, the card under the finger
-  // rises above the finger and its neighbours move apart. Lifting the finger plays that card.
-  let pick = null;                               // { x, idx } while the finger is choosing
-  function setPick(x) {
+  // Looking through a big hand: while a finger is held on the hand or slides along it, a wave runs under the
+  // finger: the card there rises above the finger, the ones beside it rise less and move apart. The wave follows
+  // the finger softly and settles when the finger is lifted. Cards are played by a tap or a swipe up only.
+  let wave = null;                               // { x: finger, cx: where the wave is now, amp: 0..1, on }
+  function waveApply() {
     const mh = $('myHand'), els = [...mh.querySelectorAll('[data-id]')];
-    if (!pick || !els.length) return;
-    pick.x = x;
+    if (!wave || !els.length) return;
     const box = mh.parentElement.getBoundingClientRect(), off = mh.getBoundingClientRect().left - mh.offsetLeft;
-    const left = els.map(el => off + el.offsetLeft), cw = els[0].offsetWidth, ch = els[0].offsetHeight;
     // places are measured without the shifts, so the cards never run away from under the finger
-    let idx = 0;
-    left.forEach((l, k) => { if (x >= l) idx = k; });
-    pick.idx = idx;
-    const step = els.length > 1 ? left[1] - left[0] : cw;
-    const S = Math.max(6, Math.min(cw - step, cw * .5) * .8);
+    const left = els.map(el => off + el.offsetLeft), cw = els[0].offsetWidth, ch = els[0].offsetHeight;
+    const step = els.length > 1 ? Math.max(8, left[1] - left[0]) : cw, n = els.length;
+    const x = Math.max(left[0] + step / 2, Math.min(left[n - 1] + step / 2, wave.cx));    // the end cards rise fully too
+    const S = Math.max(6, Math.min(cw - step, cw * .5) * .8) * wave.amp, L = ch * .55 * wave.amp;
+    let top = 0, best = 1e9;
     els.forEach((el, k) => {
-      const d = k - idx, a = Math.abs(d), ty = +el.dataset.ty || 0;
-      el.classList.toggle('picked', !d);
-      el.style.zIndex = d ? '' : 3;
-      if (!d) { el.style.translate = `0 ${ty - Math.round(ch * .55)}px`; return; }
-      let sh = S * (a === 1 ? 1 : a === 2 ? .55 : a === 3 ? .25 : 0);
+      const d = (left[k] + step / 2 - x) / step, ty = +el.dataset.ty || 0;       // distance from the finger, in cards
+      if (Math.abs(d) < best) { best = Math.abs(d); top = k; }
+      let sh = S * 1.65 * d * Math.exp(-d * d / 2);                                // 0 under the finger, most one card away
       // nothing leaves the screen
-      sh = Math.max(0, Math.min(sh, d > 0 ? box.right - 4 - (left[k] + cw) : left[k] - box.left - 4));
-      el.style.translate = `${Math.round(Math.sign(d) * sh)}px ${ty}px`;
+      sh = sh > 0 ? Math.max(0, Math.min(sh, box.right - 4 - (left[k] + cw))) : -Math.max(0, Math.min(-sh, left[k] - box.left - 4));
+      el.style.translate = `${sh.toFixed(1)}px ${(ty - L * Math.exp(-d * d / 1.6)).toFixed(1)}px`;
     });
+    wave.idx = top;
+    els.forEach((el, k) => { el.style.zIndex = k === top && wave.amp > .15 ? 3 : ''; });
   }
-  function endPick(keep) {                       // the cards come back together
-    pick = null;
-    $('myHand').querySelectorAll('[data-id]').forEach(el => {
-      if (el === keep) return;
-      el.classList.remove('picked'); el.style.zIndex = '';
-      el.style.translate = `0 ${+el.dataset.ty || 0}px`;
-    });
+  function waveTick() {
+    if (!wave) return;
+    wave.amp += ((wave.on ? 1 : 0) - wave.amp) * .16;
+    wave.cx += (wave.x - wave.cx) * .3;
+    if (!wave.on && wave.amp < .01) {
+      wave = null;
+      $('myHand').querySelectorAll('[data-id]').forEach(el => { el.style.zIndex = ''; el.style.translate = `0 ${+el.dataset.ty || 0}px`; });
+      return;
+    }
+    waveApply();
+    requestAnimationFrame(waveTick);
   }
   function handDown(e) {
-    if (e.button > 0 || pick) return;
+    if (e.button > 0 || (wave && wave.on)) return;
     const el0 = e.target.closest('[data-id]');
     if (!el0) return;
     const id = el0.dataset.id, pid = e.pointerId, sx = e.clientX, sy = e.clientY;
     const cur = () => $('myHand').querySelector(`[data-id="${id}"]`);
     const cardOf = el => el && el.classList.contains('ok') && view ? view.hand.find(c => String(c.id) === el.dataset.id) : null;
-    let lastX = sx;
-    const startPick = () => { clearTimeout(holdT); holdT = null; pick = { x: lastX, idx: 0 }; setPick(lastX); };
-    let holdT = setTimeout(startPick, 260);
+    let lastX = sx, mine = false;
+    const startWave = () => {
+      clearTimeout(holdT); holdT = null; mine = true;
+      if (wave) { wave.on = true; wave.x = lastX; }                    // the old wave has not settled yet: it goes on
+      else { wave = { x: lastX, cx: lastX, amp: 0, on: true, idx: 0 }; requestAnimationFrame(waveTick); }
+    };
+    let holdT = setTimeout(startWave, 260);
     const off = () => {
       clearTimeout(holdT); holdT = null;
       window.removeEventListener('pointermove', move);
@@ -1536,30 +1543,29 @@
     const move = ev => {
       if (ev.pointerId !== pid) return;
       lastX = ev.clientX;
-      if (pick) { setPick(ev.clientX); if (ev.cancelable) ev.preventDefault(); return; }
       const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (mine) {
+        wave.x = ev.clientX;
+        if (ev.cancelable) ev.preventDefault();
+        // the finger goes up out of the hand: the raised card is thrown
+        const mh = $('myHand');
+        if (ev.clientY < mh.parentElement.getBoundingClientRect().top - 6) {
+          const el = mh.querySelectorAll('[data-id]')[wave.idx], c = cardOf(el);
+          if (c) { off(); wave.on = false; startDrag({ button: 0, pointerId: pid, clientX: ev.clientX, clientY: ev.clientY + 12 }, el, c); }
+        }
+        return;
+      }
       if (dy < -10 && Math.abs(dy) > Math.abs(dx)) {           // a quick swipe up throws the card
         const el = cur(), c = cardOf(el);
         if (c) { off(); startDrag(e, el, c); }
         return;
       }
-      if (Math.abs(dx) > 10) startPick();                      // sliding along the hand
+      if (Math.abs(dx) > 10) startWave();                      // sliding along the hand
     };
     const end = ev => {
       if (ev.pointerId !== pid) return;
       off();
-      if (pick) {
-        eatClickUntil = Date.now() + 400;
-        const mh = $('myHand'), el = mh.querySelectorAll('[data-id]')[pick.idx], c = cardOf(el);
-        // lifting the finger plays the raised card; taking the finger up and away from the hand cancels
-        const play = c && ev.type === 'pointerup' && ev.clientY > mh.parentElement.getBoundingClientRect().top - 10;
-        if (!play) { endPick(); return; }
-        endPick(el);                                           // it flies to the pile from where it is
-        const res = playFromHand(c.id);
-        if (res !== 'sent') { endPick(); return; }
-        setTimeout(() => { if (!pick && el.isConnected) endPick(); }, 1500);
-        return;
-      }
+      if (mine) { eatClickUntil = Date.now() + 400; wave.on = false; return; }      // just looking: nothing is played
       if (ev.type === 'pointerup' && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 12) {
         const c = cardOf(cur());
         if (c) { eatClickUntil = Date.now() + 400; playFromHand(c.id); }
