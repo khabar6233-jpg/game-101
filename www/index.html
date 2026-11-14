@@ -190,6 +190,7 @@
   .me-pts b { color: var(--text); font-size: 16px; }
   .me-hint { background: rgba(242,193,78,.16); color: var(--gold); border-radius: 10px; padding: 3px 10px; font-size: 13px; }
   .zone-line { border-top-color: rgba(255,255,255,.16); transition: border-color .3s, box-shadow .3s; }
+  body.myturn .zone-line { border-top-color: rgba(242,193,78,.7); box-shadow: 0 -1px 10px rgba(242,193,78,.35); }
   .btn {
     background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); color: #fff;
     border: 1.5px solid rgba(255,255,255,.5); border-radius: 12px;
@@ -601,7 +602,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 64;              // keep in sync with www/version.txt
+  const VERSION = 65;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
