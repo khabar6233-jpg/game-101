@@ -106,8 +106,8 @@
     align-items: center; gap: 8px; min-height: 46px; }
   .below .actions { grid-column: 3; min-height: 0; }
   #turnNote { grid-column: 2; visibility: hidden; color: var(--gold); font-weight: 800; font-size: 17px; }
-  #turnNote.on { visibility: visible; animation: turnPulse 2.4s ease-in-out infinite; }
-  @keyframes turnPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.13); } }
+  #turnNote.on { visibility: visible; animation: turnPulse 3.5s ease-in-out infinite; }
+  @keyframes turnPulse { 0%, 100% { transform: scale(1); } 33.3% { transform: scale(1.13); } }
   #syncBtn { font-size: 22px; line-height: 1; padding: 4px 12px; }
   /* ----- the table, cleaned up ----- */
   .bar { padding: 2px 0; }
@@ -199,7 +199,13 @@
     0%, 100% { box-shadow: 0 0 0 1px rgba(242,193,78,.14), 0 2px 6px rgba(0,0,0,.35); }
     33.3% { box-shadow: 0 0 0 1px rgba(242,193,78,.9), 0 0 14px rgba(242,193,78,.45), 0 2px 6px rgba(0,0,0,.35); }
   }
-  body.myturn .zone-line { animation: goldPulse 3.5s ease-in-out infinite; }
+  /* the line over my cards: brightest in the middle, dimmer to the edges */
+  .zone-line { position: relative; }
+  .zone-line::after { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 1px; opacity: 0; pointer-events: none;
+    background: linear-gradient(90deg, rgba(242,193,78,.2), rgba(242,193,78,1) 50%, rgba(242,193,78,.2));
+    box-shadow: 0 0 12px rgba(242,193,78,.35); }
+  @keyframes linePulse { 0%, 100% { opacity: .15; } 33.3% { opacity: 1; } }
+  body.myturn .zone-line::after { animation: linePulse 3.5s ease-in-out infinite; }
   .opp.turn { border-color: rgba(242,193,78,.14); box-shadow: none; animation: goldPulse 3.5s ease-in-out infinite; }
   .deck.can { animation: deckPulse 3.5s ease-in-out infinite; }
   .btn {
@@ -613,7 +619,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 66;              // keep in sync with www/version.txt
+  const VERSION = 67;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
