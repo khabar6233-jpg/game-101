@@ -640,7 +640,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 72;              // keep in sync with www/version.txt
+  const VERSION = 73;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -718,6 +718,7 @@
   }
   let sortOn = false;
   try { sortOn = localStorage.getItem('g101-sort') === '1'; } catch {}
+  let suitHide = false, resHide = false;      // put aside with a tap outside; a tap on the table brings it back
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
@@ -1444,7 +1445,8 @@
     }
 
     if (window.placeActions) window.placeActions();
-    $('suitPick').classList.toggle('show', v.choose || localQueen !== null);
+    if (!v.choose) suitHide = false;
+    $('suitPick').classList.toggle('show', (v.choose && !suitHide) || localQueen !== null);
     if (window.placeSuit && $('suitPick').classList.contains('show')) window.placeSuit();
     $('suitCancel').style.display = localQueen !== null ? '' : 'none';
     drawResult(v);
@@ -1602,7 +1604,8 @@
   function drawResult(v) {
     const r = v.result;
     const show = !!r && v.phase === 'roundEnd';
-    $('result').classList.toggle('show', show);
+    if (!show) resHide = false;
+    $('result').classList.toggle('show', show && !resHide);
     if (!show) return;
     const name = i => (i === v.seat ? 'Вы' : esc(v.players[i].name));
     let title, text, tone = '';
@@ -2984,6 +2987,21 @@
     else if (mode === 'host') { $('warn').textContent = ''; render(); }
   };
   onTap($('history'), () => { $('history').classList.remove('show'); return true; });
+  // any window closes with a tap outside it (on the dark around it)
+  ['gear', 'oppInfo', 'friendsScr', 'rules', 'chipMenu', 'suitPick', 'result'].forEach(id => {
+    const o = $(id);
+    let d = null;
+    o.addEventListener('pointerdown', e => { d = e.target === o ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null; });
+    o.addEventListener('pointerup', e => {
+      const ok = d && d.id === e.pointerId && e.target === o && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 12;
+      d = null;
+      if (!ok) return;
+      eatClickUntil = Date.now() + 400;
+      if (id === 'suitPick') { if (localQueen !== null) localQueen = null; else suitHide = true; if (view) draw(view); else o.classList.remove('show'); }
+      else if (id === 'result') { resHide = true; o.classList.remove('show'); }
+      else o.classList.remove('show');
+    });
+  });
   onTap($('suitCancel'), () => { localQueen = null; if (view) draw(view); return true; });
   // tapping anywhere on the table (everything above "Ваши очки") draws a card; the pile shows its last cards
   onTap($('app'), e => {
@@ -2993,6 +3011,7 @@
     if (t.closest('.hand-me, .me-bar, .me-row, .zone-line, .actions .btn, .bar, .opp, #asks')) return false;
     const v = view;
     if (!v) return false;
+    if ((suitHide && v.choose) || (resHide && v.phase === 'roundEnd')) { suitHide = resHide = false; draw(v); return true; }
     if (t.closest('#pile')) { $('history').classList.add('show'); return true; }
     if (v.phase !== 'play') return false;
     if (v.busy) { drawWish = Date.now(); return true; }            // remembered until the card has landed
