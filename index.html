@@ -244,7 +244,8 @@
   /* the whole hand always fits the screen: the cards overlap as much as needed (see draw) */
   .hand-me { display: flex; padding: 18px 4px 6px; min-height: calc(var(--ch) + 26px); }
   .hand-me .inner { display: flex; margin: 0 auto; }
-  .hand-me .card { transition: transform .15s; touch-action: none; }
+  .hand-me .card { transition: transform .15s, translate .22s cubic-bezier(.22,.61,.36,1), box-shadow .22s; touch-action: none; }
+  .hand-me .card.picked { box-shadow: 0 14px 26px rgba(0,0,0,.5); }
   .hand-me .card.ok { transform: translateY(-14px); cursor: pointer; }   /* playable cards are only lifted */
 
   .card {
@@ -640,7 +641,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 73;              // keep in sync with www/version.txt
+  const VERSION = 74;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1358,14 +1359,16 @@
       if (n) el.style.marginLeft = stepX - cw + 'px';
       const fa = (n - (hand.length - 1) / 2) * Math.min(4, 18 / Math.max(hand.length - 1, 1));
       el.style.rotate = fa + 'deg';
-      el.style.translate = `0 ${Math.round(fa * fa / 10)}px`;
+      el.dataset.ty = Math.round(fa * fa / 10);
+      el.style.translate = `0 ${el.dataset.ty}px`;
       if (flying.has(c.id) || (pendingPlay && pendingPlay.id === c.id)) el.style.opacity = '0';
-      if (ok) el.onpointerdown = e => startDrag(e, el, c);      // a tap or a swipe up plays the card
       if (c.id === localQueen) el.style.transform = 'translateY(-26px)';
       mh.appendChild(el);
     });
+    mh.onpointerdown = handDown;                 // tap: play; hold or slide: look through the cards; swipe up: throw
+    if (pick) setPick(pick.x);
     // FLIP: every card that was already in the hand starts where it was and glides to its new place
-    if (before.size && Element.prototype.animate) mh.querySelectorAll('[data-id]').forEach(el => {
+    if (before.size && !pick && Element.prototype.animate) mh.querySelectorAll('[data-id]').forEach(el => {
       const b = before.get(el.dataset.id);
       if (!b || el.style.opacity === '0') return;
       const r = el.getBoundingClientRect(), dx = b.x - (r.left + r.width / 2), dy = b.y - (r.top + r.height / 2), rot = rotOf(el);
@@ -1478,6 +1481,93 @@
     dropFrom = from || null;
     action({ t: 'play', id });
     return 'sent';
+  }
+
+  // Looking through a big hand: while a finger is held on the hand or slides along it, the card under the finger
+  // rises above the finger and its neighbours move apart. Lifting the finger plays that card.
+  let pick = null;                               // { x, idx } while the finger is choosing
+  function setPick(x) {
+    const mh = $('myHand'), els = [...mh.querySelectorAll('[data-id]')];
+    if (!pick || !els.length) return;
+    pick.x = x;
+    const box = mh.parentElement.getBoundingClientRect(), off = mh.getBoundingClientRect().left - mh.offsetLeft;
+    const left = els.map(el => off + el.offsetLeft), cw = els[0].offsetWidth, ch = els[0].offsetHeight;
+    // places are measured without the shifts, so the cards never run away from under the finger
+    let idx = 0;
+    left.forEach((l, k) => { if (x >= l) idx = k; });
+    pick.idx = idx;
+    const step = els.length > 1 ? left[1] - left[0] : cw;
+    const S = Math.max(6, Math.min(cw - step, cw * .5) * .8);
+    els.forEach((el, k) => {
+      const d = k - idx, a = Math.abs(d), ty = +el.dataset.ty || 0;
+      el.classList.toggle('picked', !d);
+      el.style.zIndex = d ? '' : 3;
+      if (!d) { el.style.translate = `0 ${ty - Math.round(ch * .55)}px`; return; }
+      let sh = S * (a === 1 ? 1 : a === 2 ? .55 : a === 3 ? .25 : 0);
+      // nothing leaves the screen
+      sh = Math.max(0, Math.min(sh, d > 0 ? box.right - 4 - (left[k] + cw) : left[k] - box.left - 4));
+      el.style.translate = `${Math.round(Math.sign(d) * sh)}px ${ty}px`;
+    });
+  }
+  function endPick(keep) {                       // the cards come back together
+    pick = null;
+    $('myHand').querySelectorAll('[data-id]').forEach(el => {
+      if (el === keep) return;
+      el.classList.remove('picked'); el.style.zIndex = '';
+      el.style.translate = `0 ${+el.dataset.ty || 0}px`;
+    });
+  }
+  function handDown(e) {
+    if (e.button > 0 || pick) return;
+    const el0 = e.target.closest('[data-id]');
+    if (!el0) return;
+    const id = el0.dataset.id, pid = e.pointerId, sx = e.clientX, sy = e.clientY;
+    const cur = () => $('myHand').querySelector(`[data-id="${id}"]`);
+    const cardOf = el => el && el.classList.contains('ok') && view ? view.hand.find(c => String(c.id) === el.dataset.id) : null;
+    let lastX = sx;
+    const startPick = () => { clearTimeout(holdT); holdT = null; pick = { x: lastX, idx: 0 }; setPick(lastX); };
+    let holdT = setTimeout(startPick, 260);
+    const off = () => {
+      clearTimeout(holdT); holdT = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+    const move = ev => {
+      if (ev.pointerId !== pid) return;
+      lastX = ev.clientX;
+      if (pick) { setPick(ev.clientX); if (ev.cancelable) ev.preventDefault(); return; }
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (dy < -10 && Math.abs(dy) > Math.abs(dx)) {           // a quick swipe up throws the card
+        const el = cur(), c = cardOf(el);
+        if (c) { off(); startDrag(e, el, c); }
+        return;
+      }
+      if (Math.abs(dx) > 10) startPick();                      // sliding along the hand
+    };
+    const end = ev => {
+      if (ev.pointerId !== pid) return;
+      off();
+      if (pick) {
+        eatClickUntil = Date.now() + 400;
+        const mh = $('myHand'), el = mh.querySelectorAll('[data-id]')[pick.idx], c = cardOf(el);
+        // lifting the finger plays the raised card; taking the finger up and away from the hand cancels
+        const play = c && ev.type === 'pointerup' && ev.clientY > mh.parentElement.getBoundingClientRect().top - 10;
+        if (!play) { endPick(); return; }
+        endPick(el);                                           // it flies to the pile from where it is
+        const res = playFromHand(c.id);
+        if (res !== 'sent') { endPick(); return; }
+        setTimeout(() => { if (!pick && el.isConnected) endPick(); }, 1500);
+        return;
+      }
+      if (ev.type === 'pointerup' && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 12) {
+        const c = cardOf(cur());
+        if (c) { eatClickUntil = Date.now() + 400; playFromHand(c.id); }
+      }
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   }
 
   // Swipe a card up out of the hand to throw it on the pile.
