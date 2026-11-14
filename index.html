@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 80;              // keep in sync with www/version.txt
+  const VERSION = 81;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2822,25 +2822,51 @@
     const tgUrl = `https://t.me/${TG_BOT}?start=${encodeURIComponent(myPid)}`;
     if (window.App101 && window.App101.open) window.App101.open(tgUrl);      // the Android app hands the link to Telegram
     else window.open(tgUrl, '_blank');
-    $('tgRow').innerHTML = '<span class="tgok">Нажмите «Start» в Telegram и вернитесь сюда…</span>';
-    clearInterval(tgPoll);
-    const t0 = Date.now();
-    tgPoll = setInterval(async () => {
-      if (Date.now() - t0 > 180000) { clearInterval(tgPoll); drawTg(); return; }
-      const r = await tgApi('getUpdates', { limit: 100 });
-      const hit = r && r.ok && r.result.map(u => u.message).find(m => m && m.text === '/start ' + myPid);
-      if (!hit) return;
-      clearInterval(tgPoll);
-      tgChat = hit.chat.id;
-      try { localStorage.setItem('g101-tg', tgChat); } catch {}
-      tgSay(tgChat, 'Готово! Сюда будут приходить приглашения друзей в игру «101».');
-      drawTg();
-      startWatch(true);
-    }, 3000);
+    try { localStorage.setItem('g101-tgwait', Date.now()); } catch {}
+    tgWait();
   }
+  // Waiting for "Start" in Telegram. The wait is remembered on the device: the phone may freeze or reload the game
+  // while Telegram is on the screen, so the answer is looked for again on every return and after a restart.
+  const tgWaiting = () => { let t = 0; try { t = +localStorage.getItem('g101-tgwait') || 0; } catch {} return !tgChat && Date.now() - t < 86400000; };
+  let tgBusy = false, tgFails = 0;
+  async function tgCheck() {
+    if (tgBusy || tgChat) return;
+    tgBusy = true;
+    const r = await tgApi('getUpdates', { limit: 100 });
+    tgBusy = false;
+    if (tgChat || !tgWaiting()) return;
+    const el = $('tgRow').querySelector('.tgok');
+    if (!r || !r.ok) {                                      // Telegram's server cannot be reached from this network
+      if (++tgFails >= 2 && el) el.textContent = 'Нет связи с сервером Telegram. Включите VPN и вернитесь сюда.';
+      return;
+    }
+    tgFails = 0;
+    if (el) el.textContent = 'Нажмите «Start» в Telegram и вернитесь сюда…';
+    const hit = r.result.map(u => u.message).filter(m => m && m.text === '/start ' + myPid).pop();
+    if (!hit) return;
+    clearInterval(tgPoll);
+    tgChat = hit.chat.id;
+    try { localStorage.setItem('g101-tg', tgChat); localStorage.removeItem('g101-tgwait'); } catch {}
+    tgSay(tgChat, 'Готово! Сюда будут приходить приглашения друзей в игру «101».');
+    drawTg();
+    startWatch(true);
+  }
+  function tgWait() {
+    clearInterval(tgPoll);
+    if (!TG_TOKEN || !tgWaiting()) return;
+    $('tgRow').innerHTML = '<span class="tgok">Нажмите «Start» в Telegram и вернитесь сюда…</span><button class="addf" id="tgOff">отмена</button>';
+    const t0 = Date.now();
+    tgPoll = setInterval(() => {
+      if (Date.now() - t0 > 600000) { clearInterval(tgPoll); return; }        // the next return to the game looks again
+      tgCheck();
+    }, 3000);
+    tgCheck();
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && tgWaiting()) tgWait(); });
+  addEventListener('pageshow', () => { if (tgWaiting()) tgWait(); });
   function tgUnlink() {
-    tgChat = 0;
-    try { localStorage.removeItem('g101-tg'); } catch {}
+    tgChat = 0; clearInterval(tgPoll);
+    try { localStorage.removeItem('g101-tg'); localStorage.removeItem('g101-tgwait'); } catch {}
     drawTg();
     startWatch(true);
   }
