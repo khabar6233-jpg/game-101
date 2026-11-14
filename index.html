@@ -187,6 +187,9 @@
   #actions.moving .btn { outline: 3px dashed rgba(255,255,255,.8); outline-offset: 3px; transform: scale(1.06); }
   #actions.placed { position: fixed; z-index: 6; }
   #actions, #suitPick .dialog { transform-origin: 0 0; }
+  .adjLayer { position: fixed; inset: 0; z-index: 40; touch-action: none; background: rgba(0,0,0,.08); }
+  #actions.moving { z-index: 41; }
+  #suitPick .dialog.moving { z-index: 41; position: relative; }
   #suitPick .dialog { touch-action: none; }
   #suitPick .dialog.moving { outline: 3px dashed rgba(255,255,255,.85); outline-offset: 4px; }
   .vbtn:active { transform: scale(.97); }
@@ -637,7 +640,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 71;              // keep in sync with www/version.txt
+  const VERSION = 72;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -3068,51 +3071,80 @@
   // Something on the screen that each player can arrange for themselves: a long press lifts it and the finger
   // moves it; two fingers pinch it bigger or smaller. The place and the size stay on this device.
   function adjustable(box, key, apply, canStart) {
-    let st = null, holdT = null, mode = null, used = false;
+    // A long press starts arranging (a dashed frame). From then on the WHOLE screen listens: one finger
+    // anywhere moves the thing, two fingers anywhere pinch it. It ends a moment after the last finger is lifted.
+    let st = null, holdT = null, endT = null, mode = null, layer = null;
     const pts = new Map(), g = {};
     try { st = JSON.parse(localStorage.getItem(key)); } catch {}
     const save = () => { try { localStorage.setItem(key, JSON.stringify(st)); } catch {} };
-    box.addEventListener('pointerdown', e => {
-      if (canStart && !canStart()) return;
+    const rectNow = () => box.getBoundingClientRect();
+    const begin = () => {                                   // the frame appears, the screen becomes a handle
+      mode = 'edit';
+      const r = rectNow();
+      st = Object.assign({ s: 1 }, st, { x: r.left / innerWidth, y: r.top / innerHeight });
+      apply(st);
+      box.classList.add('moving');
+      layer = document.createElement('div');
+      layer.className = 'adjLayer';
+      layer.addEventListener('pointerdown', down);
+      layer.addEventListener('pointermove', move);
+      layer.addEventListener('pointerup', up);
+      layer.addEventListener('pointercancel', up);
+      document.body.appendChild(layer);
+      try { if (window.App101) window.App101.vibrate(40); else if (navigator.vibrate) navigator.vibrate(40); } catch {}
+    };
+    const finish = () => {
+      clearTimeout(endT); endT = null;
+      if (layer) { layer.remove(); layer = null; }
+      box.classList.remove('moving');
+      mode = null; pts.clear();
+      save(); apply(st);
+    };
+    const startPinch = () => {
+      const [p, q] = [...pts.values()];
+      g.d0 = Math.hypot(p.x - q.x, p.y - q.y) || 1; g.s0 = (st && st.s) || 1;
+    };
+    function down(e) {
+      e.stopPropagation(); e.preventDefault();
+      clearTimeout(endT); endT = null;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pts.size === 1) {
-        used = false; g.sx = e.clientX; g.sy = e.clientY;
-        clearTimeout(holdT);
-        holdT = setTimeout(() => {
-          const r = box.getBoundingClientRect();
-          mode = 'drag'; used = true;
-          g.dx = g.sx - r.left; g.dy = g.sy - r.top;
-          try { box.setPointerCapture(e.pointerId); } catch {}
-          box.classList.add('moving');
-          try { if (window.App101) window.App101.vibrate(40); else if (navigator.vibrate) navigator.vibrate(40); } catch {}
-        }, 450);
-      } else if (pts.size === 2) {
-        clearTimeout(holdT); holdT = null;
-        const [p, q] = [...pts.values()];
-        mode = 'pinch'; used = true;
-        g.d0 = Math.hypot(p.x - q.x, p.y - q.y) || 1; g.s0 = (st && st.s) || 1;
-        box.classList.add('moving');
-      }
-    }, true);
-    box.addEventListener('pointermove', e => {
-      if (!pts.has(e.pointerId)) return;
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (mode === 'drag') {
-        st = Object.assign({}, st, { x: (e.clientX - g.dx) / innerWidth, y: (e.clientY - g.dy) / innerHeight });
-        apply(st); e.preventDefault();
-      } else if (mode === 'pinch' && pts.size >= 2) {
+      if (pts.size === 2) startPinch();
+    }
+    function move(e) {
+      const p0 = pts.get(e.pointerId);
+      if (!p0) return;
+      const p1 = { x: e.clientX, y: e.clientY };
+      pts.set(e.pointerId, p1);
+      if (mode !== 'edit') { if (holdT && Math.hypot(p1.x - g.sx, p1.y - g.sy) > 10) { clearTimeout(holdT); holdT = null; } return; }
+      e.preventDefault(); e.stopPropagation();
+      if (pts.size >= 2) {                                  // pinch: bigger or smaller
         const [p, q] = [...pts.values()];
         st = Object.assign({}, st, { s: Math.max(.6, Math.min(1.8, g.s0 * Math.hypot(p.x - q.x, p.y - q.y) / g.d0)) });
-        apply(st); e.preventDefault();
-      } else if (holdT && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) > 10) { clearTimeout(holdT); holdT = null; }
-    }, true);
-    const up = e => {
+      } else {                                              // one finger anywhere: move by as much as the finger moved
+        st = Object.assign({}, st, { x: st.x + (p1.x - p0.x) / innerWidth, y: st.y + (p1.y - p0.y) / innerHeight });
+      }
+      apply(st);
+    }
+    function up(e) {
       if (!pts.has(e.pointerId)) return;
       pts.delete(e.pointerId);
       clearTimeout(holdT); holdT = null;
-      if (used) { e.stopPropagation(); eatClickUntil = Date.now() + 400; }     // arranging is not pressing
-      if (!pts.size) { if (mode) { box.classList.remove('moving'); save(); apply(st); } mode = null; }
-    };
+      if (mode === 'edit') {
+        e.stopPropagation(); eatClickUntil = Date.now() + 400;          // arranging is not pressing
+        if (!pts.size) endT = setTimeout(finish, 1600);                 // a moment to put two fingers down
+      }
+    }
+    box.addEventListener('pointerdown', e => {
+      if (mode === 'edit') { down(e); return; }
+      if (canStart && !canStart()) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 1) {
+        g.sx = e.clientX; g.sy = e.clientY;
+        clearTimeout(holdT);
+        holdT = setTimeout(() => { holdT = null; begin(); }, 450);
+      }
+    }, true);
+    box.addEventListener('pointermove', move, true);
     box.addEventListener('pointerup', up, true);
     box.addEventListener('pointercancel', up, true);
     return { reset() { st = null; try { localStorage.removeItem(key); } catch {} apply(null); }, get: () => st };
