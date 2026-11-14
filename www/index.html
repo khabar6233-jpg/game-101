@@ -139,6 +139,14 @@
   .opps.many .opp .mini { width: 18px; height: 26px; margin-left: -11px; }
   .opps.many .opp .omenu { top: 2px; right: 2px; font-size: 13px; }
   .hand-me .card { transform-origin: 50% 130%; }
+  .me-row { position: relative; }
+  #sortBtn { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 46px; height: 34px; padding: 2px; border-radius: 10px;
+    background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.18); }
+  #sortBtn svg { width: 100%; height: 100%; display: block; }
+  #sortBtn rect { fill: #fdfdf8; stroke: rgba(0,0,0,.35); stroke-width: .6; }
+  #sortBtn text { font: 700 9px system-ui, sans-serif; text-anchor: middle; fill: #1b1b1b; }
+  #sortBtn g:nth-child(2) text, #sortBtn g:nth-child(4) text { fill: #c8232c; }
+  #sortBtn.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 10px rgba(242,193,78,.35); }
   .hand-me { padding-left: 14px; padding-right: 14px; padding-bottom: 12px; }
   .below .btn { white-space: nowrap; padding: 0 12px; font-size: 15px; }
   /* the needle goes under the cards */
@@ -461,7 +469,7 @@
 
   <div class="status" id="status"></div>
   <div class="zone-line"></div>
-  <div class="me-bar" id="meBar"></div>
+  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"><svg viewBox="0 0 40 30" aria-hidden="true"><g transform="rotate(-27 20 34)"><rect x="13.5" y="4" width="13" height="19" rx="2.2"/><text x="20" y="17.5">6</text></g><g transform="rotate(-9 20 34)"><rect x="13.5" y="4" width="13" height="19" rx="2.2"/><text x="20" y="17.5">6</text></g><g transform="rotate(9 20 34)"><rect x="13.5" y="4" width="13" height="19" rx="2.2"/><text x="20" y="17.5">6</text></g><g transform="rotate(27 20 34)"><rect x="13.5" y="4" width="13" height="19" rx="2.2"/><text x="20" y="17.5">6</text></g></svg></button><div class="me-bar" id="meBar"></div></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
 
@@ -581,8 +589,11 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
-      <button class="btn plain" id="addBotBtn">+ бот</button>
-      <button class="btn" id="startBtn">Начать игру</button>
+      <div id="hostBox" class="col">
+        <div class="gl">Играть с ботами: сколько всего за столом</div>
+        <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
+        <button class="btn" id="waitBtn">Ждать за столом</button>
+      </div>
       <button class="btn plain" id="leaveBtn">Выйти</button>
     </div>
   </div>
@@ -619,7 +630,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 67;              // keep in sync with www/version.txt
+  const VERSION = 68;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -695,6 +706,8 @@
     if (won) r.w++; else r.l++;
     try { localStorage.setItem('g101-duels', JSON.stringify(db)); } catch {}
   }
+  let sortOn = false;
+  try { sortOn = localStorage.getItem('g101-sort') === '1'; } catch {}
   let mySeat = 0, view = null, lastTopId = -1, localQueen = null;
   let prevHand = null, prevRound = 0, newIds = new Map();
   let animRound = 0, lastEvSeq = 0, flyingTop = null;
@@ -767,7 +780,6 @@
     if (!openable.length) { roundNo--; startRound(); return; }   // all five are sixes/aces: deal again
     const opened = openable[Math.floor(Math.random() * openable.length)];
     st.hand.splice(st.hand.indexOf(opened), 1);
-    players.forEach(p => sortHand(p.hand));
     playCard(starter, opened, true);
   }
 
@@ -789,7 +801,6 @@
   function give(p, k) {
     let n = 0;
     while (k-- > 0) { const c = drawOne(); if (!c) break; p.hand.push(c); n++; }
-    sortHand(p.hand);
     return n;
   }
 
@@ -943,7 +954,7 @@
       drew = true;
       const c = drawOne();
       if (c) {
-        p.hand.push(c); sortHand(p.hand);
+        p.hand.push(c);
         lastEv = { seq: ++evSeq, type: 'draw', pi: seat, k: 1 };
         say(me => (me === seat ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
       } else {
@@ -1180,6 +1191,7 @@
     drawWish = 0;
     wasMyTurn = myTurn;
     $('roundNo').textContent = v.roundNo;
+    $('compass').style.display = '';
     document.body.dataset.back = v.back || 0;
     $('roomTag').textContent = (v.room && !group ? ' · комната ' + v.room : '') + ' · v' + VERSION;
     $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
@@ -1313,26 +1325,43 @@
       cp.style.transform = `rotate(${needleDeg}deg) translateY(${-Math.round(R)}px)`;
     }
 
-    const mh = $('myHand'); mh.innerHTML = '';
+    const mh = $('myHand');
+    const before = new Map();
+    if (!roundChanged) mh.querySelectorAll('[data-id]').forEach(el => {
+      const r = el.getBoundingClientRect();
+      before.set(el.dataset.id, { x: r.left + r.width / 2, y: r.top + r.height / 2, rot: rotOf(el) });
+    });
+    mh.innerHTML = '';
     const fresh = trackNewCards(v);
     // the cards overlap just enough for the whole hand to fit the screen
     const cw = $('deck').offsetWidth || 62;
     const room = mh.parentElement.clientWidth - 36 - cw;
     const stepX = Math.min(cw + 6,v.hand.length > 1 ? room / (v.hand.length - 1) : cw);
-    v.hand.forEach((c, n) => {
+    const hand = sortOn ? [...v.hand].sort((a, b) => SUITS.indexOf(a.s) - SUITS.indexOf(b.s) || a.r - b.r) : v.hand;
+    hand.forEach((c, n) => {
       const ok = myTurn && c.ok;
       const age = newIds.has(c.id) ? Date.now() - newIds.get(c.id) : NEW_MS;
       const el = cardEl(c, (ok ? 'ok' : 'no') + (age < NEW_MS ? ' new' : ''));
       if (age < NEW_MS) el.style.animationDelay = -age + 'ms';      // a redraw continues the fade, not restarts it
       el.dataset.id = c.id;
       if (n) el.style.marginLeft = stepX - cw + 'px';
-      const fa = (n - (v.hand.length - 1) / 2) * Math.min(4, 18 / Math.max(v.hand.length - 1, 1));
+      const fa = (n - (hand.length - 1) / 2) * Math.min(4, 18 / Math.max(hand.length - 1, 1));
       el.style.rotate = fa + 'deg';
       el.style.translate = `0 ${Math.round(fa * fa / 10)}px`;
       if (flying.has(c.id) || (pendingPlay && pendingPlay.id === c.id)) el.style.opacity = '0';
       if (ok) el.onpointerdown = e => startDrag(e, el, c);      // a tap or a swipe up plays the card
       if (c.id === localQueen) el.style.transform = 'translateY(-26px)';
       mh.appendChild(el);
+    });
+    // FLIP: every card that was already in the hand starts where it was and glides to its new place
+    if (before.size && Element.prototype.animate) mh.querySelectorAll('[data-id]').forEach(el => {
+      const b = before.get(el.dataset.id);
+      if (!b || el.style.opacity === '0') return;
+      const r = el.getBoundingClientRect(), dx = b.x - (r.left + r.width / 2), dy = b.y - (r.top + r.height / 2), rot = rotOf(el);
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(b.rot - rot) < .2) return;
+      const ty = el.style.translate.split(' ')[1] || '0px';
+      el.animate([{ translate: `${dx}px calc(${ty} + ${dy}px)`, rotate: b.rot + 'deg' }, { translate: `0px ${ty}`, rotate: rot + 'deg' }],
+        { duration: 380, easing: 'cubic-bezier(.25,.8,.3,1)' });
     });
     const oppBox = i => o.querySelector(`[data-i="${i}"] .minis`);
     const deckRect = $('deck').getBoundingClientRect();
@@ -1891,6 +1920,7 @@
       try { peer.close(); } catch {}
     }
     vAuto = false;
+    waiting = false; $('compass').style.display = '';
     conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
@@ -2817,12 +2847,38 @@
       : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
     $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
       (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
-    $('addBotBtn').style.display = host && names.length < MAX_PLAYERS ? '' : 'none';
-    $('startBtn').style.display = host ? '' : 'none';
-    $('startBtn').disabled = false;
-    $('startBtn').textContent = names.length < 2 ? 'Играть с ботом, пока ждём друзей' : 'Начать игру';
-    showOnly('lobby');
+    $('hostBox').style.display = host ? '' : 'none';
+    [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length; });
+    if (host && waiting) drawWaiting(names); else showOnly('lobby');
     if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION }); });
+  }
+
+  // The host waits at an empty table: friends who come in sit down, bots can be added, the game starts on a tap.
+  let waiting = false;
+  function drawWaiting(names) {
+    showOnly(null);
+    document.body.classList.remove('myturn');
+    $('roundNo').textContent = '—';
+    $('roomTag').textContent = ' · v' + VERSION;
+    $('compass').style.display = 'none';
+    $('turnNote').className = '';
+    $('asks').innerHTML = ''; $('specRow').innerHTML = ''; $('status').innerHTML = '';
+    const o = $('opps');
+    o.className = 'opps' + (names.length > 4 ? ' many' : '');
+    o.innerHTML = names.slice(1).map((n, k) => `<div class="opp" data-i="${k + 1}"><button class="omenu" data-kick="${k + 1}" aria-label="Убрать">✕</button>` +
+      `<div class="name">${esc(n)}</div><div class="pts">${lobby[k + 1] && lobby[k + 1].isBot ? 'бот' : 'за столом'}</div></div>`).join('') +
+      (names.length < 2 ? '<div class="opp"><div class="name">Пустое место</div><div class="pts">ждём друзей…</div></div>' : '');
+    $('deck').className = 'empty-slot'; $('deckCount').textContent = '0';
+    $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
+    $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
+    $('myHand').innerHTML = '';
+    $('meBar').textContent = 'Вы за столом · ждём друзей';
+    $('syncBtn').style.display = '';
+    const a = $('actions'); a.innerHTML = '';
+    const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
+    if (names.length < MAX_PLAYERS) add('+ бот', () => { lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null }); drawLobby(); });
+    if (names.length >= 2) add('Начать', () => { waiting = false; started = true; startMatch(lobby); });
+    if (window.placeActions) window.placeActions();
   }
 
   // ----- guest -----
@@ -2923,7 +2979,7 @@
     // what is under the finger now: the element that was touched may already have been redrawn
     const t = document.elementFromPoint(e.clientX, e.clientY);
     if (!t || !$('app').contains(t)) return false;
-    if (t.closest('.hand-me, .me-bar, .zone-line, .actions .btn, .bar, .opp, #asks')) return false;
+    if (t.closest('.hand-me, .me-bar, .me-row, .zone-line, .actions .btn, .bar, .opp, #asks')) return false;
     const v = view;
     if (!v) return false;
     if (t.closest('#pile')) { $('history').classList.add('show'); return true; }
@@ -2943,17 +2999,18 @@
   });
   $('hostBtn').onclick = () => createRoom();
   $('joinBtn').onclick = () => { joinWant = 'seat'; joinRoom(); };
-  $('addBotBtn').onclick = () => {
-    if (mode !== 'host' || lobby.length >= MAX_PLAYERS) return;
-    lobby.push({ name: 'Бот ' + (lobby.filter(s => s.isBot).length + 1), isBot: true, conn: null });
-    drawLobby();
-  };
-  $('startBtn').onclick = () => {
-    if (mode !== 'host' || !lobby) return;
-    if (lobby.length < 2) lobby.push({ name: 'Бот 1', isBot: true, conn: null });   // a friend who comes later takes this seat
-    started = true;
+  $('lobBots').onclick = e => {
+    const b = e.target.closest('[data-n]');
+    if (!b || mode !== 'host' || !lobby) return;
+    while (lobby.length < +b.dataset.n) lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null });
+    waiting = false; started = true;
     startMatch(lobby);
   };
+  $('waitBtn').onclick = () => { if (mode !== 'host' || !lobby) return; waiting = true; drawLobby(); };
+  $('opps').addEventListener('click', e => {
+    const k = e.target.closest('[data-kick]');
+    if (k && waiting && mode === 'host' && !started) kickFromLobby(+k.dataset.kick);
+  });
   $('leaveBtn').onclick = leave;
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = testNet;
@@ -3065,6 +3122,14 @@
     box.addEventListener('pointercancel', end, true);
     $('btnReset').onclick = () => { pos = null; try { localStorage.removeItem('g101-btnpos'); } catch {} place(); };
   }
+  $('sortBtn').classList.toggle('on', sortOn);
+  onTap($('sortBtn'), () => {
+    sortOn = !sortOn;
+    try { localStorage.setItem('g101-sort', sortOn ? '1' : '0'); } catch {}
+    $('sortBtn').classList.toggle('on', sortOn);
+    if (view) draw(view);
+    return true;
+  });
   $('micBtn').onclick = () => vToggle(true);
   $('spkBtn').onclick = () => vToggle(false);
   // a sound that the browser refused to start on its own starts with the next touch
