@@ -396,8 +396,13 @@
   .modeSw.long .tg::after { transform: translateX(20px); }
   #homeMode { color: var(--text); margin: 2px 0; }
   #lobMode { color: #222; margin: 4px 0; }
-  #waitMode { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); color: var(--text); display: none; z-index: 2; }
+  #waitMode { display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text); z-index: 2; }
   body.waiting #waitMode { display: flex; }
+  .modeSw.small { gap: 8px; font-size: 14px; }
+  .modeSw.small span { padding: 4px 2px; }
+  .modeSw.small .tg { width: 40px; height: 24px; border-radius: 12px; }
+  .modeSw.small .tg::after { width: 20px; height: 20px; }
+  .modeSw.small.long .tg::after { transform: translateX(16px); }
   .seg .btn { padding: 13px 0; font-size: 19px; }
   #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
   #groupList:empty { display: none; }
@@ -506,7 +511,6 @@
     <svg class="dirArc" id="dirTop" viewBox="0 0 160 30"><path d="M14 26Q80-8 146 26" marker-end="url(#dirHead)"/></svg>
     <svg class="dirArc" id="dirBot" viewBox="0 0 160 30"><defs><marker id="dirHead" viewBox="0 0 10 10" refX="7" refY="5"
       markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs><path d="M146 4Q80 38 14 4" marker-end="url(#dirHead)"/></svg>
-    <div class="modeSw" id="waitMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
     <div class="slot"><div id="deck"></div><span>Колода: <span id="deckCount">0</span></span></div>
     <div class="slot"><div id="pile"></div><span>Сброс: <span id="pileCount">0</span></span></div>
     <div class="slot"><div class="suit-now" id="suitNow"></div><span>Масть</span></div>
@@ -515,7 +519,7 @@
 
   <div class="status" id="status"></div>
   <div class="zone-line"></div>
-  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div></div>
+  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
 
@@ -684,7 +688,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 91;              // keep in sync with www/version.txt
+  const VERSION = 92;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1251,7 +1255,8 @@
   function cardEl(c, extra = '') {
     const el = document.createElement('div');
     el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
-    const mk = view && view.long && MARK[c.r] ? `<span class="mk">${MARK[c.r]}</span>` : '';
+    const many = view && view.players && view.players.filter(p => !p.out && !p.gone).length > 2;    // one on one the direction means nothing
+    const mk = view && view.long && MARK[c.r] && (c.r !== 10 || many) ? `<span class="mk">${MARK[c.r]}</span>` : '';
     el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}${mk}<small>${c.s}</small></div>` +
       (ART[c.r] ? `<div class="mid face">${ART[c.r]}<span>${c.s}</span></div>`
                 : `<div class="mid${c.r === 14 ? ' ace' : ''}">${c.s}</div>`);
@@ -1303,7 +1308,7 @@
     $('roundNo').textContent = v.roundNo;
     $('compass').style.display = '';
     document.body.dataset.back = v.back || 0;
-    document.body.classList.toggle('long', !!v.long);
+    document.body.classList.toggle('long', !!v.long && v.players.filter(p => !p.out && !p.gone).length > 2);
     document.body.classList.toggle('ccw', !!v.long && v.dir < 0);
     $('roomTag').textContent = (v.long ? ' · длинная' : '') + (v.room && !group ? ' · комната ' + v.room : '') + ' · v' + VERSION;
     $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
@@ -3427,7 +3432,7 @@
     $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
     $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
     $('myHand').innerHTML = '';
-    $('meBar').textContent = 'Вы за столом · ждём друзей';
+    $('meBar').textContent = 'Ждём друзей';
     document.body.classList.add('waiting');
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
@@ -3776,6 +3781,7 @@
     let pos = null;
     const place = (p = pos) => {
       pos = p;
+      if (pos && pos.x != null) { box.classList.add('placed'); box.style.left = '0px'; }   // measure the whole width
       if (pos && pos.s) pos.s = Math.min(pos.s, (innerWidth - 8) / (box.offsetWidth || 90));
       box.style.scale = pos && pos.s ? pos.s : '';
       if (!pos || pos.x == null) { box.classList.remove('placed'); box.style.left = box.style.top = ''; noteAside(); return; }
