@@ -351,7 +351,8 @@
   .voice.on { background: var(--gold); color: #222; }
   #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60; max-width: 92vw; display: none;
     background: #fff; color: #222; border-radius: 12px; padding: 10px 16px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
-  #toast.show { display: block; animation: toastIn .35s ease; }
+  #toast.show { display: block; animation: toastIn .35s ease; touch-action: none; }
+  #toast.gone { transition: translate .2s ease-in, opacity .2s ease-in; opacity: 0; }
   @keyframes toastIn { from { transform: translate(-50%, -20px); opacity: 0; } }
   /* ----- the start screen ----- */
   #setup { background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.08) 0%, transparent 45%), radial-gradient(ellipse at 50% 30%, var(--felt) 0%, var(--felt-dark) 100%); align-items: flex-start; padding: 0; overflow-y: auto; }
@@ -636,9 +637,8 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
-      <div id="longNote" class="gl" style="display:none">Хозяин выбрал длинную игру: 52 карты</div>
+      <div class="modeSw" id="lobMode" role="radiogroup" aria-label="Игра"><button data-long="0">Короткая</button><button data-long="1">Длинная</button><i></i></div>
       <div id="hostBox" class="col">
-        <div class="modeSw" role="radiogroup" aria-label="Игра"><button data-long="0">Короткая</button><button data-long="1">Длинная</button><i></i></div>
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
         <button class="btn" id="waitBtn">Ждать за столом</button>
@@ -679,7 +679,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 89;              // keep in sync with www/version.txt
+  const VERSION = 90;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2927,6 +2927,16 @@
       drawLobby();
       return;
     }
+    if (d.t === 'long') {                                   // somebody in the room chose the short or the long game
+      if (started || !lobby || !lobby.some(s => s.conn === conn)) return;
+      const who = lobby.find(s => s.conn === conn);
+      longPick = !!d.on;
+      try { localStorage.setItem('g101-long', longPick ? '1' : '0'); } catch {}
+      drawLobby();
+      if (window.drawModeSw) window.drawModeSw();
+      notifyUser(`${who.name} выбирает ${longPick ? 'длинную' : 'короткую'} игру`);
+      return;
+    }
     if (!started) return;
     const seat = players.findIndex(p => p.conn === conn);
     if (seat >= 0) { act(seat, d); return; }
@@ -2975,6 +2985,7 @@
     toastGroup = g || group;
     const el = $('toast');
     el.textContent = text;
+    el.classList.remove('gone'); el.style.translate = ''; el.style.opacity = '';
     el.classList.add('show');
     toastCode = code || '';
     clearTimeout(toastT);
@@ -3383,8 +3394,8 @@
       (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
     $('hostBox').style.display = host ? '' : 'none';
     [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length; });
+    if (window.drawModeSw) window.drawModeSw();
     if (host && waiting) drawWaiting(names); else showOnly('lobby');
-    $('longNote').style.display = !host && lobbyLong ? '' : 'none';
     if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick }); });
   }
   let lobbyLong = false;                                    // a guest: the host has chosen the long game
@@ -3409,11 +3420,12 @@
     $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
     $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
     $('myHand').innerHTML = '';
-    $('meBar').textContent = 'Вы за столом · ждём друзей';
+    $('meBar').textContent = 'Вы за столом · ждём друзей · ' + (longPick ? 'длинная игра' : 'короткая игра');
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
     const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
     if (names.length < MAX_PLAYERS) add('+ бот', () => { lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null }); drawLobby(); });
+    add(longPick ? 'Игра: длинная' : 'Игра: короткая', () => setRoomLong(!longPick));
     if (names.length >= 2) add('Начать', () => { waiting = false; started = true; startMatch(lobby); });
     if (window.placeActions) window.placeActions();
   }
@@ -3586,18 +3598,33 @@
   $('leaveBtn').onclick = leave;
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = testNet;
+  const roomLong = () => (mode === 'guest' ? lobbyLong : longPick);
   const drawModeSw = () => document.querySelectorAll('.modeSw').forEach(w => {
-    w.classList.toggle('long', longPick);
-    w.querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.long === '1') === longPick));
+    const on = w.id === 'lobMode' ? roomLong() : longPick;
+    w.classList.toggle('long', on);
+    w.querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.long === '1') === on));
   });
+  window.drawModeSw = drawModeSw;
+  // the table's game is chosen by anybody in the room: the host keeps the choice and tells everybody
+  function setRoomLong(on) {
+    if (mode === 'guest') {
+      if (lobbyLong === on) return;
+      lobbyLong = on;                                       // at once on this screen; the host confirms it
+      if (hostConn && hostConn.open) hostConn.send({ t: 'long', on });
+    } else {
+      longPick = on;
+      try { localStorage.setItem('g101-long', on ? '1' : '0'); } catch {}
+      if (mode === 'host' && lobby && !started) drawLobby();          // the guests see it at once
+    }
+    drawModeSw();
+  }
   document.querySelectorAll('.modeSw').forEach(w => {
     w.onclick = e => {
       const b = e.target.closest('[data-long]');
       if (!b) return;
-      longPick = b.dataset.long === '1';
-      try { localStorage.setItem('g101-long', longPick ? '1' : '0'); } catch {}
-      drawModeSw();
-      if (mode === 'host' && lobby && !started) drawLobby();          // the guests see it at once
+      const on = b.dataset.long === '1';
+      if (w.id === 'lobMode') setRoomLong(on);
+      else { longPick = on; try { localStorage.setItem('g101-long', on ? '1' : '0'); } catch {} drawModeSw(); }
     };
   });
   drawModeSw();
@@ -3849,6 +3876,35 @@
     };
     $('rulesBtn').onclick = () => $('rules').classList.add('show');
     $('rulesClose').onclick = () => $('rules').classList.remove('show');
+  }
+  {
+    const el = $('toast');
+    let at = null, swiped = false;
+    const put = (x, y) => { el.style.translate = `${x}px ${Math.min(0, y)}px`; el.style.opacity = String(Math.max(.2, 1 - Math.max(Math.abs(x), -y) / 160)); };
+    const reset = () => { el.style.translate = ''; el.style.opacity = ''; el.classList.remove('gone'); };
+    el.addEventListener('pointerdown', e => {
+      at = { x: e.clientX, y: e.clientY }; swiped = false;
+      clearTimeout(toastT);                                 // it stays while the finger holds it
+      try { el.setPointerCapture(e.pointerId); } catch {}
+    });
+    el.addEventListener('pointermove', e => { if (at) put(e.clientX - at.x, e.clientY - at.y); });
+    const up = e => {
+      if (!at) return;
+      const dx = e.clientX - at.x, dy = e.clientY - at.y;
+      at = null;
+      if (Math.abs(dx) > 50 || dy < -30) {                  // swiped away
+        swiped = true;
+        el.classList.add('gone');
+        put(Math.abs(dx) > 50 ? Math.sign(dx) * innerWidth : 0, Math.abs(dx) > 50 ? 0 : -120);
+        setTimeout(() => { el.classList.remove('show'); reset(); }, 200);
+        return;
+      }
+      reset();
+      toastT = setTimeout(() => el.classList.remove('show'), 5000);
+    };
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', e => { at = null; reset(); toastT = setTimeout(() => el.classList.remove('show'), 5000); });
+    el.addEventListener('click', e => { if (swiped) { swiped = false; e.stopImmediatePropagation(); } }, true);
   }
   $('toast').onclick = () => {
     $('toast').classList.remove('show');
