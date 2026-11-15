@@ -2,3 +2,5 @@ android/build/
 .claude/
 /101.apk
 *.idsig
+server/node_modules/
+server/.wrangler/
