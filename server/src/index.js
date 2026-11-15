@@ -7,6 +7,7 @@
 //   GET  /admin      the developer's page (behind a password that only the owner knows)
 import ADMIN_PAGE from './admin.html';
 export { Relay } from './relay.js';
+import { probeSocket, PROBE_PAGE } from './probe.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -113,6 +114,11 @@ export default {
         if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TG_HOOK) return json({ ok: false }, 403);
         return await hook(env, request);
       }
+      // measuring the network (see probe.js)
+      if (p === '/probe') return new Response(PROBE_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+      if (p === '/probe/ws') return probeSocket(url);
+      if (p === '/probe/blob') return new Response('x'.repeat(Math.min(200000, +url.searchParams.get('n') || 0)), { headers: { 'Cache-Control': 'no-store' } });
+      if (p === '/probe/echo') return new Response(String((await request.text()).length), { headers: { 'Cache-Control': 'no-store' } });
       if (p === '/admin') return new Response(ADMIN_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
       if (p.startsWith('/admin/')) return await admin(env, request, url);
       return new Response(
