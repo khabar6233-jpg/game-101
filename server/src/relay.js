@@ -23,6 +23,7 @@ export class Relay {
     this.subs = new Map();                                  // plain socket -> Set of topics
     this.clients = new Map();                               // burst client id -> its state
     this.epoch = Math.random().toString(36).slice(2, 8);    // changes when the relay starts anew and has forgotten everybody
+    this.rooms = new Map();                                 // the open rooms: code -> what its host last told
     for (const ws of state.getWebSockets()) {
       let a = null;
       try { a = ws.deserializeAttachment(); } catch {}
@@ -32,7 +33,37 @@ export class Relay {
     state.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
 
+  // The list of open rooms. Every host tells about its room every few seconds; a room that has not been
+  // heard of for a while is gone. A private room is shown only to the host's friends and to its players.
+  rooms_(url, body) {
+    const now = Date.now(), json = x => new Response(JSON.stringify(x), { headers: { 'Content-Type': 'application/json' } });
+    for (const [k, r] of this.rooms) if (now - r.at > 12000) this.rooms.delete(k);
+    if (body) {
+      const code = String(body.code || '');
+      if (!/^\d{4,10}$/.test(code)) return json({ ok: false });
+      if (body.gone) { this.rooms.delete(code); return json({ ok: true }); }
+      const str = (x, n) => String(x == null ? '' : x).slice(0, n);
+      const list = (x, n) => (Array.isArray(x) ? x : []).slice(0, 6).map(y => str(y, n));
+      const int = (x, a, b, d) => Math.min(b, Math.max(a, Math.round(+x) || d));
+      this.rooms.set(code, { code, at: now, name: str(body.name, 30), host: str(body.host, 40), names: list(body.names, 18), pids: list(body.pids, 40),
+        seats: int(body.seats, 2, 6, 6), hand: int(body.hand, 4, 6, 5), long: !!body.long, priv: !!body.priv, started: !!body.started,
+        spec: int(body.spec, 0, 999, 0), open: int(body.open, 0, 6, 0), ver: int(body.ver, 0, 99999, 0) });
+      if (this.rooms.size > 300) this.rooms.delete(this.rooms.keys().next().value);
+      return json({ ok: true });
+    }
+    const me = url.searchParams.get('pid') || '', fr = new Set((url.searchParams.get('fr') || '').split(',').filter(Boolean));
+    const out = [...this.rooms.values()].filter(r => !r.priv || r.host === me || fr.has(r.host) || r.pids.includes(me))
+      .map(({ at, ...r }) => r);
+    return json({ ok: true, rooms: out });
+  }
+
   async fetch(request) {
+    const url0 = new URL(request.url);
+    if (url0.pathname === '/rooms') {
+      let body = null;
+      if (request.method === 'POST') { try { body = JSON.parse(await request.text()) || {}; } catch { body = {}; } }
+      return this.rooms_(url0, body);
+    }
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('websocket only', { status: 426 });
     const cid = new URL(request.url).searchParams.get('c') || '';
     const pair = new WebSocketPair(), ws = pair[1];

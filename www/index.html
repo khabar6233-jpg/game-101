@@ -369,6 +369,39 @@
   .panel h3 { margin: 0; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
   .panel h3 small { letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; font-size: 12px; }
   .swRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  /* the start screen fills the screen: the list of games takes the room that is left, and scrolls inside */
+  .home { height: 100%; }
+  .home > * { flex: none; }
+  .panel.games { flex: 1 1 auto; min-height: 130px; overflow: hidden; }
+  .panel.games #rooms { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 6px; }
+  .home .two { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+  .home .room { cursor: pointer; padding: 8px 6px 8px 12px; }
+  .home .room.fr { box-shadow: 0 0 0 1.5px var(--gold) inset; }
+  .home .room .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .home .room .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .home .room .who span.go { color: #7fe0a4; }
+  .room .meta { flex: none; display: flex; gap: 8px; align-items: center; font-size: 15px; font-weight: 800; color: var(--text); }
+  .room .meta span { display: flex; flex-direction: column; align-items: center; line-height: 1.05; color: var(--text); font-size: 15px; }
+  .room .meta i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--muted); }
+  .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
+  .room .gearB { flex: none; border: 0; background: none; color: var(--muted); font-size: 20px; padding: 6px 6px; font-family: inherit; }
+  .botHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  /* a row of choices: 4 5 6, 2..6 */
+  .pick { display: flex; gap: 6px; justify-content: center; }
+  .pick button { flex: 1; border: 1.5px solid #cfd8d3; background: #f3f6f4; color: #222; border-radius: 10px; padding: 10px 0; font: inherit; font-size: 17px; font-weight: 800; }
+  .pick button.on { background: var(--felt); border-color: var(--felt); color: #fff; }
+  .pick.small { align-items: center; gap: 4px; flex: none; }
+  .pick.small small { color: var(--muted); font-size: 12px; margin-right: 2px; }
+  .pick.small button { flex: none; width: 34px; padding: 4px 0; font-size: 14px; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); color: var(--text); }
+  .pick.small button.on { background: rgba(255,255,255,.28); border-color: rgba(255,255,255,.7); }
+  .crField { display: flex; align-items: center; gap: 8px; border: 1.5px solid #cfd8d3; border-radius: 10px; padding: 0 10px; }
+  .crField span, .crRow > span { font-size: 14px; color: #555; flex: none; }
+  .crField input { flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-size: 17px; padding: 10px 0; background: none; color: #222; }
+  .crRow { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
+  #crMode { color: #222; gap: 10px; font-size: 17px; }
+  .crPriv { display: flex; align-items: center; gap: 10px; text-align: left; font-size: 14px; color: #333; }
+  .crPriv input { width: 22px; height: 22px; flex: none; accent-color: var(--felt); }
+  .lobInfo { font-size: 14px; color: #555; margin: 0 0 6px; }
   .swRow .ghost.small { flex: none; padding: 6px 10px; font-size: 12px; }
   .panel .hint { font-size: 12px; color: var(--muted); }
   .field.bad { border-color: #ff8a80; box-shadow: 0 0 0 2px rgba(255,138,128,.35); animation: nameShake .35s; }
@@ -538,28 +571,30 @@
       <button class="ghost" id="rulesBtn">Правила</button>
     </div>
 
-    <section class="panel">
-      <h3>С друзьями</h3>
-      <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off" autocapitalize="words" lang="ru"></div>
-      <div class="hint bad" id="nameHint"></div>
-      <div class="field"><span>Компания</span><input id="groupIn" maxlength="20" placeholder="Код компании" autocomplete="off"></div>
-      <div id="groupList"></div>
-      <div class="hint" id="groupHint">Нажмите на код, чтобы войти. Удерживайте — меню. Зелёный — там сейчас играют.</div>
+    <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off" autocapitalize="words" lang="ru"></div>
+    <div class="hint bad" id="nameHint"></div>
+
+    <section class="panel games">
+      <h3>Открытые игры</h3>
       <div id="rooms"></div>
-      <button class="btn wide" id="hostBtn" style="display:none">Создать комнату</button>
-      <div class="row" id="codeRow" style="display:none">
-        <input id="codeIn" maxlength="10" inputmode="numeric" placeholder="Код комнаты" autocomplete="off">
-        <button class="btn" id="joinBtn">Войти</button>
-      </div>
-      <div class="swRow"><label class="sw"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее, без голоса</span></label>
-        <button class="ghost small" id="netTest">Проверить связь</button></div>
       <div class="msg" id="netMsg"></div>
     </section>
 
-    <button class="btn wide" id="friendsBtn">Друзья</button>
+    <div class="two">
+      <button class="btn wide" id="createBtn">Создать игру</button>
+      <button class="btn wide" id="friendsBtn">Друзья</button>
+    </div>
+    <div class="swRow"><label class="sw"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее, без голоса</span></label>
+      <button class="ghost small" id="netTest">Проверить связь</button></div>
+    <!-- what is left of the company codes: not shown any more, kept for the code that still reads it -->
+    <div style="display:none">
+      <input id="groupIn"><div id="groupList"></div><div id="groupHint"></div>
+      <button id="hostBtn"></button><div id="codeRow"><input id="codeIn"><button id="joinBtn"></button></div>
+    </div>
 
     <section class="panel">
-      <h3>С ботами <small>· сколько игроков за столом</small></h3>
+      <div class="botHead"><h3>С ботами <small>· игроков</small></h3>
+        <div class="pick small" id="botHand"><small>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
         <button class="btn" data-bots="2">3</button>
@@ -642,10 +677,40 @@
   </div>
 </div>
 
+<div class="overlay" id="createDlg">
+  <div class="dialog">
+    <h2 id="crTitle">Новая игра</h2>
+    <div class="col">
+      <div class="crField"><span>Название</span><input id="crName" maxlength="30" autocomplete="off" placeholder="Стол"></div>
+      <div class="crRow"><span>Колода</span><div class="modeSw" id="crMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div></div>
+      <div class="crRow"><span>Мест за столом</span></div>
+      <div class="pick" id="crSeats"><button data-seats="2">2</button><button data-seats="3">3</button><button data-seats="4">4</button><button data-seats="5">5</button><button data-seats="6">6</button></div>
+      <div class="crRow"><span>Карт в руке</span></div>
+      <div class="pick" id="crHand"><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div>
+      <label class="crPriv"><input type="checkbox" id="crPriv"><span>Приватная: видят только ваши друзья</span></label>
+      <button class="btn" id="crGo">Создать</button>
+      <button class="btn plain" id="crCancel">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="roomInfo">
+  <div class="dialog">
+    <h2 id="riName"></h2>
+    <table id="riTable"></table>
+    <div class="col">
+      <button class="btn" id="riSeat">Сесть за стол</button>
+      <button class="btn plain" id="riWatch">Смотреть</button>
+      <button class="btn plain" id="riClose">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="lobby">
   <div class="dialog">
-    <p id="lobCodeP">Код комнаты</p>
+    <p id="lobCodeP">Комната</p>
     <div class="code" id="lobCode"></div>
+    <p id="lobInfo" class="lobInfo"></p>
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
@@ -654,6 +719,7 @@
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
         <button class="btn" id="waitBtn">Ждать за столом</button>
+        <button class="btn plain" id="roomEditBtn">⚙ Настройки комнаты</button>
       </div>
       <button class="btn plain" id="leaveBtn">Выйти</button>
     </div>
@@ -691,12 +757,23 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 93;              // keep in sync with www/version.txt
+  const VERSION = 94;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
   const PILE_SHOWN = 5, PILE_STEP = 20;   // how many discarded cards stay visible, and their shift in px
   const HAND_SIZE = 5, LOSE_AT = 102, RESET_AT = 101, MAX_PLAYERS = 6;
+  let handN = HAND_SIZE;           // cards dealt to each player in this match (4..6)
+  // what this device chose last time: cards in hand, seats, a private room
+  let handPick = HAND_SIZE, seatsPick = 4, privPick = false;
+  try {
+    handPick = Math.min(6, Math.max(4, +localStorage.getItem('g101-hand') || HAND_SIZE));
+    seatsPick = Math.min(6, Math.max(2, +localStorage.getItem('g101-seats') || 4));
+    privPick = localStorage.getItem('g101-priv') === '1';
+  } catch {}
+  // the room this device keeps (the host): its name and settings, shown to everybody in the list of games
+  let roomName = '', roomSeats = MAX_PLAYERS, roomHand = HAND_SIZE, roomPriv = false;
+  let lobbyRoom = null;            // a guest: the room's settings as its host told them
   const DELAY = 700;        // a bot "thinks" this long before its move
   const PLAY_PAUSE = 650;   // pause after any card is played, before its effect and the next turn
 
@@ -837,6 +914,7 @@
     newMatch();
     players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, pid: s.pid || '', hand: [], score: 0, out: false }));
     deckLong = longPick;
+    handN = mode === 'solo' ? handPick : roomHand;
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = []; result = null;
     backNo = (backNo + 1 + Math.floor(Math.random() * (BACKS - 1))) % BACKS;
@@ -853,10 +931,10 @@
     pile = []; sixRun = 0; pendingSix = 0; passStreak = 0; drew = false; busy = false; pendingQueen = null; result = null;
     dir = 1; fourBy = -1; fourDraw = 0;
     players.forEach(p => { p.hand = []; });
-    for (let k = 0; k < HAND_SIZE; k++) active().forEach(p => p.hand.push(deck.pop()));
+    for (let k = 0; k < handN; k++) active().forEach(p => { if (deck.length) p.hand.push(deck.pop()); });
     phase = 'play';
     turn = starter;
-    // the starter keeps 4 cards; the 5th is opened as their move
+    // the starter keeps all but one card; that one is opened as their move
     // a six or an ace is never the opening card
     const st = players[starter];
     const openable = st.hand.filter(c => !isSpecialEnd(c));
@@ -1157,7 +1235,7 @@
       const seat = { name: sp.name, isBot: false, conn: sp.conn, pid: sp.pid || '', hand: [], score: 0, out: false };
       const bi = players.findIndex(p => p.isBot);
       if (bi >= 0) players[bi] = seat;                      // a bot gives up its place
-      else if (players.length < MAX_PLAYERS) players.push(seat);
+      else if (players.length < roomSeats) players.push(seat);
       else return;
       specs.delete(id);
     });
@@ -1918,7 +1996,7 @@
   });
 
   async function testNet() {
-    if (lite) { testLite(); return; }
+    if (lite) return testLite();
     netMsg('Проверяем связь (12 секунд)…');
     // step by step for every server: connected? subscribed? do short messages come back? do long ones?
     const one = url => new Promise(res => {
@@ -2331,13 +2409,16 @@
         else if (mode === 'host' && peer.id === ownerId) {
           conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
           if (roomGroup) peer.send(groupTopic(roomGroup), { t: 'room', code: roomCode, gone: true });
+          if (roomCode) srv('/rooms', { code: roomCode, gone: 1 });    // gone from the list of games at once
         }
       } catch {}
       try { peer.close(); } catch {}
     }
     vAuto = false;
     waiting = false; $('compass').style.display = '';
+    clearInterval(srvAnnT);
     conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
+    lobbyRoom = null;
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
     animRound = 0; prevHand = null; flyingTop = null;
@@ -2617,6 +2698,7 @@
     const me = peer ? peer.id : '';
     return {
       term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup, matchId, duel, long: deckLong, dir, fourBy, fourDraw,
+      handN, room: { name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv },
       specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
         name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
@@ -2637,6 +2719,8 @@
     roundNo = st.roundNo; phase = st.phase; pend = st.pend; busy = false; backNo = st.back || 0;
     matchId = st.matchId || ''; duel = st.duel || null; deckLong = !!st.long;
     dir = st.dir || 1; fourBy = st.fourBy == null ? -1 : st.fourBy; fourDraw = st.fourDraw || 0;
+    handN = st.handN || HAND_SIZE;
+    if (st.room) { roomName = st.room.name || ''; roomSeats = st.room.seats || MAX_PLAYERS; roomHand = st.room.hand || HAND_SIZE; roomPriv = !!st.room.priv; }
     pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
     result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
     log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
@@ -2673,6 +2757,7 @@
   }
   // nobody answered in this room: I am the first one here, so my device keeps the table
   function becomeRoomHost(n, code) {
+    takeRoomPicks();
     n.sub(hostTopic(code));
     conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
     mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
@@ -2681,7 +2766,19 @@
     drawLobby();
     hostTimer(n, code);
   }
+  // the list of games on the game's server: who sits here, how many seats, cards in hand, the deck
+  let srvAnnT = null;
+  function roomToServer(code) {
+    if (mode !== 'host' || !code) return;
+    const seated = started ? players.filter(p => !p.removed) : lobby || [];
+    srv('/rooms', { code, name: roomName, host: myPid, names: seated.map(p => p.name), pids: seated.map(p => p.pid || '').filter(Boolean),
+      seats: roomSeats, hand: started ? handN : roomHand, long: started ? deckLong : longPick, priv: roomPriv, started: !!started,
+      spec: specs.size, open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0, ver: VERSION });
+  }
   function hostTimer(n, code) {
+    clearInterval(srvAnnT);
+    srvAnnT = setInterval(() => { if (peer !== n || mode !== 'host') { clearInterval(srvAnnT); return; } roomToServer(code); }, 3000);
+    setTimeout(() => roomToServer(code), 300);
     clearInterval(annT);
     annT = setInterval(() => { if (peer !== n || mode !== 'host') { clearInterval(annT); return; } hostAnnounce(n, code); }, lite ? 3000 : 2000);
     hostAnnounce(n, code);
@@ -2745,7 +2842,7 @@
       if (d.st && (d.st.term || 0) >= gTerm && view && !view.spec) { gSnap = d.st; takeOver(n, code, true); }
       return;
     }
-    if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; lobbyLong = !!d.long; netMsg(''); drawLobby(); }
+    if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; lobbyLong = !!d.long; lobbyRoom = d.room || null; netMsg(''); drawLobby(); }
     else if (d.t === 'view' && d.v) {
       const t = d.v.term || 0;
       if (t < gTerm) return;                                // a host that has already been replaced
@@ -2759,7 +2856,11 @@
       view = d.v;
       try { draw(view); } catch (e) { console.error(e); }
     } else if (d.t === 'ok') { if ((d.term || 0) >= gTerm) gHeard = Date.now(); }
-    else if (d.t === 'full') { if (!gJoined) quit('Комната заполнена или игра уже идёт'); }
+    else if (d.t === 'full') {
+      if (gJoined) return;
+      joinWant = 'watch'; gT0 = Date.now();                 // keep asking: when the game starts, I come in to watch
+      netMsg('Все места заняты. Когда игра начнётся, вы сможете смотреть.');
+    }
     else if (d.t === 'kicked') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты убрал вас из игры'); }
     else if (d.t === 'closed') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты вышел из игры. Игра окончена.'); }
   }
@@ -2853,7 +2954,7 @@
     netMsg('Создаём комнату…');
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
-    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const code = String(Math.floor(100000 + Math.random() * 900000));
     let taken = false;
     const n = netOpen((topic, from, d) => {
       if (peer !== n || !d || typeof d !== 'object') return;
@@ -2879,6 +2980,7 @@
     await pause(1000);
     if (peer !== n) return;
     if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
+    takeRoomPicks();
     conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
     mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
     lobby = [{ name: myName(), conn: null, isBot: false, pid: myPid }];
@@ -2887,12 +2989,19 @@
     hostTimer(n, code);
   }
 
+  // the room gets the settings this device chose in "Создать игру"
+  function takeRoomPicks() {
+    roomName = (namePick() || ('Стол ' + myName())).slice(0, 30);
+    roomSeats = seatsPick; roomHand = handPick; roomPriv = privPick;
+  }
+  const namePick = () => { try { return (localStorage.getItem('g101-rname') || '').trim(); } catch { return ''; } };
+  const roomInfoMsg = () => ({ name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv });
   const lobbyNames = () => lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? ' (другая версия игры)' : ''));
 
   // send a guest the current state again (answers every ping, so a lost message heals itself)
   function resync(conn, d) {
     if (!started) {
-      if (lobby && lobby.some(s => s.conn === conn)) conn.send({ t: 'lobby', code: roomCode, names: lobbyNames(), ver: VERSION, long: longPick });
+      if (lobby && lobby.some(s => s.conn === conn)) conn.send({ t: 'lobby', code: roomCode, names: lobbyNames(), ver: VERSION, long: longPick, room: roomInfoMsg() });
       return;
     }
     const seat = players.findIndex(p => p.conn === conn);
@@ -2936,7 +3045,7 @@
       }
       const seat = pid && lobby ? lobby.find(x => x.pid === pid && x.conn) : null;
       if (seat) { retire(seat.conn); seat.conn = conn; seat.ver = +d.ver || 0; drawLobby(); return; }
-      if (!lobby || lobby.length >= MAX_PLAYERS) { conn.send({ t: 'full' }); return; }
+      if (!lobby || lobby.length >= roomSeats) { conn.send({ t: 'full' }); return; }
       lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false, ver: +d.ver || 0, pid });
       drawLobby();
       return;
@@ -3016,7 +3125,40 @@
     } catch {}
   }
 
+  let roomList = null, roomListErr = 0;
+  const isMine = r => r.host === myPid || r.pids.includes(myPid);
+  const isFriendRoom = r => isFriend(r.host) || r.pids.some(isFriend);
+  async function pollRooms() {
+    if (!$('setup').classList.contains('show') || document.hidden || mode !== 'solo') return;
+    const r = await srv('/rooms?pid=' + encodeURIComponent(myPid) + '&fr=' + encodeURIComponent(Object.keys(friends).join(',')));
+    if (r && r.ok && Array.isArray(r.rooms)) {
+      // friends' rooms first, then rooms waiting for players, then fuller tables
+      const k = x => (isFriendRoom(x) ? 0 : 4) + (x.started ? 2 : 0) + (x.names.length >= x.seats ? 1 : 0);
+      roomList = r.rooms.sort((a, b) => k(a) - k(b) || b.names.length - a.names.length);
+      roomListErr = 0;
+      rooms.clear(); roomList.forEach(x => rooms.set(x.code, { names: x.names, started: x.started, t: Date.now() }));
+    } else roomListErr++;
+    drawRooms();
+  }
+  function roomRow(r) {
+    const n = r.names.length, full = n >= r.seats;
+    const status = r.started ? 'идёт игра' + (r.spec ? ' · зрителей ' + r.spec : '') : full ? 'мест нет' : 'ждут игроков';
+    return `<div class="room${isFriendRoom(r) ? ' fr' : ''}" data-code="${esc(r.code)}">` +
+      `<div class="who"><b>${isFriendRoom(r) ? '★ ' : ''}${esc(r.name || r.names[0] || 'Стол')}${r.priv ? ' 🔒' : ''}</b>` +
+      `<span class="${r.started ? '' : 'go'}">${esc(r.names.join(', '))} · ${status}</span></div>` +
+      `<div class="meta"><span>${r.hand}<i>в руке</i></span><span>${n}/${r.seats}<i>мест</i></span><span class="dk">${r.long ? 52 : 36}</span></div>` +
+      `<button class="gearB" data-gear="${esc(r.code)}" aria-label="Настройки комнаты">⚙</button></div>`;
+  }
   function drawRooms() {
+    const el = $('rooms');
+    let html;
+    if (roomList === null) html = '<p class="none">' + (roomListErr > 1 ? 'Нет связи с сервером игры: список не загрузился.' : 'Загружаем список игр…') + '</p>';
+    else if (!roomList.length) html = '<p class="none">Открытых игр сейчас нет. Создайте свою — её увидят все.</p>';
+    else html = roomList.map(roomRow).join('') + (roomListErr > 2 ? '<p class="none">Нет связи с сервером игры: список может быть устаревшим.</p>' : '');
+    if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+    return;
+  }
+  function drawRoomsOld() {
     const el = $('rooms');
     if (!group) { el.dataset.h = ''; el.innerHTML = '<p class="none">Введите код компании. По нему вы с друзьями попадаете за один стол.</p>'; return; }
     const who = online.size ? `<p class="none">В сети: ${[...online].map(([id, x]) => isFriend(id) ? `<span class="addf">★ ${esc(x.name)}</span>`
@@ -3134,7 +3276,7 @@
     helloAt = Date.now();
     const ua = navigator.userAgent;
     srv('/hello', Object.assign({
-      pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: group || '', tg: !!tgChat, chat: tgChat || 0,
+      pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: mode === 'solo' ? '' : (mode === 'host' ? roomName : (lobbyRoom && lobbyRoom.name) || ''), tg: !!tgChat, chat: tgChat || 0,
       dev: window.App101 ? 'apk' : /iPhone|iPad|iPod/.test(ua) ? 'iphone' : /Android/.test(ua) ? 'android' : 'pc',
       mode: mode === 'solo' ? (phase === 'setup' ? 'menu' : 'bots') : 'table',
       room: mode === 'solo' ? '' : roomCode || '', host: mode === 'host',
@@ -3401,19 +3543,24 @@
   function drawLobby() {
     const host = mode === 'host';
     const names = host ? lobbyNames() : lobby;
-    $('lobCode').textContent = roomCode;
-    $('lobHint').textContent = host ? (roomGroup ? 'Друзья с вашим кодом компании видят эту комнату в списке и входят одним нажатием.' : 'Скажите этот код друзьям.') + ' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
+    const ri = host ? roomInfoMsg() : lobbyRoom || {};
+    $('lobCode').textContent = ri.name || roomCode;
+    $('lobInfo').textContent = roomLine(host ? longPick : lobbyLong, ri.hand || HAND_SIZE, names.length, ri.seats || MAX_PLAYERS, ri.priv);
+    $('lobHint').textContent = host ? (roomPriv ? 'Комнату видят только ваши друзья.' : 'Комнату видят все в списке «Открытые игры».') + ' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
       : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
     $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
       (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
     $('hostBox').style.display = host ? '' : 'none';
-    [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length; });
+    $('roomEditBtn').style.display = host && !started ? '' : 'none';
+    [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length || +b.dataset.n > roomSeats; });
     if (window.drawModeSw) window.drawModeSw();
     document.body.classList.toggle('waiting', host && waiting);
     if (host && waiting) drawWaiting(names); else showOnly('lobby');
-    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick }); });
+    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick, room: roomInfoMsg() }); });
+    if (host) roomToServer(roomCode);
   }
   let lobbyLong = false;                                    // a guest: the host has chosen the long game
+  const roomLine = (long, hand, n, seats, priv) => `Колода ${long ? 52 : 36} · ${hand} ${hand === 5 || hand === 6 ? 'карт' : 'карты'} в руке · мест ${n}/${seats}` + (priv ? ' · приватная' : '');
 
   // The host waits at an empty table: friends who come in sit down, bots can be added, the game starts on a tap.
   let waiting = false;
@@ -3440,7 +3587,7 @@
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
     const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
-    if (names.length < MAX_PLAYERS) add('+ бот', () => { lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null }); drawLobby(); });
+    if (names.length < roomSeats) add('+ бот', () => { lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null }); drawLobby(); });
     if (names.length >= 2) add('Начать', () => { waiting = false; started = true; startMatch(lobby); });
     if (window.placeActions) window.placeActions();
   }
@@ -3556,7 +3703,7 @@
   };
   onTap($('history'), () => { $('history').classList.remove('show'); return true; });
   // any window closes with a tap outside it (on the dark around it)
-  ['gear', 'oppInfo', 'friendsScr', 'rules', 'chipMenu', 'suitPick', 'result'].forEach(id => {
+  ['gear', 'oppInfo', 'friendsScr', 'rules', 'chipMenu', 'suitPick', 'result', 'createDlg', 'roomInfo'].forEach(id => {
     const o = $(id);
     let d = null;
     o.addEventListener('pointerdown', e => { d = e.target === o ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null; });
@@ -3612,10 +3759,16 @@
   });
   $('leaveBtn').onclick = leave;
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
-  $('netTest').onclick = testNet;
+  $('netTest').onclick = async () => {
+    const b = $('netTest');
+    if (b.dataset.fold) { netMsg(''); b.textContent = 'Проверить связь'; delete b.dataset.fold; return; }
+    b.disabled = true;
+    try { await testNet(); } catch {}
+    b.disabled = false; b.textContent = 'Свернуть'; b.dataset.fold = '1';
+  };
   const roomLong = () => (mode === 'guest' ? lobbyLong : longPick);
   const drawModeSw = () => document.querySelectorAll('.modeSw').forEach(w => {
-    const on = w.id === 'lobMode' || w.id === 'waitMode' ? roomLong() : longPick;
+    const on = w.id === 'lobMode' || w.id === 'waitMode' ? roomLong() : longPick;   // the start screen and "Создать игру": this device's choice
     w.classList.toggle('long', on);
     w.querySelectorAll('[data-long]').forEach(b => b.classList.toggle('on', (b.dataset.long === '1') === on));
     w.querySelector('.tg').setAttribute('aria-checked', on ? 'true' : 'false');
@@ -3854,7 +4007,7 @@
   };
   // a sound that the browser refused to start on its own starts with the next touch
   document.addEventListener('pointerup', () => { if (vOn()) aGet(); if (vSpk) vPeers.forEach(p => { if (p.audio.paused && p.audio.srcObject) p.audio.play().catch(() => {}); }); });
-  try { group = normGroup(localStorage.getItem('g101-group')); groups = JSON.parse(localStorage.getItem('g101-groups')) || []; } catch {}
+  group = ''; groups = [];                                  // no company codes any more: rooms have names and a list
   if (!Array.isArray(groups)) groups = [];
   groups = groups.map(normGroup).filter(Boolean);
   if (group && !groups.includes(group)) groups.unshift(group);
@@ -3931,12 +4084,90 @@
       $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom();
     }
   };
+  const findRoom = code => (roomList || []).find(r => r.code === code);
+  // sit down at a room from the list (or come in to watch when there is no free seat)
+  function joinListed(code, want) {
+    if (needName()) return;
+    const r = findRoom(code);
+    if (!r) return;
+    joinWant = want || (r.started ? (r.open > 0 ? 'seat' : 'watch') : r.names.length < r.seats ? 'seat' : 'watch');
+    $('codeIn').value = code;
+    joinRoom(false);
+  }
+  let infoCode = '';
+  function openRoomInfo(code) {
+    const r = findRoom(code);
+    if (!r) return;
+    infoCode = code;
+    const n = r.names.length, full = n >= r.seats;
+    $('riName').textContent = r.name || 'Стол';
+    const rows = [['Игроки', r.names.join(', ') || '—'], ['Колода', r.long ? '52 карты' : '36 карт'], ['Карт в руке', r.hand],
+      ['Мест', n + ' из ' + r.seats], ['Комната', r.priv ? 'приватная' : 'открытая'],
+      ['Сейчас', r.started ? 'идёт игра' + (r.spec ? ', зрителей ' + r.spec : '') : 'ждут игроков']];
+    $('riTable').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${esc(b)}</td></tr>`).join('');
+    $('riSeat').style.display = (!r.started && !full) || (r.started && r.open > 0) ? '' : 'none';
+    $('riSeat').textContent = r.started ? 'Сесть вместо бота' : 'Сесть за стол';
+    $('roomInfo').classList.add('show');
+  }
   $('rooms').onclick = e => {
-    const f = e.target.closest('[data-af]');
-    if (f) { addFriend(f.dataset.af, f.dataset.n); drawRooms(); return; }
-    const b = e.target.closest('[data-w]');
-    if (b) enterRoom(b.dataset.w);
+    const g = e.target.closest('[data-gear]');
+    if (g) { openRoomInfo(g.dataset.gear); return; }
+    const row = e.target.closest('[data-code]');
+    if (row) joinListed(row.dataset.code);
   };
+  $('riClose').onclick = () => $('roomInfo').classList.remove('show');
+  $('riSeat').onclick = () => { $('roomInfo').classList.remove('show'); joinListed(infoCode, 'seat'); };
+  $('riWatch').onclick = () => { $('roomInfo').classList.remove('show'); joinListed(infoCode, 'watch'); };
+
+  // "Создать игру" (and, for the host in the room, "Настройки комнаты"): name, deck, seats, cards in hand, private
+  let crEdit = false;
+  const drawPicks = () => {
+    document.querySelectorAll('#crSeats [data-seats]').forEach(b => b.classList.toggle('on', +b.dataset.seats === seatsPick));
+    document.querySelectorAll('#crHand [data-hand], #botHand [data-hand]').forEach(b => b.classList.toggle('on', +b.dataset.hand === handPick));
+  };
+  function openCreate(edit) {
+    if (!edit && needName()) return;
+    crEdit = !!edit;
+    if (edit) { seatsPick = roomSeats; handPick = roomHand; privPick = roomPriv; }
+    $('crTitle').textContent = edit ? 'Настройки комнаты' : 'Новая игра';
+    $('crGo').textContent = edit ? 'Сохранить' : 'Создать';
+    $('crName').value = edit ? roomName : namePick() || ('Стол ' + myName());
+    $('crPriv').checked = privPick;
+    drawPicks();
+    if (window.drawModeSw) window.drawModeSw();
+    $('createDlg').classList.add('show');
+  }
+  const savePicks = () => {
+    try {
+      localStorage.setItem('g101-hand', handPick); localStorage.setItem('g101-seats', seatsPick);
+      localStorage.setItem('g101-priv', privPick ? '1' : '0'); localStorage.setItem('g101-rname', $('crName').value.trim());
+    } catch {}
+  };
+  $('crSeats').onclick = e => { const b = e.target.closest('[data-seats]'); if (b) { seatsPick = +b.dataset.seats; drawPicks(); } };
+  $('crHand').onclick = e => { const b = e.target.closest('[data-hand]'); if (b) { handPick = +b.dataset.hand; drawPicks(); } };
+  $('botHand').onclick = e => { const b = e.target.closest('[data-hand]'); if (b) { handPick = +b.dataset.hand; drawPicks(); savePicks(); } };
+  $('crPriv').onchange = () => { privPick = $('crPriv').checked; };
+  $('crCancel').onclick = () => $('createDlg').classList.remove('show');
+  $('crGo').onclick = () => {
+    privPick = $('crPriv').checked;
+    savePicks();
+    $('createDlg').classList.remove('show');
+    if (crEdit) {
+      if (mode !== 'host' || started) return;
+      const n = lobby ? lobby.length : 1;
+      if (seatsPick < n) { notifyUser(`За столом уже ${n}: мест не может быть меньше`); seatsPick = n; }
+      takeRoomPicks();
+      drawLobby();
+      return;
+    }
+    createRoom();
+  };
+  $('createBtn').onclick = () => openCreate(false);
+  $('roomEditBtn').onclick = () => openCreate(true);
+  drawPicks();
+  setInterval(pollRooms, 3000);
+  setTimeout(pollRooms, 300);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollRooms(); });
   $('friendsBtn').onclick = () => { drawFriends(); $('friendsScr').classList.add('show'); };
   $('gearFriends').onclick = () => { $('gear').classList.remove('show'); drawFriends(); $('friendsScr').classList.add('show'); };
   $('friendsClose').onclick = () => $('friendsScr').classList.remove('show');
@@ -3970,9 +4201,13 @@
     if (!h || !$('setup').classList.contains('show')) return;
     const a = document.activeElement;
     if (a && a.tagName === 'INPUT' && a.type !== 'checkbox' && h.contains(a)) return;
-    h.style.zoom = '';
+    h.style.zoom = ''; h.style.height = 'auto';
+    const g = h.querySelector('.panel.games'), was = g && g.style.flex;
+    if (g) g.style.flex = '0 0 130px';
     const need = h.scrollHeight, room = (window.visualViewport ? visualViewport.height : innerHeight);
-    if (need > room) h.style.zoom = String(Math.max(.6, Math.floor(room / need * 1000) / 1000));
+    if (g) g.style.flex = was || '';
+    h.style.height = '';
+    if (need > room) { const z = Math.max(.6, Math.floor(room / need * 1000) / 1000); h.style.zoom = String(z); h.style.height = (room / z) + 'px'; }
   }
   window.fitHome = fitHome;
   addEventListener('resize', () => setTimeout(fitHome, 50));
