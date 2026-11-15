@@ -280,6 +280,10 @@
   .card.new { animation: newFade 3.5s ease-out both; }
   .card .tl { position: absolute; left: 5px; top: 3px; font-size: calc(var(--cw) * .27); line-height: 1; text-align: center; }
   .card .tl small { display: block; font-size: calc(var(--cw) * .25); }
+  .card .tl .mk { position: absolute; left: 100%; top: 0; margin-left: calc(var(--cw) * .03); font-size: calc(var(--cw) * .2);
+    font-weight: 800; line-height: 1; white-space: nowrap; }
+  .card .tl .mk svg { display: block; width: calc(var(--cw) * .27); height: calc(var(--cw) * .27);
+    fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
   .card .mid { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .55); }
   /* jack, queen, king: a picture with the suit under it; ace: the suit in a double ring */
   .card .mid.face { flex-direction: column; padding-top: 16%; font-size: calc(var(--cw) * .34); line-height: 1; }
@@ -384,9 +388,10 @@
     background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.14); }
   .modeSw button { position: relative; z-index: 1; border: 0; background: none; color: var(--muted); font: inherit; font-size: 17px; font-weight: 700;
     padding: 11px 0; border-radius: 12px; transition: color .25s; -webkit-tap-highlight-color: transparent; }
-  .modeSw button.on { color: #1d1606; }
-  .modeSw i { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 12px; background: var(--gold);
-    transition: transform .25s ease; pointer-events: none; }
+  .modeSw button.on { color: #fff; }
+  .modeSw i { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 12px;
+    background: linear-gradient(rgba(255,255,255,.3), rgba(255,255,255,.13)); border: 1px solid rgba(255,255,255,.35);
+    box-shadow: 0 2px 6px rgba(0,0,0,.25); transition: transform .25s ease; pointer-events: none; }
   .modeSw.long i { transform: translateX(100%); }
   .seg .btn { padding: 13px 0; font-size: 19px; }
   #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -603,9 +608,9 @@
       <li>Дама кладётся на любую карту и заказывает масть.</li>
       <li>На шестёрке и тузе раунд не кончается: в свой ход берёте карту, подошла — накрываете и выигрываете.</li>
       <li>102 очка — проигрыш, ровно 101 — счёт обнуляется.</li>
-      <li><b>Длинная игра</b> — колода из 52 карт, очки двоек–пятёрок по номиналу. Двойка, тройка, пятёрка и восьмёрка — обычные карты.</li>
+      <li><b>Длинная игра</b> — колода из 52 карт, очки двоек–пятёрок по номиналу. Двойка, тройка, четвёрка и пятёрка — обычные карты.</li>
       <li>Семёрка — соседу 1 карта и пропуск хода, каждая семёрка подряд — ещё +1. Шестёрка — как в короткой: 2 карты, каждая подряд ещё +2. Втроём и больше их можно перевести такой же картой.</li>
-      <li>Четвёрку кроет тот, кто её положил. Нечем — берёт до 3 карт, не подошло — пас.</li>
+      <li>Восьмёрку кроет тот, кто её положил. Нечем — берёт до 3 карт, не подошло — пас.</li>
       <li>Десятка меняет направление игры: его показывают стрелки на столе.</li>
     </ul>
     <button class="btn" id="rulesClose" style="width:100%">Понятно</button>
@@ -674,7 +679,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 88;              // keep in sync with www/version.txt
+  const VERSION = 89;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -689,7 +694,8 @@
   let deckLong = false;            // this game: 52 cards
   // the long game only: the direction of play (a ten turns it), and who must cover their own four
   let dir = 1, fourBy = -1, fourDraw = 0;
-  const FOUR_MAX = 3;              // a four: the one who laid it draws at most this many cards to cover it
+  const FOUR_MAX = 3;              // an eight: the one who laid it draws at most this many cards to cover it
+                                   // (the names say "four": that card had this job first)
   let longPick = false;            // the switch on this device: the next game I start is long
   try { longPick = localStorage.getItem('g101-long') === '1'; } catch {}
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
@@ -787,7 +793,7 @@
   const canPlay = c => (pendingSix ? c.r === (deckLong ? top().r : 6) && active().length >= 3 :c.r === 12 || c.s === suit || c.r === top().r);
   const label = c => RANK_NAME[c.r] + c.s;
   // nobody wins on these cards (and the round does not open with them)
-  const isSpecialEnd = c => (deckLong ? c.r === 6 || c.r === 7 || c.r === 4 || c.r === 14 : c.r === 6 || c.r === 14);
+  const isSpecialEnd = c => (deckLong ? c.r === 6 || c.r === 7 || c.r === 8 || c.r === 14 : c.r === 6 || c.r === 14);
   const pointsWord = n => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? 'очков' : b === 1 ? 'очко' : b >= 2 && b <= 4 ? 'очка' : 'очков'; };
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
   const handPoints = p => p.hand.reduce((n, c) => n + POINTS(c.r), 0);
@@ -927,9 +933,9 @@
       const k = pendingSix;
       const or = active().length >= 3 ? ' или подкинуть ' + PEN_WORD[card.r] : '';   // one on one a stack cannot be answered
       say(who(n, `должны взять ${k} ${cardsWord(k)}${or}`, `должен взять ${k} ${cardsWord(k)}${or}`));
-    } else if (deckLong && card.r === 4) {     // a four: the same player covers it
+    } else if (deckLong && card.r === 8) {     // an eight: the same player covers it
       n = pi; fourBy = pi; fourDraw = 0;
-      say(who(pi, 'кроете свою четвёрку', 'кроет свою четвёрку'));
+      say(who(pi, 'кроете свою восьмёрку', 'кроет свою восьмёрку'));
     }
     turn = n;
     drew = false;
@@ -1230,10 +1236,17 @@
   };
   for (let r = 11; r <= 13; r++) for (let i = 0; i < 4; i++) new Image().src = `cards/${r}_${i}.png`;   // load ahead
   ['atlas', 'rus', 'swiss'].forEach(n => { new Image().src = `backs/${n}.jpg`; });
+  // the long game: a mark next to the number tells what the card does
+  const MARK = {
+    6: '+2', 7: '+1',
+    8: '<svg viewBox="0 0 24 24"><path d="M19.2 8.6A8 8 0 0 0 5.4 7.4M4.8 15.4a8 8 0 0 0 13.8 1.2"/><path d="M4.9 3.4l.5 4 4-.6M19.1 20.6l-.5-4-4 .6"/></svg>',
+    10: '<svg viewBox="0 0 24 24"><path d="M3.5 8h16M15.5 4l4 4-4 4"/><path d="M20.5 16h-16M8.5 12l-4 4 4 4"/></svg>'
+  };
   function cardEl(c, extra = '') {
     const el = document.createElement('div');
     el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
-    el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}<small>${c.s}</small></div>` +
+    const mk = view && view.long && MARK[c.r] ? `<span class="mk">${MARK[c.r]}</span>` : '';
+    el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}${mk}<small>${c.s}</small></div>` +
       (ART[c.r] ? `<div class="mid face">${ART[c.r]}<span>${c.s}</span></div>`
                 : `<div class="mid${c.r === 14 ? ' ace' : ''}">${c.s}</div>`);
     if (c.r >= 11 && c.r <= 13) {
