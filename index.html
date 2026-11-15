@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 85;              // keep in sync with www/version.txt
+  const VERSION = 86;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2056,22 +2056,35 @@
     };
   }
   function srvBursts(subs, onMessage) {
-    const FRAMES = 10, AGE = 5000;                           // packets per session (both ways), and how long one may stay open
+    // Packets per session (both ways) and how long one may stay open. On mobile networks only what the phone
+    // SENDS is counted: about 7 packets per connection. A long message is cut into packets of about 1300 bytes
+    // on its way, so the sending side is counted in such pieces (UP of them per session).
+    const FRAMES = 10, AGE = 5000, UP = 5, PIECE = 1300;
     const cid = Math.random().toString(36).slice(2, 12), out = [];
-    let ws = null, alive = true, ever = false, frames = 0, epoch = '', got = 0, oid = 0, subsDirty = false, t1 = null, t2 = null, sess = 0, waiting = false;
+    let ws = null, alive = true, ever = false, frames = 0, upUsed = 0, epoch = '', got = 0, oid = 0, subsDirty = false, t1 = null, t2 = null, sess = 0, waiting = false;
     const pack = hi => {
       const d = { e: epoch, a: got };
       if (hi) { d.hi = 1; d.s = [...subs]; } else if (subsDirty) d.s = [...subs];
       subsDirty = false;
-      const fresh = out.filter(m => m.sentIn !== sess);
+      // as many waiting messages as fit into what this session may still send (always at least one)
+      let room = (UP - upUsed) * PIECE - 200 - (d.s ? d.s.join().length + 4 * d.s.length : 0);
+      const fresh = [];
+      for (const m of out) {
+        if (m.sentIn === sess) continue;
+        const size = m.text.length + m.t.length + 40;
+        if (fresh.length && size > room) break;
+        fresh.push(m); room -= size;
+      }
       if (fresh.length) { d.o = fresh.map(m => ({ i: m.i, p: m.t, m: m.text, k: m.keep ? 1 : 0 })); fresh.forEach(m => { m.sentIn = sess; }); }
       return d;
     };
     const say = hi => {                                     // one packet up; the relay answers with one packet
       if (!ws || ws.readyState !== 1) return;
-      if (frames >= FRAMES - 1) { next(); return; }
+      if (frames >= FRAMES - 1 || upUsed >= UP) { next(); return; }
+      const text = JSON.stringify(pack(hi));
       frames++; waiting = true;
-      try { ws.send(JSON.stringify(pack(hi))); } catch {}
+      upUsed += Math.ceil((text.length + 60) / PIECE);
+      try { ws.send(text); } catch {}
       clearTimeout(t2);
       t2 = setTimeout(() => { if (waiting) next(); }, 2500);   // no answer: this connection is frozen
     };
@@ -2086,7 +2099,7 @@
       if (!alive) return;
       let s;
       try { s = new WebSocket(SRV_WS + '/ws?c=' + cid); } catch { t1 = setTimeout(open, 2000); return; }
-      ws = s; frames = 0; sess++; waiting = false;
+      ws = s; frames = 0; upUsed = 0; sess++; waiting = false;
       s.onopen = () => { if (ws !== s) return; say(true); clearTimeout(t1); t1 = setTimeout(next, AGE); };
       s.onmessage = e => {
         if (ws !== s || typeof e.data !== 'string') return;
@@ -2099,6 +2112,7 @@
         if (Array.isArray(d.q)) d.q.forEach(m => { if (m.n > got) { got = m.n; onMessage(m.t, m.m); } });
         if (frames >= FRAMES) { next(); return; }
         if (out.some(m => m.sentIn !== sess) || subsDirty) say(false);
+        else if (upUsed >= UP) next();                      // nothing more may be sent here: be ready on a fresh connection
       };
       s.onerror = () => {};
       s.onclose = () => { if (ws === s) next(); };
