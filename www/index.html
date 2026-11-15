@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 81;              // keep in sync with www/version.txt
+  const VERSION = 82;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2461,6 +2461,10 @@
     if (topic !== topicOf(code, n.id)) return;
     gHostSeen = true;
     if (d.t === 'rejoin') { if ((d.term || 0) >= gTerm && gJoined) { gJoined = false; gT0 = Date.now(); gTerm = 0; gRev = 0; gSnap = null; } return; }
+    if (d.t === 'lead') {                                   // the host hands the game over to this device
+      if (d.st && (d.st.term || 0) >= gTerm && view && !view.spec) { gSnap = d.st; takeOver(n, code, true); }
+      return;
+    }
     if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
     else if (d.t === 'view' && d.v) {
       const t = d.v.term || 0;
@@ -2509,19 +2513,19 @@
   }
 
   // the host has been silent for too long: this device continues the game from the last state it received
-  function takeOver(n, code) {
+  function takeOver(n, code, given) {
     const st = gSnap, seat = st.players.findIndex(p => p.cid === n.id);
     if (seat < 0) return;
     restore(st);
     term = Math.floor(st.term || 1) + 1 + (9 - seat) / 10;   // two devices can never get the same term
-    mode = 'host'; mySeat = seat; started = true; lobby = null; hostConn = null; ownerId = st.owner || ''; hostBorn = Date.now();
+    mode = 'host'; mySeat = seat; started = true; lobby = null; hostConn = null; ownerId = given ? n.id : st.owner || ''; hostBorn = Date.now();
     conns.clear(); kicked.clear();
     players.forEach((p, i) => {
       if (!p.cid || i === seat) return;
       p.conn = mkConn(n, code, p.cid);
       p.conn.last = Date.now();
       conns.set(p.cid, p.conn);
-      if (i === st.hostSeat) { p.conn.last = 1; p.lost = true; }      // silent until it answers again
+      if (i === st.hostSeat && !given) { p.conn.last = 1; p.lost = true; }      // silent until it answers again
     });
     specs.clear(); roomGroup = st.group || '';
     (st.specs || []).forEach(x => {
@@ -2533,11 +2537,22 @@
     n.sub(hostTopic(code));
     hostTimer(n, code);
     const name = players[seat].name;
-    say(me => (me === seat ? 'Хозяин комнаты не отвечает — игру ведёте вы' : 'Хозяин комнаты не отвечает — игру ведёт ' + name));
+    say(given ? me => (me === seat ? 'Теперь вы хозяин комнаты' : 'Хозяин комнаты теперь ' + name)
+      : me => (me === seat ? 'Хозяин комнаты не отвечает — игру ведёте вы' : 'Хозяин комнаты не отвечает — игру ведёт ' + name));
     $('warn').textContent = '';
     if (phase === 'play' && pend) later(pend.k, pend.a, PLAY_PAUSE);
     else if (phase === 'play') step();
     else render();
+  }
+
+  // the host makes another player the host: that device gets the whole game and carries it on,
+  // this one becomes a player as soon as the new host shows itself
+  function makeHost(i) {
+    const p = players[i], t0 = term;
+    if (mode !== 'host' || !started || !p || !p.conn) return;
+    const give = () => { if (mode === 'host' && term === t0 && players[i] === p && p.conn) p.conn.send({ t: 'lead', st: snapshot() }); };
+    give();
+    setTimeout(give, 2500);
   }
 
   // this device was the host, but the game went on without it: continue as a player
@@ -3163,6 +3178,7 @@
         b.onclick = () => { if (confirm(ask)) { fn(i); $('oppInfo').classList.remove('show'); } };
         t.appendChild(b);
       };
+      if (p.remote && !p.lost) add('Сделать хозяином', `Сделать «${p.name}» хозяином комнаты? Игру дальше будет вести его телефон.`, makeHost);
       if (p.remote) add('Заменить ботом', `Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`, replaceWithBot);
       add('Удалить из игры', `Удалить «${p.name}» из игры? Его карты вернутся в колоду.`, removePlayer);
     }
