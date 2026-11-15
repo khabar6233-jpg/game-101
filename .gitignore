@@ -4,3 +4,4 @@ android/build/
 *.idsig
 server/node_modules/
 server/.wrangler/
+server/.tg-hook.txt

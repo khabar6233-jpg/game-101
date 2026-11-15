@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>101 · игроки</title>
+<style>
+  :root { --bg: #10251a; --card: #183626; --text: #f2f5f3; --muted: #9fb3a8; --line: #2a4a39; --on: #5fd38d; --btn: #2f7d52; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f3f6f4; --card: #fff; --text: #14241b; --muted: #5d7167; --line: #dbe4df; --on: #1e9a55; --btn: #1f7a4a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; }
+  .stat b { font-size: 22px; display: block; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  input, button { font: inherit; border-radius: 10px; border: 1px solid var(--line); padding: 9px 12px; background: var(--card); color: var(--text); }
+  input { flex: 1; min-width: 0; }
+  button { background: var(--btn); color: #fff; border-color: transparent; }
+  .p { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .p .top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .p .name { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; align-self: center; }
+  .dot.on { background: var(--on); }
+  .when { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .row { color: var(--muted); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+  .row b { color: var(--text); font-weight: 600; }
+  .del { background: none; border: 0; color: var(--muted); padding: 0 4px; font-size: 13px; text-decoration: underline; }
+  #gate { max-width: 360px; margin: 12vh auto 0; }
+  #gate p { color: var(--muted); }
+  #gate input, #gate button { width: 100%; margin-top: 8px; }
+  #err { color: #e2725b; min-height: 20px; margin-top: 8px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<div id="gate" class="hide">
+  <h1>101 · страница разработчика</h1>
+  <p id="gateText"></p>
+  <input id="pw" type="password" autocomplete="current-password" placeholder="Пароль">
+  <button id="go">Войти</button>
+  <div id="err"></div>
+</div>
+<div id="main" class="hide">
+  <h1>101 · игроки</h1>
+  <div class="stats" id="stats"></div>
+  <div class="bar"><input id="q" placeholder="Поиск: имя, код компании, устройство"><button id="re">Обновить</button></div>
+  <div id="list"></div>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let key = '', data = null, claimed = true;
+  try { key = localStorage.getItem('adm101') || ''; } catch {}
+  const api = (path, opt = {}) => fetch(path, { ...opt, headers: { 'X-Key': key, ...(opt.headers || {}) } }).then(r => r.json()).catch(() => null);
+  const ago = (now, t) => {
+    const s = Math.max(0, Math.round((now - t) / 1000));
+    if (s < 150) return 'в сети';
+    if (s < 3600) return Math.round(s / 60) + ' мин назад';
+    if (s < 86400) return Math.round(s / 3600) + ' ч назад';
+    return Math.round(s / 86400) + ' дн назад';
+  };
+  const day = t => new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  const DEV = { iphone: 'iPhone (сайт)', android: 'Android (сайт)', apk: 'Android (приложение)', pc: 'Компьютер' };
+  const MODE = { menu: 'в меню', bots: 'играет с ботами', table: 'за столом с друзьями' };
+
+  function draw() {
+    const now = data.now, all = data.players;
+    const on = all.filter(p => now - p.last < 150000);
+    const today = all.filter(p => now - p.last < 86400000);
+    $('stats').innerHTML = [[all.length, 'всего игроков'], [on.length, 'сейчас в сети'], [today.length, 'за сутки'],
+      [all.reduce((a, p) => a + p.games, 0), 'партий сыграно']].map(([n, t]) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`).join('');
+    const q = $('q').value.trim().toLowerCase();
+    const rows = all.filter(p => !q || [p.name, p.names, p.grp, DEV[p.dev] || p.dev, p.pid].join(' ').toLowerCase().includes(q));
+    $('list').innerHTML = rows.map(p => {
+      let names = [];
+      try { names = JSON.parse(p.names).filter(n => n !== p.name); } catch {}
+      const live = now - p.last < 150000;
+      return `<div class="p"><div class="top"><span class="dot${live ? ' on' : ''}"></span><span class="name">${esc(p.name || 'без имени')}</span>` +
+        `<span class="when">${live ? esc(MODE[p.mode] || 'в сети') : ago(now, p.last)}</span></div>` +
+        `<div class="row">${esc(DEV[p.dev] || p.dev || 'устройство неизвестно')} · версия <b>${p.ver}</b> · компания <b>${esc(p.grp || 'нет')}</b>` +
+        ` · Telegram <b>${p.tg ? 'да' : 'нет'}</b></div>` +
+        `<div class="row">заходил <b>${p.visits}</b> раз · партий <b>${p.games}</b> · впервые ${day(p.first)}` +
+        (names.length ? ` · другие имена: ${esc(names.join(', '))}` : '') + `</div>` +
+        `<div class="row">${esc(p.pid)} <button class="del" data-pid="${esc(p.pid)}">удалить запись</button></div></div>`;
+    }).join('') || '<div class="row">Никого нет.</div>';
+  }
+  async function load() {
+    const r = await api('/admin/data');
+    if (!r) { $('err').textContent = 'Нет связи с сервером.'; return gate(); }
+    if (!r.ok) { key = ''; try { localStorage.removeItem('adm101'); } catch {} return gate(r.why === 'key' && $('pw').value ? 'Неверный пароль.' : ''); }
+    data = r;
+    $('gate').classList.add('hide'); $('main').classList.remove('hide');
+    draw();
+  }
+  async function gate(err) {
+    const s = await api('/admin/state');
+    claimed = !s || s.claimed;
+    $('gateText').textContent = claimed ? 'Введите пароль.' : 'Пароль ещё не задан. Придумайте его сейчас (от 6 знаков): дальше страница будет открываться только с ним.';
+    $('pw').autocomplete = claimed ? 'current-password' : 'new-password';
+    $('go').textContent = claimed ? 'Войти' : 'Задать пароль';
+    $('err').textContent = err || '';
+    $('main').classList.add('hide'); $('gate').classList.remove('hide');
+  }
+  $('go').onclick = async () => {
+    const pw = $('pw').value;
+    if (!claimed) {
+      if (pw.length < 6) { $('err').textContent = 'Слишком короткий пароль.'; return; }
+      const r = await api('/admin/claim', { method: 'POST', body: JSON.stringify({ pw }) });
+      if (!r || !r.ok) { $('err').textContent = 'Не получилось задать пароль.'; return gate(); }
+    }
+    key = pw;
+    try { localStorage.setItem('adm101', key); } catch {}
+    load();
+  };
+  $('pw').onkeydown = e => { if (e.key === 'Enter') $('go').click(); };
+  $('re').onclick = load;
+  $('q').oninput = () => data && draw();
+  $('list').onclick = async e => {
+    const b = e.target.closest('.del');
+    if (!b || !confirm('Удалить эту запись? Если игрок зайдёт снова, она появится заново.')) return;
+    await api('/admin/drop', { method: 'POST', body: JSON.stringify({ pid: b.dataset.pid }) });
+    load();
+  };
+  setInterval(() => { if (data && !document.hidden) load(); }, 20000);
+  if (key) load(); else gate();
+})();
+</script>
+</body>
+</html>

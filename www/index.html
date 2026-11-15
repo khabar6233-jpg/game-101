@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 82;              // keep in sync with www/version.txt
+  const VERSION = 83;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1726,6 +1726,9 @@
 
   function drawResult(v) {
     const r = v.result;
+    const over = !!r && r.gameOver && (r.champion >= 0 || r.w >= 0);
+    if (over && !overSeen && !v.spec) hello({ game: 1 });   // a finished game is counted once
+    overSeen = over;
     const show = !!r && v.phase === 'roundEnd';
     if (!show) resHide = false;
     $('result').classList.toggle('show', show && !resHide);
@@ -2823,7 +2826,26 @@
   try { tgChat = +localStorage.getItem('g101-tg') || 0; } catch {}
   const followers = new Map();                              // pid -> Telegram chat of a person who follows me
   const tgApi = (m, q) => fetch(`https://api.telegram.org/bot${TG_TOKEN}/${m}?` + new URLSearchParams(q)).then(r => r.json()).catch(() => null);
-  const tgSay = (chat, text) => tgApi('sendMessage', { chat_id: chat, text, disable_web_page_preview: true });
+  const SRV = 'https://game-101.game-101-server.workers.dev';
+  const srv = (path, data) => fetch(SRV + path, data ? { method: 'POST', body: JSON.stringify(data), keepalive: true } : {}).then(r => r.json()).catch(() => null);
+  const tgSay = async (chat, text) => {
+    const r = await srv('/tg/say', { chat, text });
+    if (!r) tgApi('sendMessage', { chat_id: chat, text, disable_web_page_preview: true });      // the server is away: straight to Telegram
+  };
+  // "I am here": the game's server keeps the list of players for the developer
+  let helloAt = 0, overSeen = false;
+  function hello(extra) {
+    helloAt = Date.now();
+    const ua = navigator.userAgent;
+    srv('/hello', Object.assign({
+      pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: group || '', tg: !!tgChat, chat: tgChat || 0,
+      dev: window.App101 ? 'apk' : /iPhone|iPad|iPod/.test(ua) ? 'iphone' : /Android/.test(ua) ? 'android' : 'pc',
+      mode: mode === 'solo' ? (phase === 'setup' ? 'menu' : 'bots') : 'table'
+    }, extra));
+  }
+  setTimeout(() => hello({ start: 1 }), 1500);
+  setInterval(() => { if (!document.hidden && Date.now() - helloAt > 110000) hello(); }, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - helloAt > 30000) hello(); });
   const followTopic = (who, me) => TOPIC + 'u/' + who + '/f/' + me;
   function drawTg() {
     const el = $('tgRow');
@@ -2847,22 +2869,21 @@
   async function tgCheck() {
     if (tgBusy || tgChat) return;
     tgBusy = true;
-    const r = await tgApi('getUpdates', { limit: 100 });
+    const r = await srv('/tg/chat?pid=' + encodeURIComponent(myPid));
     tgBusy = false;
     if (tgChat || !tgWaiting()) return;
     const el = $('tgRow').querySelector('.tgok');
     if (!r || !r.ok) {                                      // Telegram's server cannot be reached from this network
-      if (++tgFails >= 2 && el) el.textContent = 'Нет связи с сервером Telegram. Включите VPN и вернитесь сюда.';
+      if (++tgFails >= 2 && el) el.textContent = 'Нет связи с сервером игры. Проверьте интернет и вернитесь сюда.';
       return;
     }
     tgFails = 0;
     if (el) el.textContent = 'Нажмите «Start» в Telegram и вернитесь сюда…';
-    const hit = r.result.map(u => u.message).filter(m => m && m.text === '/start ' + myPid).pop();
-    if (!hit) return;
+    if (!r.chat) return;                                    // "Start" has not been pressed yet
     clearInterval(tgPoll);
-    tgChat = hit.chat.id;
+    tgChat = r.chat;                                        // the bot has already answered "Готово!" by itself
     try { localStorage.setItem('g101-tg', tgChat); localStorage.removeItem('g101-tgwait'); } catch {}
-    tgSay(tgChat, 'Готово! Сюда будут приходить приглашения друзей в игру «101».');
+    hello();
     drawTg();
     startWatch(true);
   }

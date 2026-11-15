@@ -2,3 +2,17 @@ name = "game-101"
 main = "src/index.js"
 compatibility_date = "2026-06-01"
 workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "game101"
+database_id = "da633406-9717-4568-8f68-d502b16dc620"
+
+# Secrets (set with "wrangler secret put", never written here):
+#   TG_TOKEN  the Telegram bot token
+#   TG_HOOK   the secret Telegram sends with every update
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
