@@ -3,8 +3,10 @@
 //   GET  /tg/chat    has this player pressed Start in the Telegram bot?
 //   POST /tg/say     the bot writes to a chat (an invitation from a friend)
 //   POST /tg/hook/…  Telegram tells the bot what people wrote to it
+//   GET  /ws         the relay of game messages (see relay.js)
 //   GET  /admin      the developer's page (behind a password that only the owner knows)
 import ADMIN_PAGE from './admin.html';
+export { Relay } from './relay.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -93,6 +95,7 @@ export default {
     try {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
       if (p === '/ping') return json({ ok: true, time: Date.now() });
+      if (p === '/ws') return env.RELAY.get(env.RELAY.idFromName('main')).fetch(request);      // game messages
       if (p === '/hello' && request.method === 'POST') return await hello(env, await body(request));
       if (p === '/tg/chat') {
         const pid = url.searchParams.get('pid') || '';
