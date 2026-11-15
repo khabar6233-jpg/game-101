@@ -38,6 +38,13 @@
   .out { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 0; margin-top: 8px; }
   #err { color: #e2725b; min-height: 20px; margin-top: 8px; }
   .hide { display: none; }
+  h2 { font-size: 16px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+  .t { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--on); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .t .head { font-weight: 700; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+  .t .kind { color: var(--muted); font-weight: 400; font-size: 13px; }
+  .t .who { margin-top: 4px; overflow-wrap: anywhere; }
+  .t .who b { font-weight: 600; }
+  .t.quiet { border-left-color: var(--line); }
 </style>
 </head>
 <body>
@@ -52,6 +59,9 @@
 <div id="main" class="hide">
   <h1>101 · игроки</h1>
   <div class="stats" id="stats"></div>
+  <h2>Сейчас играют</h2>
+  <div id="now"></div>
+  <h2>Все игроки</h2>
   <div class="bar"><input id="q" placeholder="Поиск: имя, код компании, устройство"><button id="re">Обновить</button></div>
   <div id="list"></div>
   <button class="out" id="out">Выйти и забыть пароль на этом устройстве</button>
@@ -84,6 +94,30 @@
   const day = t => new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
   const DEV = { iphone: 'iPhone (сайт)', android: 'Android (сайт)', apk: 'Android (приложение)', pc: 'Компьютер' };
   const MODE = { menu: 'в меню', bots: 'играет с ботами', table: 'за столом с друзьями' };
+  const KIND = { short: 'короткая', long: 'длинная' };
+
+  // who is where right now: one card per table, then the ones with bots, then the ones in the menu
+  function drawNow(now, on) {
+    const tables = new Map(), bots = [], menu = [];
+    on.forEach(p => {
+      if (p.mode === 'table') {
+        const k = p.grp || p.room || '?';
+        if (!tables.has(k)) tables.set(k, []);
+        tables.get(k).push(p);
+      } else if (p.mode === 'bots') bots.push(p);
+      else menu.push(p);
+    });
+    const nm = p => esc(p.name || 'без имени') + (p.host ? ' (хозяин)' : '');
+    const kinds = list => [...new Set(list.map(p => KIND[p.kind]).filter(Boolean))].join(', ');
+    let html = [...tables].map(([k, list]) =>
+      `<div class="t"><div class="head">Стол «${esc(k)}»<span class="kind">${list.length} чел.${kinds(list) ? ' · ' + kinds(list) : ''}</span></div>` +
+      `<div class="who">${list.map(p => '<b>' + nm(p) + '</b>').join(', ')}</div></div>`).join('');
+    if (bots.length) html += `<div class="t"><div class="head">С ботами<span class="kind">${bots.length} чел.</span></div>` +
+      `<div class="who">${bots.map(p => '<b>' + nm(p) + '</b>' + (KIND[p.kind] ? ' · ' + KIND[p.kind] : '')).join(', ')}</div></div>`;
+    if (menu.length) html += `<div class="t quiet"><div class="head">В меню<span class="kind">${menu.length} чел.</span></div>` +
+      `<div class="who">${menu.map(p => '<b>' + nm(p) + '</b>').join(', ')}</div></div>`;
+    $('now').innerHTML = html || '<div class="row">Сейчас никого нет.</div>';
+  }
 
   function draw() {
     const now = data.now, all = data.players;
@@ -91,6 +125,7 @@
     const today = all.filter(p => now - p.last < 86400000);
     $('stats').innerHTML = [[all.length, 'всего игроков'], [on.length, 'сейчас в сети'], [today.length, 'за сутки'],
       [all.reduce((a, p) => a + p.games, 0), 'партий сыграно']].map(([n, t]) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`).join('');
+    drawNow(now, on);
     const q = $('q').value.trim().toLowerCase();
     const rows = all.filter(p => !q || [p.name, p.names, p.grp, DEV[p.dev] || p.dev, p.pid].join(' ').toLowerCase().includes(q));
     $('list').innerHTML = rows.map(p => {
@@ -98,7 +133,7 @@
       try { names = JSON.parse(p.names).filter(n => n !== p.name); } catch {}
       const live = now - p.last < 150000;
       return `<div class="p"><div class="top"><span class="dot${live ? ' on' : ''}"></span><span class="name">${esc(p.name || 'без имени')}</span>` +
-        `<span class="when">${live ? esc(MODE[p.mode] || 'в сети') : ago(now, p.last)}</span></div>` +
+        `<span class="when">${live ? esc(MODE[p.mode] || 'в сети') + (live && p.mode === 'table' ? ' «' + esc(p.grp || p.room) + '»' : '') : ago(now, p.last)}</span></div>` +
         `<div class="row">${esc(DEV[p.dev] || p.dev || 'устройство неизвестно')} · версия <b>${p.ver}</b> · компания <b>${esc(p.grp || 'нет')}</b>` +
         ` · Telegram <b>${p.tg ? 'да' : 'нет'}</b></div>` +
         `<div class="row">заходил <b>${p.visits}</b> раз · партий <b>${p.games}</b> · впервые ${day(p.first)}` +
@@ -145,7 +180,7 @@
     await api('/admin/drop', { method: 'POST', body: JSON.stringify({ pid: b.dataset.pid }) });
     load();
   };
-  setInterval(() => { if (data && !document.hidden) load(); }, 20000);
+  setInterval(() => { if (data && !document.hidden) load(); }, 10000);
   if (key) load(); else gate();
 })();
 </script>

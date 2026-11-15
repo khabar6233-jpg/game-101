@@ -362,6 +362,10 @@
   .panel { background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
   .panel h3 { margin: 0 0 2px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
   .panel .hint { font-size: 12px; color: var(--muted); }
+  .field.bad { border-color: #ff8a80; box-shadow: 0 0 0 2px rgba(255,138,128,.35); animation: nameShake .35s; }
+  @keyframes nameShake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  .hint.bad { color: #ffb4a8; min-height: 0; }
+  .hint.bad:empty { display: none; }
   .field { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 0 14px; }
   .field span { flex: none; width: 82px; font-size: 13px; color: var(--muted); }
   .home input { flex: 1; min-width: 0; width: 100%; background: none; border: 0; outline: 0; color: var(--text); font-size: 17px; font-family: inherit; padding: 13px 0; }
@@ -375,6 +379,15 @@
   .sw { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
   .home .sw input { flex: none; width: 22px; height: 22px; padding: 0; accent-color: var(--gold); }
   .seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  /* the kind of game: a two-way slider */
+  .modeSw { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 16px;
+    background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.14); }
+  .modeSw button { position: relative; z-index: 1; border: 0; background: none; color: var(--muted); font: inherit; font-size: 17px; font-weight: 700;
+    padding: 11px 0; border-radius: 12px; transition: color .25s; -webkit-tap-highlight-color: transparent; }
+  .modeSw button.on { color: #1d1606; }
+  .modeSw i { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 12px; background: var(--gold);
+    transition: transform .25s ease; pointer-events: none; }
+  .modeSw.long i { transform: translateX(100%); }
   .seg .btn { padding: 13px 0; font-size: 19px; }
   #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
   #groupList:empty { display: none; }
@@ -503,10 +516,12 @@
       <div class="title"><h1>101</h1><span id="ver"></span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
     </div>
+    <div class="modeSw" role="radiogroup" aria-label="Игра"><button data-long="0">Короткая</button><button data-long="1">Длинная</button><i></i></div>
 
     <section class="panel">
       <h3>С друзьями</h3>
-      <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off"></div>
+      <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off" autocapitalize="words" lang="ru"></div>
+      <div class="hint bad" id="nameHint"></div>
       <div class="field"><span>Компания</span><input id="groupIn" maxlength="20" placeholder="Код компании" autocomplete="off"></div>
       <div id="groupList"></div>
       <div class="hint" id="groupHint">Нажмите на код, чтобы войти. Удерживайте — меню. Зелёный — там сейчас играют.</div>
@@ -524,7 +539,6 @@
 
     <section class="panel">
       <h3>С ботами</h3>
-      <label class="sw"><input type="checkbox" class="longBox"><span>Длинная: 52 карты</span></label>
       <div class="hint">Сколько игроков за столом</div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
@@ -589,8 +603,8 @@
       <li>Дама кладётся на любую карту и заказывает масть.</li>
       <li>На шестёрке и тузе раунд не кончается: в свой ход берёте карту, подошла — накрываете и выигрываете.</li>
       <li>102 очка — проигрыш, ровно 101 — счёт обнуляется.</li>
-      <li><b>Длинная игра</b> — колода из 52 карт, очки двоек–пятёрок по номиналу. Шестёрка, семёрка и восьмёрка — обычные карты.</li>
-      <li>Двойка — соседу 1 карта и пропуск хода, каждая двойка подряд — ещё +1. Тройка — как шестёрка в короткой: 2 карты, каждая подряд ещё +2. Втроём и больше их можно перевести такой же картой.</li>
+      <li><b>Длинная игра</b> — колода из 52 карт, очки двоек–пятёрок по номиналу. Двойка, тройка, пятёрка и восьмёрка — обычные карты.</li>
+      <li>Семёрка — соседу 1 карта и пропуск хода, каждая семёрка подряд — ещё +1. Шестёрка — как в короткой: 2 карты, каждая подряд ещё +2. Втроём и больше их можно перевести такой же картой.</li>
       <li>Четвёрку кроет тот, кто её положил. Нечем — берёт до 3 карт, не подошло — пас.</li>
       <li>Десятка меняет направление игры: его показывают стрелки на столе.</li>
     </ul>
@@ -617,9 +631,9 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
-      <div id="longNote" class="gl" style="display:none">Длинная игра: 52 карты</div>
+      <div id="longNote" class="gl" style="display:none">Хозяин выбрал длинную игру: 52 карты</div>
       <div id="hostBox" class="col">
-        <label class="sw"><input type="checkbox" class="longBox"><span>Длинная: 52 карты</span></label>
+        <div class="modeSw" role="radiogroup" aria-label="Игра"><button data-long="0">Короткая</button><button data-long="1">Длинная</button><i></i></div>
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
         <button class="btn" id="waitBtn">Ждать за столом</button>
@@ -660,7 +674,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 87;              // keep in sync with www/version.txt
+  const VERSION = 88;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -768,12 +782,12 @@
   const active = () => players.filter(p => !p.out);
   const top = () => pile[pile.length - 1];
   // a queen goes on any card; while sixes are stacked on you, only another six can be played
-  const PEN = c => (deckLong ? (c.r === 2 ? 1 : c.r === 3 ? 2 : 0) : c.r === 6 ? 2 : 0);
-  const PEN_WORD = { 2: 'двойку', 3: 'тройку', 6: 'шестёрку' };
+  const PEN = c => (deckLong ? (c.r === 7 ? 1 : c.r === 6 ? 2 : 0) : c.r === 6 ? 2 : 0);
+  const PEN_WORD = { 6: 'шестёрку', 7: 'семёрку' };
   const canPlay = c => (pendingSix ? c.r === (deckLong ? top().r : 6) && active().length >= 3 :c.r === 12 || c.s === suit || c.r === top().r);
   const label = c => RANK_NAME[c.r] + c.s;
   // nobody wins on these cards (and the round does not open with them)
-  const isSpecialEnd = c => (deckLong ? c.r === 2 || c.r === 3 || c.r === 4 || c.r === 14 : c.r === 6 || c.r === 14);
+  const isSpecialEnd = c => (deckLong ? c.r === 6 || c.r === 7 || c.r === 4 || c.r === 14 : c.r === 6 || c.r === 14);
   const pointsWord = n => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? 'очков' : b === 1 ? 'очко' : b >= 2 && b <= 4 ? 'очка' : 'очков'; };
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
   const handPoints = p => p.hand.reduce((n, c) => n + POINTS(c.r), 0);
@@ -908,7 +922,7 @@
     } else if (PEN(card)) {
       // Every six lying in a row on the table adds 2 cards, no matter who already took cards in between
       // or whether the deck was reshuffled. The next player answers with a six or presses "Беру".
-      // (The long game: twos add 1 card each, threes 2 each, in the same way.)
+      // (The long game: sevens add 1 card each, sixes 2 each, in the same way.)
       pendingSix = PEN(card) * sixRun;
       const k = pendingSix;
       const or = active().length >= 3 ? ' или подкинуть ' + PEN_WORD[card.r] : '';   // one on one a stack cannot be answered
@@ -1830,8 +1844,23 @@
   const netMsg = t => { $('netMsg').textContent = t || ''; };
   function myName() {
     const n = $('nick').value.trim().slice(0, 12) || 'Игрок';
-    try { localStorage.setItem('g101-name', n); } catch {}
+    if (NAME_RE.test(n)) { try { localStorage.setItem('g101-name', n); } catch {} }
     return n;
+  }
+  // a name: Russian letters, a hyphen only between letters ("Анна-Мария")
+  const NAME_RE = /^[А-ЯЁа-яё]+(-[А-ЯЁа-яё]+)*$/;
+  const nameOk = () => NAME_RE.test($('nick').value.trim());
+  // nobody gets to a table without a name: the field is shown, lit and waits for it
+  function needName() {
+    if (nameOk()) return false;
+    const f = $('nick');
+    $('setup').classList.add('show');
+    f.closest('.field').classList.remove('bad'); void f.offsetWidth;
+    f.closest('.field').classList.add('bad');
+    $('nameHint').textContent = f.value.trim() ? 'Имя — только русские буквы, через дефис можно: Анна-Мария' : 'Сначала введите имя';
+    f.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(() => { try { f.focus(); } catch {} }, 250);
+    return true;
   }
 
   // "Проверить связь": which relay servers answer from this network
@@ -2793,6 +2822,7 @@
 
   // ----- host -----
   async function createRoom(attempt = 0) {
+    if (needName()) return;
     netMsg('Создаём комнату…');
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
@@ -3068,11 +3098,17 @@
     srv('/hello', Object.assign({
       pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: group || '', tg: !!tgChat, chat: tgChat || 0,
       dev: window.App101 ? 'apk' : /iPhone|iPad|iPod/.test(ua) ? 'iphone' : /Android/.test(ua) ? 'android' : 'pc',
-      mode: mode === 'solo' ? (phase === 'setup' ? 'menu' : 'bots') : 'table'
+      mode: mode === 'solo' ? (phase === 'setup' ? 'menu' : 'bots') : 'table',
+      room: mode === 'solo' ? '' : roomCode || '', host: mode === 'host',
+      kind: mode === 'solo' && phase === 'setup' ? '' : (mode === 'guest' ? (view && view.long) || lobbyLong : started || mode === 'solo' ? deckLong : longPick) ? 'long' : 'short'
     }, extra));
+    helloKey = whereNow();
   }
+  // tell the server as soon as the player goes somewhere else (a table, the menu, a game with bots)
+  let helloKey = '';
+  const whereNow = () => [mode, mode === 'solo' ? phase === 'setup' : roomCode, ($('nick').value || '').trim()].join('|');
   setTimeout(() => hello({ start: 1 }), 1500);
-  setInterval(() => { if (!document.hidden && Date.now() - helloAt > 110000) hello(); }, 20000);
+  setInterval(() => { if (!document.hidden && (Date.now() - helloAt > 110000 || (whereNow() !== helloKey && Date.now() - helloAt > 4000))) hello(); }, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - helloAt > 30000) hello(); });
   const followTopic = (who, me) => TOPIC + 'u/' + who + '/f/' + me;
   function drawTg() {
@@ -3373,12 +3409,14 @@
   // Enter the company's table. If somebody keeps it already, sit down there; if nobody answers, it is empty
   // and this device starts keeping it.
   function enterRoom(want) {
+    if (needName()) return;
     if (!group) { netMsg('Введите код компании'); return; }
     joinWant = want || 'seat';
     $('codeIn').value = roomOf(group);
     return joinRoom(true);
   }
   async function joinRoom(orHost) {
+    if (needName()) return;
     const code = $('codeIn').value.trim();
     if (!ROOM_RE.test(code)) { netMsg('Неверный код комнаты'); return; }
     netMsg('Подключаемся…');
@@ -3511,6 +3549,7 @@
   window.addEventListener('resize', () => { if (view) draw(view); });
   document.querySelectorAll('[data-bots]').forEach(b => {
     b.onclick = () => {
+      if (needName()) return;
       mode = 'solo'; mySeat = 0; roomCode = '';
       const seats = [{ name: 'Игрок', pid: myPid }];
       for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: 'Бот ' + i, isBot: true });
@@ -3534,15 +3573,21 @@
   $('leaveBtn').onclick = leave;
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = testNet;
-  document.querySelectorAll('.longBox').forEach(b => {
-    b.checked = longPick;
-    b.onchange = () => {
-      longPick = b.checked;
-      document.querySelectorAll('.longBox').forEach(x => { x.checked = longPick; });
+  const drawModeSw = () => document.querySelectorAll('.modeSw').forEach(w => {
+    w.classList.toggle('long', longPick);
+    w.querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.long === '1') === longPick));
+  });
+  document.querySelectorAll('.modeSw').forEach(w => {
+    w.onclick = e => {
+      const b = e.target.closest('[data-long]');
+      if (!b) return;
+      longPick = b.dataset.long === '1';
       try { localStorage.setItem('g101-long', longPick ? '1' : '0'); } catch {}
+      drawModeSw();
       if (mode === 'host' && lobby && !started) drawLobby();          // the guests see it at once
     };
   });
+  drawModeSw();
   $('liteBox').checked = lite;
   $('liteBox').onchange = () => {
     lite = $('liteBox').checked;
@@ -3832,6 +3877,16 @@
     leave();
   };
   try { $('nick').value = localStorage.getItem('g101-name') || ''; } catch {}
+  // typing: only Russian letters and a hyphen get in; a good name is remembered at once
+  $('nick').addEventListener('input', () => {
+    const f = $('nick');
+    const v = f.value.replace(/[^А-ЯЁа-яё-]/g, '').replace(/-{2,}/g, '-').replace(/^-/, '');
+    if (v !== f.value) f.value = v;
+    f.closest('.field').classList.remove('bad');
+    $('nameHint').textContent = '';
+    if (NAME_RE.test(v)) { try { localStorage.setItem('g101-name', v); } catch {} }
+  });
+  $('nick').addEventListener('blur', () => { if ($('nick').value && !nameOk()) needName(); });
 
   // ----- version: shown on the start screen; an old cached page reloads itself -----
   $('ver').textContent = 'версия ' + VERSION;

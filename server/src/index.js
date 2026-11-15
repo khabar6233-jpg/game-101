@@ -39,12 +39,12 @@ async function hello(env, d) {
   try { names = JSON.parse(row ? row.names : '[]'); } catch {}
   if (name && !names.includes(name)) names = names.concat(name).slice(-8);
   await env.DB.prepare(
-    `INSERT INTO players (pid, name, names, dev, ver, grp, mode, tg, first, last, visits, games)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10, ?11)
+    `INSERT INTO players (pid, name, names, dev, ver, grp, mode, tg, first, last, visits, games, room, kind, host)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10, ?11, ?12, ?13, ?14)
      ON CONFLICT(pid) DO UPDATE SET name = CASE WHEN ?2 = '' THEN name ELSE ?2 END, names = ?3, dev = ?4, ver = ?5, grp = ?6,
-       mode = ?7, tg = ?8, last = ?9, visits = visits + ?10, games = games + ?11`
+       mode = ?7, tg = ?8, last = ?9, visits = visits + ?10, games = games + ?11, room = ?12, kind = ?13, host = ?14`
   ).bind(pid, name, JSON.stringify(names), str(d.dev, 12), +d.ver || 0, str(d.group, 16), str(d.mode, 8), d.tg ? 1 : 0, now,
-    d.start ? 1 : 0, d.game ? 1 : 0).run();
+    d.start ? 1 : 0, d.game ? 1 : 0, str(d.room, 12), str(d.kind, 6), d.host ? 1 : 0).run();
   // a player who linked Telegram before the server existed: remember the chat
   const chat = Math.floor(+d.chat || 0);
   if (chat) await env.DB.prepare('INSERT INTO tg (pid, chat, at) VALUES (?, ?, ?) ON CONFLICT(pid) DO NOTHING').bind(pid, chat, now).run();
