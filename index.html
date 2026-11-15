@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 83;              // keep in sync with www/version.txt
+  const VERSION = 84;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1763,6 +1763,8 @@
   // several independent public relays in different places: two players need just one in common
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt',
     'wss://test.mosquitto.org:8081/mqtt', 'wss://broker-cn.emqx.io:8084/mqtt'];
+  // the game's own server: it relays the same messages and can be reached without VPN
+  const SRV = 'https://game-101.game-101-server.workers.dev';
   const TOPIC = 'cardgame101/v1/';
   const PING_MS = 3000, LOST_MS = 60000;
   let netTimer = null;
@@ -1786,9 +1788,20 @@
       const p = setInterval(() => { if (l.up && k < 15) { l.pub(topic, k < 10 ? 'm' + k : mid); k++; } }, 600);
       setTimeout(() => { clearInterval(p); l.close(); res({ up: l.up, small, medium }); }, 14000);
     });
-    const r = await Promise.all(BROKERS.slice(0, 2).map(one));
-    netMsg(r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился' : `короткие ${x.small}/10, средние ${x.medium}/5`)).join(String.fromCharCode(10)));
+    const [r, own] = await Promise.all([Promise.all(BROKERS.slice(0, 2).map(one)), testOwn()]);
+    netMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился' : `короткие ${x.small}/10, средние ${x.medium}/5`)).join(String.fromCharCode(10)));
   }
+
+  // the game's own server: do messages of every size come back?
+  const testOwn = () => new Promise(res => {
+    const topic = TOPIC + 't/' + Math.random().toString(36).slice(2, 10), blob = 'x'.repeat(2000);
+    let small = 0, big = 0, k = 0, wasUp = false;
+    const l = srvLink((t, text) => { if (text.length < 500) small++; else big += text.length; });
+    l.sub(topic);
+    const p = setInterval(() => { if (l.up && k < 30) { wasUp = true; l.pub(topic, k < 10 ? 'm' + k : blob); k++; } }, 150);
+    setTimeout(() => { clearInterval(p); l.close();
+      res('Сервер игры: ' + (!wasUp ? 'не подключился' : `подключился, короткие ${small}/10, длинные ${Math.round(big / 1000)}/40 КБ`)); }, 9000);
+  });
 
   async function testNet() {
     if (lite) { testLite(); return; }
@@ -1808,8 +1821,8 @@
         if (big >= 40000 || Date.now() - t0 > 11000) { clearInterval(iv); const ack = l.acks > 0; l.close(); res({ up: wasUp, ack, small, big: Math.round(big / 1000) }); }
       }, 200);
     });
-    const r = await Promise.all(BROKERS.map(one));
-    netMsg(r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился'
+    const [r, own] = await Promise.all([Promise.all(BROKERS.map(one)), testOwn()]);
+    netMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился'
       : `подключился, подписка ${x.ack ? 'да' : 'нет'}, короткие ${x.small}/10, длинные ${x.big}/40 КБ`)).join('\n'));
   }
 
@@ -1995,12 +2008,55 @@
     };
   }
 
+  // --- the link to the game's own server: the same interface as the broker links, plain JSON lines ---
+  function srvLink(onMessage) {
+    const subs = new Set();
+    let ws = null, alive = true, up = false, lastIn = 0, pingT = null;
+    const put = x => { try { if (up && ws.readyState === 1) ws.send(JSON.stringify(x)); } catch {} };
+    function open() {
+      if (!alive) return;
+      let s;
+      try { s = new WebSocket(SRV.replace('https', 'wss') + '/ws'); } catch { setTimeout(open, 3000); return; }
+      ws = s; lastIn = Date.now();
+      s.onopen = () => { if (ws !== s) return; up = true; subs.forEach(t => put({ s: t })); };
+      s.onmessage = e => {
+        lastIn = Date.now();
+        if (e.data === 'pong' || typeof e.data !== 'string') return;
+        let d;
+        try { d = JSON.parse(e.data); } catch { return; }
+        if (d && typeof d.t === 'string' && typeof d.m === 'string') onMessage(d.t, d.m);
+      };
+      s.onerror = () => {};
+      s.onclose = () => { if (ws !== s) return; up = false; if (alive) setTimeout(open, 2000); };
+    }
+    function restart() {
+      if (!alive) return;
+      try { ws.onclose = null; ws.onmessage = null; ws.close(); } catch {}
+      up = false;
+      open();
+    }
+    open();
+    pingT = setInterval(() => {
+      if (!alive) return;
+      if (Date.now() - lastIn > 11000) { restart(); return; }
+      try { if (up && ws.readyState === 1) ws.send('ping'); } catch {}
+    }, 4000);
+    return {
+      get up() { return up; },
+      get acks() { return up ? 1 : 0; },
+      sub(t) { subs.add(t); put({ s: t }); },
+      pub(t, text, plain, keep) { put(keep ? { p: t, m: text, k: 1 } : { p: t, m: text }); },
+      reconnect: restart,
+      close() { alive = false; up = false; clearInterval(pingT); try { ws.onclose = null; ws.close(); } catch {} }
+    };
+  }
+
   // --- one handle over all brokers: every message goes through each of them, duplicates are dropped ---
   function netOpen(onMessage) {
     const id = Math.random().toString(36).slice(2, 10);
     const seen = new Set();
     let seq = 0, lastEcho = 0;
-    const links = (lite ? BROKERS.slice(0, 2) : BROKERS).map((u, i) => (lite ? burstLink : mqttLink)(u, 'g101_' + id + '_' + i, (topic, text) => {
+    const onText = (topic, text) => {
       let m;
       try { m = JSON.parse(text); } catch { return; }
       if (!m || typeof m.f !== 'string') return;
@@ -2010,7 +2066,9 @@
       seen.add(key);
       if (seen.size > 600) seen.delete(seen.values().next().value);
       onMessage(topic, m.f, m.d);
-    }));
+    };
+    const links = (lite ? BROKERS.slice(0, 2) : BROKERS).map((u, i) => (lite ? burstLink : mqttLink)(u, 'g101_' + id + '_' + i, onText));
+    links.push(srvLink(onText));                            // last: voice (send1) prefers the public relays
     const anyUp = () => links.some(l => l.up);
     return {
       id,
@@ -2826,7 +2884,6 @@
   try { tgChat = +localStorage.getItem('g101-tg') || 0; } catch {}
   const followers = new Map();                              // pid -> Telegram chat of a person who follows me
   const tgApi = (m, q) => fetch(`https://api.telegram.org/bot${TG_TOKEN}/${m}?` + new URLSearchParams(q)).then(r => r.json()).catch(() => null);
-  const SRV = 'https://game-101.game-101-server.workers.dev';
   const srv = (path, data) => fetch(SRV + path, data ? { method: 'POST', body: JSON.stringify(data), keepalive: true } : {}).then(r => r.json()).catch(() => null);
   const tgSay = async (chat, text) => {
     const r = await srv('/tg/say', { chat, text });
