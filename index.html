@@ -642,7 +642,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 84;              // keep in sync with www/version.txt
+  const VERSION = 85;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1796,11 +1796,11 @@
   const testOwn = () => new Promise(res => {
     const topic = TOPIC + 't/' + Math.random().toString(36).slice(2, 10), blob = 'x'.repeat(2000);
     let small = 0, big = 0, k = 0, wasUp = false;
-    const l = srvLink((t, text) => { if (text.length < 500) small++; else big += text.length; });
+    const l = srvLink((t, text) => { if (text.length < 500) small++; else big += text.length; }, lite);
     l.sub(topic);
     const p = setInterval(() => { if (l.up && k < 30) { wasUp = true; l.pub(topic, k < 10 ? 'm' + k : blob); k++; } }, 150);
-    setTimeout(() => { clearInterval(p); l.close();
-      res('Сервер игры: ' + (!wasUp ? 'не подключился' : `подключился, короткие ${small}/10, длинные ${Math.round(big / 1000)}/40 КБ`)); }, 9000);
+    setTimeout(() => { clearInterval(p); const how = l.bursts ? 'короткими сеансами' : 'напрямую'; l.close();
+      res('Сервер игры: ' + (!wasUp ? 'не подключился' : `подключился ${how}, короткие ${small}/10, длинные ${Math.round(big / 1000)}/40 КБ`)); }, 11000);
   });
 
   async function testNet() {
@@ -2008,15 +2008,21 @@
     };
   }
 
-  // --- the link to the game's own server: the same interface as the broker links, plain JSON lines ---
-  function srvLink(onMessage) {
-    const subs = new Set();
+  // --- the link to the game's own server: the same interface as the broker links ---
+  // Two ways to talk. Plain: one long connection, a JSON line per message. Burst: for networks that let about
+  // 16 packets through a connection and then freeze it (whatever their size): short sessions, each on a new
+  // connection, many messages packed into one packet, everything confirmed and sent again if it got lost.
+  // The link starts plain and turns to bursts by itself when the plain connection freezes.
+  const SRV_WS = SRV.replace('https', 'wss');
+  let srvBurst = false;
+  try { srvBurst = Date.now() - (+localStorage.getItem('g101-burst') || 0) < 3 * 86400000; } catch {}
+  function srvPlain(subs, onMessage, onStall) {
     let ws = null, alive = true, up = false, lastIn = 0, pingT = null;
     const put = x => { try { if (up && ws.readyState === 1) ws.send(JSON.stringify(x)); } catch {} };
     function open() {
       if (!alive) return;
       let s;
-      try { s = new WebSocket(SRV.replace('https', 'wss') + '/ws'); } catch { setTimeout(open, 3000); return; }
+      try { s = new WebSocket(SRV_WS + '/ws'); } catch { setTimeout(open, 3000); return; }
       ws = s; lastIn = Date.now();
       s.onopen = () => { if (ws !== s) return; up = true; subs.forEach(t => put({ s: t })); };
       s.onmessage = e => {
@@ -2038,16 +2044,100 @@
     open();
     pingT = setInterval(() => {
       if (!alive) return;
-      if (Date.now() - lastIn > 11000) { restart(); return; }
+      if (Date.now() - lastIn > 9000) { if (up) onStall(); if (alive) restart(); return; }     // it opened and then went silent
       try { if (up && ws.readyState === 1) ws.send('ping'); } catch {}
-    }, 4000);
+    }, 3000);
     return {
       get up() { return up; },
-      get acks() { return up ? 1 : 0; },
-      sub(t) { subs.add(t); put({ s: t }); },
-      pub(t, text, plain, keep) { put(keep ? { p: t, m: text, k: 1 } : { p: t, m: text }); },
+      sub(t) { put({ s: t }); },
+      pub(t, text, keep) { put(keep ? { p: t, m: text, k: 1 } : { p: t, m: text }); },
       reconnect: restart,
       close() { alive = false; up = false; clearInterval(pingT); try { ws.onclose = null; ws.close(); } catch {} }
+    };
+  }
+  function srvBursts(subs, onMessage) {
+    const FRAMES = 10, AGE = 5000;                           // packets per session (both ways), and how long one may stay open
+    const cid = Math.random().toString(36).slice(2, 12), out = [];
+    let ws = null, alive = true, ever = false, frames = 0, epoch = '', got = 0, oid = 0, subsDirty = false, t1 = null, t2 = null, sess = 0, waiting = false;
+    const pack = hi => {
+      const d = { e: epoch, a: got };
+      if (hi) { d.hi = 1; d.s = [...subs]; } else if (subsDirty) d.s = [...subs];
+      subsDirty = false;
+      const fresh = out.filter(m => m.sentIn !== sess);
+      if (fresh.length) { d.o = fresh.map(m => ({ i: m.i, p: m.t, m: m.text, k: m.keep ? 1 : 0 })); fresh.forEach(m => { m.sentIn = sess; }); }
+      return d;
+    };
+    const say = hi => {                                     // one packet up; the relay answers with one packet
+      if (!ws || ws.readyState !== 1) return;
+      if (frames >= FRAMES - 1) { next(); return; }
+      frames++; waiting = true;
+      try { ws.send(JSON.stringify(pack(hi))); } catch {}
+      clearTimeout(t2);
+      t2 = setTimeout(() => { if (waiting) next(); }, 2500);   // no answer: this connection is frozen
+    };
+    function next() {
+      clearTimeout(t1); clearTimeout(t2);
+      const old = ws;
+      ws = null; waiting = false;
+      if (old) { try { old.onclose = null; old.onmessage = null; old.onopen = null; old.close(); } catch {} }
+      if (alive) t1 = setTimeout(open, 60);
+    }
+    function open() {
+      if (!alive) return;
+      let s;
+      try { s = new WebSocket(SRV_WS + '/ws?c=' + cid); } catch { t1 = setTimeout(open, 2000); return; }
+      ws = s; frames = 0; sess++; waiting = false;
+      s.onopen = () => { if (ws !== s) return; say(true); clearTimeout(t1); t1 = setTimeout(next, AGE); };
+      s.onmessage = e => {
+        if (ws !== s || typeof e.data !== 'string') return;
+        let d;
+        try { d = JSON.parse(e.data); } catch { return; }
+        if (!d) return;
+        frames++; ever = true; waiting = false;
+        if (d.e !== epoch) { epoch = d.e; got = 0; }         // the relay started anew: its numbers start anew too
+        if (Array.isArray(d.k)) d.k.forEach(i => { const k = out.findIndex(m => m.i === i); if (k >= 0) out.splice(k, 1); });
+        if (Array.isArray(d.q)) d.q.forEach(m => { if (m.n > got) { got = m.n; onMessage(m.t, m.m); } });
+        if (frames >= FRAMES) { next(); return; }
+        if (out.some(m => m.sentIn !== sess) || subsDirty) say(false);
+      };
+      s.onerror = () => {};
+      s.onclose = () => { if (ws === s) next(); };
+      clearTimeout(t1);
+      t1 = setTimeout(next, 4000);                          // could not get through: try again
+    }
+    open();
+    return {
+      get up() { return ever; },
+      sub() { subsDirty = true; if (!waiting) say(false); },
+      pub(t, text, keep) {
+        out.push({ i: ++oid, t, text, keep, sentIn: 0 });
+        if (out.length > 80) out.shift();
+        if (!waiting) say(false);                           // while an answer is on its way, the message waits and goes with the next packet
+      },
+      reconnect: next,
+      close() { alive = false; clearTimeout(t1); clearTimeout(t2); try { ws.onclose = null; ws.close(); } catch {} }
+    };
+  }
+  function srvLink(onMessage, burst) {
+    const subs = new Set();
+    let l = null, alive = true;
+    const toBursts = () => {
+      if (!alive || (l && l.b)) return;
+      srvBurst = true;
+      try { localStorage.setItem('g101-burst', Date.now()); } catch {}
+      if (l) l.close();
+      l = srvBursts(subs, onMessage); l.b = true;
+    };
+    if (burst || srvBurst) { l = srvBursts(subs, onMessage); l.b = true; }
+    else l = srvPlain(subs, onMessage, toBursts);
+    return {
+      get up() { return l.up; },
+      get acks() { return l.up ? 1 : 0; },
+      get bursts() { return !!l.b; },
+      sub(t) { if (subs.has(t)) return; subs.add(t); l.sub(t); },
+      pub(t, text, plain, keep) { l.pub(t, text, keep); },
+      reconnect() { l.reconnect(); },
+      close() { alive = false; l.close(); }
     };
   }
 
@@ -2068,7 +2158,7 @@
       onMessage(topic, m.f, m.d);
     };
     const links = (lite ? BROKERS.slice(0, 2) : BROKERS).map((u, i) => (lite ? burstLink : mqttLink)(u, 'g101_' + id + '_' + i, onText));
-    links.push(srvLink(onText));                            // last: voice (send1) prefers the public relays
+    links.push(srvLink(onText, lite));                      // last: voice (send1) prefers the public relays
     const anyUp = () => links.some(l => l.up);
     return {
       id,
@@ -2884,7 +2974,15 @@
   try { tgChat = +localStorage.getItem('g101-tg') || 0; } catch {}
   const followers = new Map();                              // pid -> Telegram chat of a person who follows me
   const tgApi = (m, q) => fetch(`https://api.telegram.org/bot${TG_TOKEN}/${m}?` + new URLSearchParams(q)).then(r => r.json()).catch(() => null);
-  const srv = (path, data) => fetch(SRV + path, data ? { method: 'POST', body: JSON.stringify(data), keepalive: true } : {}).then(r => r.json()).catch(() => null);
+  const srv = (path, data) => new Promise(res => {
+    let done = false, ws;
+    const fin = v => { if (done) return; done = true; try { ws.close(); } catch {} res(v); };
+    try { ws = new WebSocket(SRV_WS + '/rpc'); } catch { res(null); return; }
+    ws.onopen = () => { try { ws.send(JSON.stringify({ path, body: data })); } catch { fin(null); } };
+    ws.onmessage = e => { try { fin(JSON.parse(e.data)); } catch { fin(null); } };
+    ws.onerror = () => fin(null);
+    setTimeout(() => fin(null), 7000);
+  });
   const tgSay = async (chat, text) => {
     const r = await srv('/tg/say', { chat, text });
     if (!r) tgApi('sendMessage', { chat_id: chat, text, disable_web_page_preview: true });      // the server is away: straight to Telegram
