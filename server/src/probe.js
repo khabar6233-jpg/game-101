@@ -63,7 +63,7 @@ p{color:#9fb3a8}</style></head><body>
       const good = await new Promise(res => {
         let done = false; const fin = v => { if (!done) { done = true; res(v); } };
         let ws; try { ws = new WebSocket(W + '/probe/ws?m=tiny&r=' + Math.random()); } catch { return fin(false); }
-        ws.onmessage = () => { sum += Date.now() - t0; setTimeout(() => { try { ws.close(); } catch {} fin(true); }, hold); };
+        let first = true; ws.onmessage = () => { if (!first) return; first = false; sum += Date.now() - t0; setTimeout(() => { try { ws.close(); } catch {} fin(true); }, hold); };
         ws.onerror = () => fin(false);
         setTimeout(() => { try { ws.close(); } catch {} fin(false); }, 4000);
       });
