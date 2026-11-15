@@ -91,6 +91,14 @@
   .middle { gap: 16px; }
   .deck.can { box-shadow: 0 0 0 3px var(--gold), 0 2px 6px rgba(0,0,0,.35); cursor: pointer; }
   .suit-now { font-size: 44px; line-height: 1; width: 56px; text-align: center; }
+  /* the long game: two half-circle arrows show which way the turn goes (a ten turns them round) */
+  .dirArc { position: absolute; left: 50%; width: 170px; height: 32px; margin-left: -85px; pointer-events: none; display: none;
+    fill: none; stroke: rgba(255,255,255,.3); stroke-width: 3; stroke-linecap: round; transition: transform .5s ease-in-out; }
+  .dirArc marker path { fill: rgba(255,255,255,.3); stroke: none; }
+  #dirTop { top: 0; }
+  #dirBot { bottom: 0; }
+  body.long .dirArc { display: block; }
+  body.ccw .dirArc { transform: scaleX(-1); }
   .suit-now.red { color: #ff6b72; }
 
   .status { text-align: center; min-height: 44px; font-size: 15px; line-height: 22px; }
@@ -472,6 +480,9 @@
         <stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
       <mask id="ndlMask"><rect width="22" height="72" fill="url(#ndlFade)"/></mask></defs>
       <path d="M11 1.5C11.6 1.5 17.4 60 17.6 66.5 17.8 70 4.2 70 4.4 66.5 4.6 60 10.4 1.5 11 1.5z" fill="url(#ndlSide)" mask="url(#ndlMask)"/></svg>
+    <svg class="dirArc" id="dirTop" viewBox="0 0 160 30"><path d="M14 26Q80-8 146 26" marker-end="url(#dirHead)"/></svg>
+    <svg class="dirArc" id="dirBot" viewBox="0 0 160 30"><defs><marker id="dirHead" viewBox="0 0 10 10" refX="7" refY="5"
+      markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs><path d="M146 4Q80 38 14 4" marker-end="url(#dirHead)"/></svg>
     <div class="slot"><div id="deck"></div><span>Колода: <span id="deckCount">0</span></span></div>
     <div class="slot"><div id="pile"></div><span>Сброс: <span id="pileCount">0</span></span></div>
     <div class="slot"><div class="suit-now" id="suitNow"></div><span>Масть</span></div>
@@ -513,6 +524,7 @@
 
     <section class="panel">
       <h3>С ботами</h3>
+      <label class="sw"><input type="checkbox" class="longBox"><span>Длинная: 52 карты</span></label>
       <div class="hint">Сколько игроков за столом</div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
@@ -577,6 +589,10 @@
       <li>Дама кладётся на любую карту и заказывает масть.</li>
       <li>На шестёрке и тузе раунд не кончается: в свой ход берёте карту, подошла — накрываете и выигрываете.</li>
       <li>102 очка — проигрыш, ровно 101 — счёт обнуляется.</li>
+      <li><b>Длинная игра</b> — колода из 52 карт, очки двоек–пятёрок по номиналу. Шестёрка, семёрка и восьмёрка — обычные карты.</li>
+      <li>Двойка — соседу 1 карта и пропуск хода, каждая двойка подряд — ещё +1. Тройка — как шестёрка в короткой: 2 карты, каждая подряд ещё +2. Втроём и больше их можно перевести такой же картой.</li>
+      <li>Четвёрку кроет тот, кто её положил. Нечем — берёт до 3 карт, не подошло — пас.</li>
+      <li>Десятка меняет направление игры: его показывают стрелки на столе.</li>
     </ul>
     <button class="btn" id="rulesClose" style="width:100%">Понятно</button>
   </div>
@@ -601,7 +617,9 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
+      <div id="longNote" class="gl" style="display:none">Длинная игра: 52 карты</div>
       <div id="hostBox" class="col">
+        <label class="sw"><input type="checkbox" class="longBox"><span>Длинная: 52 карты</span></label>
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
         <button class="btn" id="waitBtn">Ждать за столом</button>
@@ -640,9 +658,9 @@
   // U+FE0E asks phones to draw suits as plain text symbols, not emoji
   const SUITS = ['♠', '♣', '♦', '♥'].map(s => s + '︎');
   const RED = new Set([SUITS[2], SUITS[3]]);
-  const RANK_NAME = { 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
+  const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 86;              // keep in sync with www/version.txt
+  const VERSION = 87;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -654,6 +672,12 @@
   // ----- engine state (lives on the solo device or on the room host) -----
   let players = [], deck = [], pile = [], suit = null, turn = 0, drew = false;
   let sixRun = 0, passStreak = 0, starter = 0, roundNo = 0, phase = 'setup';
+  let deckLong = false;            // this game: 52 cards
+  // the long game only: the direction of play (a ten turns it), and who must cover their own four
+  let dir = 1, fourBy = -1, fourDraw = 0;
+  const FOUR_MAX = 3;              // a four: the one who laid it draws at most this many cards to cover it
+  let longPick = false;            // the switch on this device: the next game I start is long
+  try { longPick = localStorage.getItem('g101-long') === '1'; } catch {}
   let gameId = 0, busy = false, log = [], pendingQueen = null, result = null;
   let evSeq = 0, lastEv = null, viewRev = 0;
   let emptySeq = 0;               // order in which players ran out of cards
@@ -744,9 +768,12 @@
   const active = () => players.filter(p => !p.out);
   const top = () => pile[pile.length - 1];
   // a queen goes on any card; while sixes are stacked on you, only another six can be played
-  const canPlay = c => (pendingSix ? c.r === 6 && active().length >= 3 :c.r === 12 || c.s === suit || c.r === top().r);
+  const PEN = c => (deckLong ? (c.r === 2 ? 1 : c.r === 3 ? 2 : 0) : c.r === 6 ? 2 : 0);
+  const PEN_WORD = { 2: 'двойку', 3: 'тройку', 6: 'шестёрку' };
+  const canPlay = c => (pendingSix ? c.r === (deckLong ? top().r : 6) && active().length >= 3 :c.r === 12 || c.s === suit || c.r === top().r);
   const label = c => RANK_NAME[c.r] + c.s;
-  const isSpecialEnd = c => c.r === 6 || c.r === 14;
+  // nobody wins on these cards (and the round does not open with them)
+  const isSpecialEnd = c => (deckLong ? c.r === 2 || c.r === 3 || c.r === 4 || c.r === 14 : c.r === 6 || c.r === 14);
   const pointsWord = n => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? 'очков' : b === 1 ? 'очко' : b >= 2 && b <= 4 ? 'очка' : 'очков'; };
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
   const handPoints = p => p.hand.reduce((n, c) => n + POINTS(c.r), 0);
@@ -755,7 +782,7 @@
 
   function nextIdx(i) {
     let n = i;
-    do { n = (n + 1) % players.length; } while (players[n].out);
+    do { n = (n + dir + players.length) % players.length; } while (players[n].out);
     return n;
   }
   function say(f) { log.push(typeof f === 'function' ? f : () => f); if (log.length > HISTORY) log.shift(); }
@@ -776,6 +803,7 @@
     gameId++;
     newMatch();
     players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, pid: s.pid || '', hand: [], score: 0, out: false }));
+    deckLong = longPick;
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = []; result = null;
     backNo = (backNo + 1 + Math.floor(Math.random() * (BACKS - 1))) % BACKS;
@@ -787,9 +815,10 @@
     roundNo++;
     deck = [];
     let id = 0;
-    for (const s of SUITS) for (let r = 6; r <= 14; r++) deck.push({ s, r, id: id++ });
+    for (const s of SUITS) for (let r = deckLong ? 2 : 6; r <= 14; r++) deck.push({ s, r, id: id++ });
     shuffle(deck);
     pile = []; sixRun = 0; pendingSix = 0; passStreak = 0; drew = false; busy = false; pendingQueen = null; result = null;
+    dir = 1; fourBy = -1; fourDraw = 0;
     players.forEach(p => { p.hand = []; });
     for (let k = 0; k < HAND_SIZE; k++) active().forEach(p => p.hand.push(deck.pop()));
     phase = 'play';
@@ -829,11 +858,13 @@
     const p = players[pi];
     const i = p.hand.indexOf(card);
     if (i >= 0) p.hand.splice(i, 1);
+    const prev = top();
     pile.push(card);
+    if (fourBy === pi) fourBy = -1;                         // the four is covered
     lastEv = { seq: ++evSeq, type: 'play', pi };
     suit = card.s;
     passStreak = 0;
-    sixRun = card.r === 6 ? sixRun + 1 : 0;
+    sixRun = deckLong ? (PEN(card) ? (prev && prev.r === card.r ? sixRun + 1 : 1) : 0) : card.r === 6 ? sixRun + 1 : 0;
     if (opened) say(me => `Открыта карта ${label(card)} — это ${pi === me ? 'ваш ход' : 'ход: ' + p.name}`);
     else say(who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card)));
 
@@ -866,17 +897,25 @@
 
   function afterPlay(pi, card) {
     if (card.r === 12) card.as = suit;         // whichever way the suit was chosen
+    if (deckLong && card.r === 10) {           // a ten turns the direction of play
+      dir = -dir;
+      say('Направление игры сменилось');
+    }
     let n = nextIdx(pi);
     if (card.r === 14) {                       // ace: next player skips
       say(who(n, 'пропускаете ход', 'пропускает ход'));
       n = nextIdx(n);
-    } else if (card.r === 6) {
+    } else if (PEN(card)) {
       // Every six lying in a row on the table adds 2 cards, no matter who already took cards in between
       // or whether the deck was reshuffled. The next player answers with a six or presses "Беру".
-      pendingSix = 2 * sixRun;
+      // (The long game: twos add 1 card each, threes 2 each, in the same way.)
+      pendingSix = PEN(card) * sixRun;
       const k = pendingSix;
-      const or = active().length >= 3 ? ' или подкинуть шестёрку' : '';   // one on one a six cannot be answered
+      const or = active().length >= 3 ? ' или подкинуть ' + PEN_WORD[card.r] : '';   // one on one a stack cannot be answered
       say(who(n, `должны взять ${k} ${cardsWord(k)}${or}`, `должен взять ${k} ${cardsWord(k)}${or}`));
+    } else if (deckLong && card.r === 4) {     // a four: the same player covers it
+      n = pi; fourBy = pi; fourDraw = 0;
+      say(who(pi, 'кроете свою четвёрку', 'кроет свою четвёрку'));
     }
     turn = n;
     drew = false;
@@ -898,6 +937,20 @@
     step();
   }
 
+  function drawForFour(pi) {
+    const p = players[pi];
+    if (fourDraw >= FOUR_MAX) return;
+    const c = drawOne();
+    if (c) {
+      fourDraw++;
+      p.hand.push(c);
+      lastEv = { seq: ++evSeq, type: 'draw', pi, k: 1 };
+      say(me => (me === pi ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
+    } else say(who(pi, 'не можете взять карту', 'не может взять карту'));
+    if (!c || fourDraw >= FOUR_MAX) drew = true;            // no more drawing: cover it or press "Пас"
+    step();
+  }
+
   // the player who got rid of their cards last (-1 if everybody still has cards)
   function lastOut() {
     let best = -1;
@@ -909,6 +962,7 @@
 
   function pass() {
     passStreak++;
+    fourBy = -1;
     if (players[turn].hand.length) say(who(turn, 'пасуете', 'пасует'));
     else say(who(turn, 'без карт: ждёте, пока накроют', 'без карт: ждёт, пока накроют'));
     if (passStreak >= active().length && !deck.length && pile.length <= 1) { endRound(-1); return; }
@@ -971,6 +1025,7 @@
       const c = p.hand.find(x => x.id === a.id);
       if (c && canPlay(c)) playCard(seat, c, false, c.r === 12 && SUITS.includes(a.s) ? a.s : null);
     } else if (a.t === 'draw') {
+      if (fourBy === seat) { drawForFour(seat); return; }
       if (drew || pendingSix) return;                      // no drawing for luck while sixes are on you
       drew = true;
       const c = drawOne();
@@ -1000,6 +1055,7 @@
     const p = players[turn];
     const opts = p.hand.filter(canPlay);
     if (!opts.length) {
+      if (fourBy === turn) { if (drew) pass(); else drawForFour(turn); return; }
       if (pendingSix) { takePenalty(); return; }           // no six to answer with: take the cards
       if (drew) { pass(); return; }
       drew = true;
@@ -1012,7 +1068,7 @@
       return;
     }
     // drop expensive cards first, attack with sixes, keep queens for later
-    const w = c => POINTS(c.r) + (c.r === 6 ? 6 : 0) + (c.r === 14 ? 3 : 0) - (c.r === 12 && p.hand.length > 2 ? 12 : 0);
+    const w = c => POINTS(c.r) + (PEN(c) ? 6 : 0) + (c.r === 14 ? 3 : 0) - (c.r === 12 && p.hand.length > 2 ? 12 : 0);
     opts.sort((a, b) => w(b) - w(a));
     playCard(turn, opts[0]);
   }
@@ -1090,7 +1146,7 @@
     const t = top(), me = players[seat];
     return {
       seat, roundNo, phase, turn, drew, busy, suit, room: roomCode, ver: VERSION, ev: lastEv, rev: ++viewRev, pendingSix,
-      term, back: backNo,
+      term, back: backNo, long: deckLong, dir,
       top: t ? face(t) : null,
       hist: pile.slice(-HISTORY).map(face),
       deckCount: deck.length, pileCount: pile.length,
@@ -1214,7 +1270,9 @@
     $('roundNo').textContent = v.roundNo;
     $('compass').style.display = '';
     document.body.dataset.back = v.back || 0;
-    $('roomTag').textContent = (v.room && !group ? ' · комната ' + v.room : '') + ' · v' + VERSION;
+    document.body.classList.toggle('long', !!v.long);
+    document.body.classList.toggle('ccw', !!v.long && v.dir < 0);
+    $('roomTag').textContent = (v.long ? ' · длинная' : '') + (v.room && !group ? ' · комната ' + v.room : '') + ' · v' + VERSION;
     $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
     // spectators ask to see the cards: every player decides for themselves
     const ab = $('asks'); ab.innerHTML = '';
@@ -2502,7 +2560,7 @@
   function snapshot() {
     const me = peer ? peer.id : '';
     return {
-      term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup, matchId, duel,
+      term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup, matchId, duel, long: deckLong, dir, fourBy, fourDraw,
       specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
         name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
@@ -2521,7 +2579,8 @@
     deck = st.deck; pile = st.pile; suit = st.suit; turn = st.turn; drew = st.drew; sixRun = st.sixRun;
     pendingSix = st.pendingSix; emptySeq = st.emptySeq; passStreak = st.passStreak; starter = st.starter;
     roundNo = st.roundNo; phase = st.phase; pend = st.pend; busy = false; backNo = st.back || 0;
-    matchId = st.matchId || ''; duel = st.duel || null;
+    matchId = st.matchId || ''; duel = st.duel || null; deckLong = !!st.long;
+    dir = st.dir || 1; fourBy = st.fourBy == null ? -1 : st.fourBy; fourDraw = st.fourDraw || 0;
     pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
     result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
     log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
@@ -2630,7 +2689,7 @@
       if (d.st && (d.st.term || 0) >= gTerm && view && !view.spec) { gSnap = d.st; takeOver(n, code, true); }
       return;
     }
-    if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; netMsg(''); drawLobby(); }
+    if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; lobbyLong = !!d.long; netMsg(''); drawLobby(); }
     else if (d.t === 'view' && d.v) {
       const t = d.v.term || 0;
       if (t < gTerm) return;                                // a host that has already been replaced
@@ -2776,7 +2835,7 @@
   // send a guest the current state again (answers every ping, so a lost message heals itself)
   function resync(conn, d) {
     if (!started) {
-      if (lobby && lobby.some(s => s.conn === conn)) conn.send({ t: 'lobby', code: roomCode, names: lobbyNames(), ver: VERSION });
+      if (lobby && lobby.some(s => s.conn === conn)) conn.send({ t: 'lobby', code: roomCode, names: lobbyNames(), ver: VERSION, long: longPick });
       return;
     }
     const seat = players.findIndex(p => p.conn === conn);
@@ -3276,8 +3335,10 @@
     $('hostBox').style.display = host ? '' : 'none';
     [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length; });
     if (host && waiting) drawWaiting(names); else showOnly('lobby');
-    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION }); });
+    $('longNote').style.display = !host && lobbyLong ? '' : 'none';
+    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick }); });
   }
+  let lobbyLong = false;                                    // a guest: the host has chosen the long game
 
   // The host waits at an empty table: friends who come in sit down, bots can be added, the game starts on a tap.
   let waiting = false;
@@ -3287,6 +3348,7 @@
     $('roundNo').textContent = '—';
     $('roomTag').textContent = ' · v' + VERSION;
     $('compass').style.display = 'none';
+    document.body.classList.remove('long', 'ccw');
     $('turnNote').className = '';
     $('asks').innerHTML = ''; $('specRow').innerHTML = ''; $('status').innerHTML = '';
     const o = $('opps');
@@ -3472,6 +3534,15 @@
   $('leaveBtn').onclick = leave;
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = testNet;
+  document.querySelectorAll('.longBox').forEach(b => {
+    b.checked = longPick;
+    b.onchange = () => {
+      longPick = b.checked;
+      document.querySelectorAll('.longBox').forEach(x => { x.checked = longPick; });
+      try { localStorage.setItem('g101-long', longPick ? '1' : '0'); } catch {}
+      if (mode === 'host' && lobby && !started) drawLobby();          // the guests see it at once
+    };
+  });
   $('liteBox').checked = lite;
   $('liteBox').onchange = () => {
     lite = $('liteBox').checked;
