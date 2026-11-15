@@ -33,6 +33,9 @@
   #gate { max-width: 360px; margin: 12vh auto 0; }
   #gate p { color: var(--muted); }
   #gate input, #gate button { width: 100%; margin-top: 8px; }
+  #gate .keep { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); }
+  #gate .keep input { width: 20px; height: 20px; margin: 0; flex: none; }
+  .out { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 0; margin-top: 8px; }
   #err { color: #e2725b; min-height: 20px; margin-top: 8px; }
   .hide { display: none; }
 </style>
@@ -42,6 +45,7 @@
   <h1>101 · страница разработчика</h1>
   <p id="gateText"></p>
   <input id="pw" type="password" autocomplete="current-password" placeholder="Пароль">
+  <label class="keep"><input id="keep" type="checkbox" checked> Запомнить пароль на этом устройстве</label>
   <button id="go">Войти</button>
   <div id="err"></div>
 </div>
@@ -50,13 +54,16 @@
   <div class="stats" id="stats"></div>
   <div class="bar"><input id="q" placeholder="Поиск: имя, код компании, устройство"><button id="re">Обновить</button></div>
   <div id="list"></div>
+  <button class="out" id="out">Выйти и забыть пароль на этом устройстве</button>
 </div>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let key = '', data = null, claimed = true;
-  try { key = localStorage.getItem('adm101') || ''; } catch {}
+  // remembered for good (the tick) or only until this tab is closed
+  try { key = localStorage.getItem('adm101') || sessionStorage.getItem('adm101') || ''; } catch {}
+  const forget = () => { key = ''; try { localStorage.removeItem('adm101'); sessionStorage.removeItem('adm101'); } catch {} };
   const api = (path, opt = {}) => fetch(path, { ...opt, headers: { 'X-Key': key, ...(opt.headers || {}) } }).then(r => r.json()).catch(() => null);
   const ago = (now, t) => {
     const s = Math.max(0, Math.round((now - t) / 1000));
@@ -93,7 +100,7 @@
   async function load() {
     const r = await api('/admin/data');
     if (!r) { $('err').textContent = 'Нет связи с сервером.'; return gate(); }
-    if (!r.ok) { key = ''; try { localStorage.removeItem('adm101'); } catch {} return gate(r.why === 'key' && $('pw').value ? 'Неверный пароль.' : ''); }
+    if (!r.ok) { forget(); return gate(r.why === 'key' && $('pw').value ? 'Неверный пароль.' : ''); }
     data = r;
     $('gate').classList.add('hide'); $('main').classList.remove('hide');
     draw();
@@ -114,10 +121,12 @@
       const r = await api('/admin/claim', { method: 'POST', body: JSON.stringify({ pw }) });
       if (!r || !r.ok) { $('err').textContent = 'Не получилось задать пароль.'; return gate(); }
     }
+    forget();
     key = pw;
-    try { localStorage.setItem('adm101', key); } catch {}
+    try { ($('keep').checked ? localStorage : sessionStorage).setItem('adm101', key); } catch {}
     load();
   };
+  $('out').onclick = () => { forget(); data = null; $('pw').value = ''; gate(); };
   $('pw').onkeydown = e => { if (e.key === 'Enter') $('go').click(); };
   $('re').onclick = load;
   $('q').oninput = () => data && draw();
