@@ -4,6 +4,7 @@
 //   POST /tg/say     the bot writes to a chat (an invitation from a friend)
 //   POST /tg/hook/…  Telegram tells the bot what people wrote to it
 //   GET  /ws         the relay of game messages (see relay.js)
+//   GET  /rpc        any of the requests above as one question and one answer over a fresh WebSocket
 //   GET  /admin      the developer's page (behind a password that only the owner knows)
 import ADMIN_PAGE from './admin.html';
 export { Relay } from './relay.js';
@@ -90,11 +91,37 @@ async function admin(env, request, url) {
   return json({ ok: false }, 404);
 }
 
+// One question, one answer, each on a new connection: {"path", "body", "key"} -> the same answer the
+// plain request would give. Some networks freeze a connection after a few packets, and the browser keeps
+// sending plain requests into the frozen one; a fresh WebSocket always gets through.
+function rpc(env, origin) {
+  const pair = new WebSocketPair(), ws = pair[1];
+  ws.accept();
+  ws.addEventListener('message', async e => {
+    let out = '{"ok":false}';
+    try {
+      const d = JSON.parse(e.data), path = String(d.path || '');
+      if (path.startsWith('/') && !path.startsWith('/rpc') && !path.startsWith('/ws')) {
+        const r = await route(new Request(origin + path, { method: d.body == null ? 'GET' : 'POST',
+          headers: { 'X-Key': String(d.key || '') }, body: d.body == null ? undefined : JSON.stringify(d.body) }), env);
+        out = await r.text();
+      }
+    } catch {}
+    try { ws.send(out); ws.close(1000, 'done'); } catch {}
+  });
+  return new Response(null, { status: 101, webSocket: pair[0] });
+}
+
 export default {
-  async fetch(request, env) {
+  fetch(request, env) { return route(request, env); },
+};
+
+async function route(request, env) {
+  {
     const url = new URL(request.url), p = url.pathname;
     try {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+      if (p === '/rpc') return rpc(env, url.origin);
       if (p === '/ping') return json({ ok: true, time: Date.now() });
       if (p === '/ws') return env.RELAY.get(env.RELAY.idFromName('main')).fetch(request);      // game messages
       if (p === '/hello' && request.method === 'POST') return await hello(env, await body(request));
@@ -129,5 +156,5 @@ export default {
     } catch (e) {
       return json({ ok: false, why: 'error' }, 500);
     }
-  },
-};
+  }
+}

@@ -64,7 +64,16 @@
   // remembered for good (the tick) or only until this tab is closed
   try { key = localStorage.getItem('adm101') || sessionStorage.getItem('adm101') || ''; } catch {}
   const forget = () => { key = ''; try { localStorage.removeItem('adm101'); sessionStorage.removeItem('adm101'); } catch {} };
-  const api = (path, opt = {}) => fetch(path, { ...opt, headers: { 'X-Key': key, ...(opt.headers || {}) } }).then(r => r.json()).catch(() => null);
+  // one question, one answer, each on a new connection (plain requests get stuck on some networks)
+  const api = (path, opt = {}) => new Promise(res => {
+    let done = false, ws;
+    const fin = v => { if (done) return; done = true; try { ws.close(); } catch {} res(v); };
+    try { ws = new WebSocket(location.origin.replace('http', 'ws') + '/rpc'); } catch { return res(null); }
+    ws.onopen = () => ws.send(JSON.stringify({ path, key, body: opt.body ? JSON.parse(opt.body) : undefined }));
+    ws.onmessage = e => { try { fin(JSON.parse(e.data)); } catch { fin(null); } };
+    ws.onerror = () => fin(null);
+    setTimeout(() => fin(null), 8000);
+  });
   const ago = (now, t) => {
     const s = Math.max(0, Math.round((now - t) / 1000));
     if (s < 150) return 'в сети';
