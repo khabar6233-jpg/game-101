@@ -355,17 +355,21 @@
   #toast.gone { transition: translate .2s ease-in, opacity .2s ease-in; opacity: 0; }
   @keyframes toastIn { from { transform: translate(-50%, -20px); opacity: 0; } }
   /* ----- the start screen ----- */
-  #setup { background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.08) 0%, transparent 45%), radial-gradient(ellipse at 50% 30%, var(--felt) 0%, var(--felt-dark) 100%); align-items: flex-start; padding: 0; overflow-y: auto; }
-  .home { width: 100%; max-width: 420px; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) 16px 28px; display: flex; flex-direction: column; gap: 14px; color: var(--text); }
-  .brand { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
-  .brand img { width: 56px; height: 56px; border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  #setup { background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.08) 0%, transparent 45%), radial-gradient(ellipse at 50% 30%, var(--felt) 0%, var(--felt-dark) 100%); align-items: flex-start; padding: 0; overflow: hidden; }
+  .home { width: 100%; max-width: 420px; margin: 0 auto; padding: max(10px, env(safe-area-inset-top)) 16px max(10px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; color: var(--text); }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px; }
+  .brand img { width: 46px; height: 46px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
   .brand .title { flex: 1; text-align: left; }
-  .brand h1 { margin: 0; font-size: 34px; line-height: 1; letter-spacing: 1px; }
+  .brand h1 { margin: 0; font-size: 30px; line-height: 1; letter-spacing: 1px; }
+  .brand .ghost { padding: 9px 12px; font-size: 14px; }
   .brand #ver { font-size: 12px; color: var(--muted); }
   .ghost { background: rgba(255,255,255,.1); color: var(--text); border: 1px solid rgba(255,255,255,.22); border-radius: 12px; padding: 10px 16px; font-size: 15px; font-family: inherit; }
   .ghost.small { align-self: center; font-size: 13px; padding: 8px 14px; color: var(--muted); border-color: rgba(255,255,255,.14); background: none; }
-  .panel { background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
-  .panel h3 { margin: 0 0 2px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
+  .panel { background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.1); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .panel h3 { margin: 0; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
+  .panel h3 small { letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; font-size: 12px; }
+  .swRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .swRow .ghost.small { flex: none; padding: 6px 10px; font-size: 12px; }
   .panel .hint { font-size: 12px; color: var(--muted); }
   .field.bad { border-color: #ff8a80; box-shadow: 0 0 0 2px rgba(255,138,128,.35); animation: nameShake .35s; }
   @keyframes nameShake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
@@ -373,15 +377,16 @@
   .hint.bad:empty { display: none; }
   .field { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 0 14px; }
   .field span { flex: none; width: 82px; font-size: 13px; color: var(--muted); }
-  .home input { flex: 1; min-width: 0; width: 100%; background: none; border: 0; outline: 0; color: var(--text); font-size: 17px; font-family: inherit; padding: 13px 0; }
+  .home input { flex: 1; min-width: 0; width: 100%; background: none; border: 0; outline: 0; color: var(--text); font-size: 17px; font-family: inherit; padding: 10px 0; }
   .home input::placeholder { color: rgba(255,255,255,.35); }
   .home .row { display: flex; gap: 8px; }
   .home .row > input { flex: 1; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 13px 14px; text-align: center; }
   .home .row > .btn { flex: none; }
-  .home .btn.wide { width: 100%; font-size: 18px; padding: 15px; }
+  .home .btn.wide { width: 100%; font-size: 17px; padding: 11px; }
+  .home .seg .btn { padding: 10px 0; }
   .home .msg { color: #ffc2b8; font-size: 14px; white-space: pre-line; }
   .home .msg:empty { display: none; }
-  .sw { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+  .sw { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
   .home .sw input { flex: none; width: 22px; height: 22px; padding: 0; accent-color: var(--gold); }
   .seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
   /* the deck: 36 or 52 cards, an iPhone-style switch between the two numbers */
@@ -394,7 +399,7 @@
     box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 3px 1px rgba(0,0,0,.06); transition: transform .25s; }
   .modeSw.long .tg { background: #34c759; }
   .modeSw.long .tg::after { transform: translateX(20px); }
-  #homeMode { color: var(--text); margin: 2px 0; }
+  #homeMode { color: var(--text); gap: 8px; font-size: 16px; }
   #lobMode { color: #222; margin: 4px 0; }
   #waitMode { display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text); z-index: 2; }
   body.waiting #waitMode { display: flex; }
@@ -529,9 +534,9 @@
     <div class="brand">
       <img src="icon-192.png?2" alt="">
       <div class="title"><h1>101</h1><span id="ver"></span></div>
+      <div class="modeSw" id="homeMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
     </div>
-    <div class="modeSw" id="homeMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
 
     <section class="panel">
       <h3>С друзьями</h3>
@@ -546,15 +551,15 @@
         <input id="codeIn" maxlength="10" inputmode="numeric" placeholder="Код комнаты" autocomplete="off">
         <button class="btn" id="joinBtn">Войти</button>
       </div>
-      <label class="sw"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее и без голоса</span></label>
+      <div class="swRow"><label class="sw"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее, без голоса</span></label>
+        <button class="ghost small" id="netTest">Проверить связь</button></div>
       <div class="msg" id="netMsg"></div>
     </section>
 
     <button class="btn wide" id="friendsBtn">Друзья</button>
 
     <section class="panel">
-      <h3>С ботами</h3>
-      <div class="hint">Сколько игроков за столом</div>
+      <h3>С ботами <small>· сколько игроков за столом</small></h3>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
         <button class="btn" data-bots="2">3</button>
@@ -563,8 +568,6 @@
         <button class="btn" data-bots="5">6</button>
       </div>
     </section>
-
-    <button class="ghost small" id="netTest">Проверить связь</button>
   </div>
 </div>
 
@@ -688,7 +691,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 92;              // keep in sync with www/version.txt
+  const VERSION = 93;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -3960,6 +3963,24 @@
     leave();
   };
   try { $('nick').value = localStorage.getItem('g101-name') || ''; } catch {}
+  // the start screen fits the screen: when the phone is too small for it, the whole screen is drawn smaller
+  // (not while the keyboard is open: then the screen is short only for a moment)
+  function fitHome() {
+    const h = document.querySelector('.home');
+    if (!h || !$('setup').classList.contains('show')) return;
+    const a = document.activeElement;
+    if (a && a.tagName === 'INPUT' && a.type !== 'checkbox' && h.contains(a)) return;
+    h.style.zoom = '';
+    const need = h.scrollHeight, room = (window.visualViewport ? visualViewport.height : innerHeight);
+    if (need > room) h.style.zoom = String(Math.max(.6, Math.floor(room / need * 1000) / 1000));
+  }
+  window.fitHome = fitHome;
+  addEventListener('resize', () => setTimeout(fitHome, 50));
+  addEventListener('orientationchange', () => setTimeout(fitHome, 300));
+  new MutationObserver(() => requestAnimationFrame(fitHome)).observe(document.querySelector('.home'), { childList: true, subtree: true, characterData: true });
+  new MutationObserver(() => requestAnimationFrame(fitHome)).observe($('setup'), { attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('focusout', () => setTimeout(fitHome, 300));
+  setTimeout(fitHome, 0);
   // typing: only Russian letters and a hyphen get in; a good name is remembered at once
   $('nick').addEventListener('input', () => {
     const f = $('nick');
