@@ -384,16 +384,20 @@
   .sw { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
   .home .sw input { flex: none; width: 22px; height: 22px; padding: 0; accent-color: var(--gold); }
   .seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-  /* the kind of game: a two-way slider */
-  .modeSw { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 16px;
-    background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.14); }
-  .modeSw button { position: relative; z-index: 1; border: 0; background: none; color: var(--muted); font: inherit; font-size: 17px; font-weight: 700;
-    padding: 11px 0; border-radius: 12px; transition: color .25s; -webkit-tap-highlight-color: transparent; }
-  .modeSw button.on { color: #fff; }
-  .modeSw i { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 12px;
-    background: linear-gradient(rgba(255,255,255,.3), rgba(255,255,255,.13)); border: 1px solid rgba(255,255,255,.35);
-    box-shadow: 0 2px 6px rgba(0,0,0,.25); transition: transform .25s ease; pointer-events: none; }
-  .modeSw.long i { transform: translateX(100%); }
+  /* the deck: 36 or 52 cards, an iPhone-style switch between the two numbers */
+  .modeSw { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 19px; font-weight: 800; color: inherit; }
+  .modeSw span { opacity: .45; padding: 6px 4px; cursor: pointer; transition: opacity .25s; -webkit-tap-highlight-color: transparent; }
+  .modeSw span.on { opacity: 1; }
+  .modeSw .tg { position: relative; flex: none; width: 51px; height: 31px; padding: 0; border: 0; border-radius: 16px;
+    background: rgba(120,120,128,.36); transition: background .25s; -webkit-tap-highlight-color: transparent; }
+  .modeSw .tg::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
+    box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 3px 1px rgba(0,0,0,.06); transition: transform .25s; }
+  .modeSw.long .tg { background: #34c759; }
+  .modeSw.long .tg::after { transform: translateX(20px); }
+  #homeMode { color: var(--text); margin: 2px 0; }
+  #lobMode { color: #222; margin: 4px 0; }
+  #waitMode { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); color: var(--text); display: none; z-index: 2; }
+  body.waiting #waitMode { display: flex; }
   .seg .btn { padding: 13px 0; font-size: 19px; }
   #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
   #groupList:empty { display: none; }
@@ -502,6 +506,7 @@
     <svg class="dirArc" id="dirTop" viewBox="0 0 160 30"><path d="M14 26Q80-8 146 26" marker-end="url(#dirHead)"/></svg>
     <svg class="dirArc" id="dirBot" viewBox="0 0 160 30"><defs><marker id="dirHead" viewBox="0 0 10 10" refX="7" refY="5"
       markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs><path d="M146 4Q80 38 14 4" marker-end="url(#dirHead)"/></svg>
+    <div class="modeSw" id="waitMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
     <div class="slot"><div id="deck"></div><span>Колода: <span id="deckCount">0</span></span></div>
     <div class="slot"><div id="pile"></div><span>Сброс: <span id="pileCount">0</span></span></div>
     <div class="slot"><div class="suit-now" id="suitNow"></div><span>Масть</span></div>
@@ -522,7 +527,7 @@
       <div class="title"><h1>101</h1><span id="ver"></span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
     </div>
-    <div class="modeSw" role="radiogroup" aria-label="Игра"><button data-long="0">Короткая</button><button data-long="1">Длинная</button><i></i></div>
+    <div class="modeSw" id="homeMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
 
     <section class="panel">
       <h3>С друзьями</h3>
@@ -637,7 +642,7 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
-      <div class="modeSw" id="lobMode" role="radiogroup" aria-label="Игра"><button data-long="0">Короткая</button><button data-long="1">Длинная</button><i></i></div>
+      <div class="modeSw" id="lobMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
       <div id="hostBox" class="col">
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
@@ -679,7 +684,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 90;              // keep in sync with www/version.txt
+  const VERSION = 91;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -820,6 +825,7 @@
 
   // ================= ENGINE =================
   function startMatch(seats) {
+    document.body.classList.remove('waiting');
     gameId++;
     newMatch();
     players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, pid: s.pid || '', hand: [], score: 0, out: false }));
@@ -2293,7 +2299,7 @@
   }
 
   function leave() {
-    document.body.classList.remove('myturn');
+    document.body.classList.remove('myturn', 'waiting');
     // one on one, the game is not finished: it is counted by points
     try {
       if (mode !== 'guest' && players.length && phase !== 'setup') { duelAbort(); if (duel && duel.id === matchId) render(); }
@@ -2934,7 +2940,7 @@
       try { localStorage.setItem('g101-long', longPick ? '1' : '0'); } catch {}
       drawLobby();
       if (window.drawModeSw) window.drawModeSw();
-      notifyUser(`${who.name} выбирает ${longPick ? 'длинную' : 'короткую'} игру`);
+      notifyUser(`${who.name} выбирает колоду из ${longPick ? 52 : 36} карт`);
       return;
     }
     if (!started) return;
@@ -3395,6 +3401,7 @@
     $('hostBox').style.display = host ? '' : 'none';
     [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length; });
     if (window.drawModeSw) window.drawModeSw();
+    document.body.classList.toggle('waiting', host && waiting);
     if (host && waiting) drawWaiting(names); else showOnly('lobby');
     if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick }); });
   }
@@ -3420,12 +3427,12 @@
     $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
     $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
     $('myHand').innerHTML = '';
-    $('meBar').textContent = 'Вы за столом · ждём друзей · ' + (longPick ? 'длинная игра' : 'короткая игра');
+    $('meBar').textContent = 'Вы за столом · ждём друзей';
+    document.body.classList.add('waiting');
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
     const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
     if (names.length < MAX_PLAYERS) add('+ бот', () => { lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null }); drawLobby(); });
-    add(longPick ? 'Игра: длинная' : 'Игра: короткая', () => setRoomLong(!longPick));
     if (names.length >= 2) add('Начать', () => { waiting = false; started = true; startMatch(lobby); });
     if (window.placeActions) window.placeActions();
   }
@@ -3600,9 +3607,10 @@
   $('netTest').onclick = testNet;
   const roomLong = () => (mode === 'guest' ? lobbyLong : longPick);
   const drawModeSw = () => document.querySelectorAll('.modeSw').forEach(w => {
-    const on = w.id === 'lobMode' ? roomLong() : longPick;
+    const on = w.id === 'lobMode' || w.id === 'waitMode' ? roomLong() : longPick;
     w.classList.toggle('long', on);
-    w.querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.long === '1') === on));
+    w.querySelectorAll('[data-long]').forEach(b => b.classList.toggle('on', (b.dataset.long === '1') === on));
+    w.querySelector('.tg').setAttribute('aria-checked', on ? 'true' : 'false');
   });
   window.drawModeSw = drawModeSw;
   // the table's game is chosen by anybody in the room: the host keeps the choice and tells everybody
@@ -3620,10 +3628,10 @@
   }
   document.querySelectorAll('.modeSw').forEach(w => {
     w.onclick = e => {
-      const b = e.target.closest('[data-long]');
+      const b = e.target.closest('[data-long], [data-flip]');
       if (!b) return;
-      const on = b.dataset.long === '1';
-      if (w.id === 'lobMode') setRoomLong(on);
+      const on = b.dataset.flip ? !w.classList.contains('long') : b.dataset.long === '1';
+      if (w.id === 'lobMode' || w.id === 'waitMode') setRoomLong(on);
       else { longPick = on; try { localStorage.setItem('g101-long', on ? '1' : '0'); } catch {} drawModeSw(); }
     };
   });
