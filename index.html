@@ -146,7 +146,7 @@
   .opp .lost { font-size: 11px; }
   .opps.many .opp .minis.fan { height: 32px; }
   .opps.many .opp .mini { width: 18px; height: 26px; margin-left: -11px; }
-  .opps.many .opp .omenu { top: 2px; right: 2px; font-size: 13px; }
+  .opps.many .opp .omenu { top: 2px; right: 0; font-size: 12px; padding: 2px; }
   .hand-me .card { transform-origin: 50% 130%; }
   .me-row { position: relative; }
   #sortBtn { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 46px; height: 34px; padding: 2px; border-radius: 10px;
@@ -331,8 +331,14 @@
   .opp .tools { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
   .opps.many { gap: 4px; }
   .opps.many .opp { padding: 6px 2px; font-size: 11px; }
-  .opps.many .opp .name { font-size: 12px; }
+  .opps.many .opp .name { font-size: 12px; max-width: calc(100% - 16px); align-self: flex-start; text-align: left; padding-left: 2px; }   /* six at the table: the name gets the room next to ☰ */
   .opps.many .opp .name .botW { display: none; }
+  .opp .pts i.w { font-style: normal; }
+  @media (max-width: 379px) { .bar .vtag { display: none; } }
+  .opps.many .opp .pts { font-size: 10px; letter-spacing: -.2px; }
+  .opps.many .opp .pts .sep { margin: 0 2px; }
+  .opps.many .opp .pts b, .opps.many .opp .pts .cnt { font-size: 12px; }
+  @media (max-width: 359px) { .opps.many .opp .pts i.w:first-of-type { display: none; } }   /* six at a 320 px table: "0 · 6 карт" */
   .opp .minis.open { flex-wrap: wrap; height: auto; gap: 1px; }
   .mini.f { margin-left: 0; background: #fff; border: 1px solid #bbb; color: #1b1b1b; font-size: 10px; line-height: 1.15; font-weight: 800; padding-top: 3px; }
   .mini.f.red { color: #c8232c; }
@@ -891,7 +897,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 107;              // keep in sync with www/version.txt
+  const VERSION = 108;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1590,7 +1596,7 @@
     document.body.dataset.back = v.back || 0;
     document.body.classList.toggle('long', !!v.long && v.players.filter(p => !p.out && !p.gone).length > 2);
     document.body.classList.toggle('ccw', !!v.long && v.dir < 0);
-    $('roomTag').textContent = (v.long ? L(' · длинная', ' · long') : '') + ' · v' + VERSION;
+    $('roomTag').innerHTML = (v.long ? L(' · длинная', ' · long') : '') + '<span class="vtag"> · v' + VERSION + '</span>';
     $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
     // spectators ask to see the cards: every player decides for themselves
     const ab = $('asks'); ab.innerHTML = '';
@@ -1653,12 +1659,12 @@
       d.dataset.i = i;
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
       const many = o.classList.contains('many'), shown = Math.min(p.count, many ? 5 : 7);
-      const fan = k => { const a = (k - (shown - 1) / 2) * (many ? 9 : 8); return `style="rotate:${a}deg;translate:0 ${Math.abs(a) / 3}px"`; };
+      const fan = k => { const a = (k - (shown - 1) / 2) * (many ? 6 : 8); return `style="rotate:${a}deg;translate:0 ${Math.abs(a) / 3}px"`; };
       d.innerHTML = `<button class="omenu" data-m="${i}" aria-label="${L('Подробнее', 'Details')}">☰</button>` +
         `<div class="name">${nameHtml(p.name)}</div>` +
         (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${rankName(c.r)}<br>${c.s}</div>`).join('')}</div>`
           : `<div class="minis fan">${Array.from({ length: shown }, (_, k) => `<div class="mini" ${fan(k)}></div>`).join('')}</div>`) +
-        `<div class="pts">${p.gone ? L('удалён', 'removed') : p.out ? L('выбыл', 'out') : `<b>${p.score}</b> ${L('оч.', 'pts')}`}<span class="sep">·</span><span class="cnt">${p.count}</span> ${L('карт', 'cards')}</div>` +
+        `<div class="pts">${p.gone ? L('удалён', 'removed') : p.out ? L('выбыл', 'out') : `<b>${p.score}</b><i class="w"> ${L('оч.', 'pts')}</i>`}<span class="sep">·</span><span class="cnt">${p.count}</span><i class="w"> ${L('карт', 'cards')}</i></div>` +
         (p.lost ? `<div class="lost">${L('нет связи', 'offline')}</div>` : '');
       o.appendChild(d);
     }
@@ -2159,8 +2165,10 @@
     return n;
   }
   // a name: Russian letters, a hyphen only between letters ("Анна-Мария")
-  const NAME_RE = /^[А-ЯЁа-яё]+(-[А-ЯЁа-яё]+)*$/, NAME_EN = /^[A-Za-z]+(-[A-Za-z]+)*$/;   // in English: Latin letters ("Mary-Ann")
-  const nameRe = () => (lang === 'en' ? NAME_EN : NAME_RE);
+  // a name: Russian or Latin letters, one alphabet per name, a hyphen only between letters ("Анна-Мария", "Mary-Ann");
+  // either kind is good in both languages, so switching the language never locks a player out
+  const NAME_ANY = /^(?:[А-ЯЁа-яё]+(?:-[А-ЯЁа-яё]+)*|[A-Za-z]+(?:-[A-Za-z]+)*)$/;
+  const nameRe = () => NAME_ANY;
   const nameOk = () => nameRe().test($('nick').value.trim());
   // nobody gets to a table without a name: the field is shown, lit and waits for it
   function needName() {
@@ -2169,7 +2177,7 @@
     $('setup').classList.add('show');
     f.closest('.field').classList.remove('bad'); void f.offsetWidth;
     f.closest('.field').classList.add('bad');
-    $('nameHint').textContent = f.value.trim() ? L('Имя — только русские буквы, через дефис можно: Анна-Мария', 'Name: Latin letters only, a hyphen is fine: Mary-Ann') : L('Сначала введите имя', 'Enter your name first');
+    $('nameHint').textContent = f.value.trim() ? L('Имя — буквы одного алфавита, через дефис можно: Анна-Мария', 'Name: letters of one alphabet, a hyphen is fine: Mary-Ann') : L('Сначала введите имя', 'Enter your name first');
     f.scrollIntoView({ block: 'center', behavior: 'smooth' });
     setTimeout(() => { try { f.focus(); } catch {} }, 250);
     return true;
@@ -3537,7 +3545,7 @@
   }
   function tgLink() {
     if (!TG_TOKEN || !TG_BOT) return;
-    const tgUrl = `https://t.me/${TG_BOT}?start=${encodeURIComponent(myPid)}`;
+    const tgUrl = `https://t.me/${TG_BOT}?start=${encodeURIComponent(myPid)}${lang === 'en' ? '--en' : ''}`;   // the bot answers in this language
     if (window.App101 && window.App101.open) window.App101.open(tgUrl);      // the Android app hands the link to Telegram
     else window.open(tgUrl, '_blank');
     try { localStorage.setItem('g101-tgwait', Date.now()); } catch {}
@@ -3821,7 +3829,7 @@
     showOnly(null);
     document.body.classList.remove('myturn');
     $('roundNo').textContent = '—';
-    $('roomTag').textContent = ' · v' + VERSION;
+    $('roomTag').innerHTML = '<span class="vtag"> · v' + VERSION + '</span>';
     $('compass').style.display = 'none';
     document.body.classList.remove('long', 'ccw');
     $('turnNote').className = '';
@@ -4499,10 +4507,12 @@
   new MutationObserver(() => requestAnimationFrame(fitHome)).observe($('setup'), { attributes: true, attributeFilter: ['class'] });
   document.addEventListener('focusout', () => setTimeout(fitHome, 300));
   setTimeout(fitHome, 0);
-  // typing: only Russian letters and a hyphen get in; a good name is remembered at once
+  // typing: letters and a hyphen get in, all of the alphabet of the first letter; a good name is remembered at once
   $('nick').addEventListener('input', () => {
     const f = $('nick');
-    const v = f.value.replace(lang === 'en' ? /[^A-Za-z-]/g : /[^А-ЯЁа-яё-]/g, '').replace(/-{2,}/g, '-').replace(/^-/, '');
+    let v = f.value.replace(/[^A-Za-zА-ЯЁа-яё-]/g, '');
+    const first = (v.match(/[A-Za-zА-ЯЁа-яё]/) || [''])[0];
+    v = v.replace(/[A-Za-z]/.test(first) ? /[А-ЯЁа-яё]/g : /[A-Za-z]/g, '').replace(/-{2,}/g, '-').replace(/^-/, '');
     if (v !== f.value) f.value = v;
     f.closest('.field').classList.remove('bad');
     $('nameHint').textContent = '';
