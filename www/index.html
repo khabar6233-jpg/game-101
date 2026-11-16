@@ -303,6 +303,8 @@
     position: fixed; inset: 0; background: rgba(0,0,0,.6);
     display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10;
   }
+  #createDlg { z-index: 12; }
+  .opp.free { opacity: .6; border-style: dashed; }          /* "Настройки комнаты" opens above any other window */
   .overlay.show { display: flex; }
   .dialog { background: #fff; color: #222; border-radius: 16px; padding: 20px; text-align: center; max-width: 340px; width: 100%; max-height: 100%; overflow-y: auto; }
   .dialog h2 { margin: 0 0 8px; }
@@ -678,6 +680,7 @@
         <button class="btn plain" id="netTest">Проверить связь</button>
         <div class="testMsg" id="testMsg"></div>
       </div>
+      <button class="btn" id="gearRoom" style="display:none">Настройки комнаты</button>
       <button class="btn" id="newGameBtn">Новая игра</button>
       <button class="btn plain" id="gearFriends">Друзья</button>
       <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопки и окно масти на место</button>
@@ -857,7 +860,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 102;              // keep in sync with www/version.txt
+  const VERSION = 103;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -3677,6 +3680,7 @@
     $('roomEditBtn').style.display = host && !started ? '' : 'none';
     [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length || +b.dataset.n > roomSeats; });
     if (window.drawModeSw) window.drawModeSw();
+    if (host && !started) waiting = true;                    // the host always waits at the table itself
     document.body.classList.toggle('waiting', host && waiting);
     if (host && waiting) drawWaiting(names); else showOnly('lobby');
     if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick, room: roomInfoMsg() }); });
@@ -3700,7 +3704,8 @@
     o.className = 'opps' + (names.length > 4 ? ' many' : '');
     o.innerHTML = names.slice(1).map((n, k) => `<div class="opp" data-i="${k + 1}"><button class="omenu" data-kick="${k + 1}" aria-label="Убрать">✕</button>` +
       `<div class="name">${esc(n)}</div><div class="pts">${lobby[k + 1] && lobby[k + 1].isBot ? 'бот' : 'за столом'}</div></div>`).join('') +
-      (names.length < 2 ? '<div class="opp"><div class="name">Пустое место</div><div class="pts">ждём друзей…</div></div>' : '');
+      '<div class="opp free"><div class="name">Место</div><div class="pts">свободно</div></div>'.repeat(Math.max(0, roomSeats - names.length));
+    o.className = 'opps' + (roomSeats - 1 > 4 ? ' many' : '');
     $('deck').className = 'empty-slot'; $('deckCount').textContent = '0';
     $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
     $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
@@ -3931,7 +3936,12 @@
   };
   setBg(bgNo);
   $('bgs').onclick = e => { const b = e.target.closest('[data-bg]'); if (b) setBg(+b.dataset.bg); };
-  $('gearBtn').onclick = () => { vDraw(); $('gear').classList.remove('atHome'); $('gear').classList.add('show'); };
+  $('gearBtn').onclick = () => {
+    vDraw(); $('gear').classList.remove('atHome');
+    $('gearRoom').style.display = mode === 'host' && !started && lobby ? '' : 'none';   // the host, before the game: the room's settings
+    $('gear').classList.add('show');
+  };
+  $('gearRoom').onclick = () => { $('gear').classList.remove('show'); openCreate(true); };
   $('homeGear').onclick = () => { vDraw(); $('gear').classList.add('atHome'); $('gear').classList.add('show'); };
   $('gearClose').onclick = () => $('gear').classList.remove('show');
   $('newGameBtn').onclick = () => {
