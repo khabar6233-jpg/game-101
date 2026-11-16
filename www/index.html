@@ -430,7 +430,8 @@
   .room .meta span { display: flex; flex-direction: column; align-items: center; line-height: 1.05; color: var(--text); font-size: 15px; }
   .room .meta i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--muted); }
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
-  .room .gearB { flex: none; border: 0; background: none; color: var(--muted); font-size: 20px; padding: 6px 6px; font-family: inherit; }
+  .room .gearB { flex: none; border: 0; background: none; color: var(--muted); padding: 6px; display: flex; align-items: center; }
+  .room .gearB svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; pointer-events: none; }
   .botHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .botHead { flex-wrap: wrap; row-gap: 6px; }
   .botHead h3 { flex: 0 0 100%; white-space: nowrap; letter-spacing: 1.5px; }
@@ -506,7 +507,12 @@
   .modeSw.small .sl span.on { color: #fff; }
   #waitMode { display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2; }
   body.waiting #waitMode { display: flex; }
-  body.waiting #meBar { visibility: hidden; }          /* "ждём друзей" is said at the top of the table already */
+  body.watching #waitMode { display: none; }
+  body.waiting #meBar { color: var(--muted); }          /* while waiting: what for ("Ждём друзей", "Вы зритель") */
+  /* waiting at the table: "Начать" and "+ бот" in one row near the bottom of the table, always in the same places */
+  body.waiting .below { top: auto; bottom: 10px; }
+  body.waiting .below .actions { flex-wrap: nowrap; }
+  #actions .btn:disabled { opacity: .4; }
   .seg .btn { padding: 13px 0; font-size: 19px; }
   #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
   #groupList:empty { display: none; }
@@ -593,9 +599,12 @@
   .rules h4:first-child { margin-top: 0; }
   .rules ul { margin: 0; padding-left: 20px; }
   .rules li { margin-bottom: 4px; }
-  #specRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-  #specRow:empty { display: none; }
-  #specRow span { background: rgba(0,0,0,.2); color: var(--text); border-radius: 12px; padding: 2px 10px; font-size: 12px; }
+  #specRow { display: none; }
+  /* those who watch: an eye and their number at the left edge of the table (a tap names them) */
+  .specEye { position: absolute; left: 4px; top: 8px; z-index: 3; display: none; align-items: center; gap: 5px; border: 0; border-radius: 12px;
+    padding: 4px 9px 4px 7px; background: rgba(0,0,0,.22); color: var(--text); font: inherit; font-size: 14px; font-weight: 800; }
+  .specEye.on { display: flex; }
+  .specEye svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linejoin: round; }
   body.grp #codeRow, body.grp #lobCodeP, body.grp #lobCode { display: none; }
   .suits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .suits button { font-size: 40px; height: 76px; border-radius: 12px; border: 2px solid #ddd; background: #fafafa; color: #1b1b1b; }
@@ -621,6 +630,7 @@
   <div id="specRow"></div>
 
   <div class="middle">
+    <button class="specEye" id="specEye" aria-label="Зрители"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><b></b></button>
     <svg id="compass" viewBox="0 0 22 72"><defs>
       <linearGradient id="ndlSide" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0" stop-color="#fff" stop-opacity=".2"/><stop offset=".38" stop-color="#fff" stop-opacity=".75"/>
@@ -897,7 +907,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 110;              // keep in sync with www/version.txt
+  const VERSION = 111;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -1580,7 +1590,7 @@
     document.body.classList.toggle('long', !!v.long && v.players.filter(p => !p.out && !p.gone).length > 2);
     document.body.classList.toggle('ccw', !!v.long && v.dir < 0);
     $('roomTag').innerHTML = (v.long ? L(' · длинная', ' · long') : '') + '<span class="vtag"> · v' + VERSION + '</span>';
-    $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
+    showSpecs(v.specN || 0, v.specNames || []);
     // spectators ask to see the cards: every player decides for themselves
     const ab = $('asks'); ab.innerHTML = '';
     (v.asks || []).forEach(q => {
@@ -2648,7 +2658,8 @@
   }
 
   function leave() {
-    document.body.classList.remove('myturn', 'waiting');
+    document.body.classList.remove('myturn', 'waiting', 'watching');
+    showSpecs(0, []);
     // one on one, the game is not finished: it is counted by points
     try {
       if (mode !== 'guest' && players.length && phase !== 'setup') { duelAbort(); if (duel && duel.id === matchId) render(); }
@@ -2956,7 +2967,8 @@
     gHostSeen = true;
     if (d.t === 'lobby') {
       gJoined = true; gHeard = Date.now(); view = null;
-      lobby = d.names || []; lobbyBots = d.bots || []; lobbyMe = +d.me || 0; lobbyCtl = !!d.ctl; lobbyPw = d.pw || '';
+      lobby = d.names || []; lobbyBots = d.bots || []; lobbyMe = d.me == null ? 0 : +d.me; lobbyCtl = !!d.ctl; lobbyPw = d.pw || '';
+      lobbySpec = !!d.spec; lobbySpecN = +d.specN || 0; lobbySpecNames = Array.isArray(d.specNames) ? d.specNames.map(String) : [];
       hostVer = +d.ver || 0; lobbyProto = +d.proto || 0; lobbyLong = !!d.long; lobbyRoom = d.room || null;
       takeVk(n, d.vk);
       netMsg(''); drawLobby();
@@ -2970,7 +2982,7 @@
       if (d.v.rev && d.v.rev < gRev) return;
       if (d.v.rev) gRev = d.v.rev;
       takeVk(n, d.v.vk);
-      waiting = false; lobbyCtl = false; document.body.classList.remove('waiting'); netMsg('');
+      waiting = false; lobbyCtl = false; document.body.classList.remove('waiting', 'watching'); netMsg('');
       $('setup').classList.remove('show'); $('lobby').classList.remove('show');
       view = d.v;
       try { draw(view); } catch (e) { console.error(e); }
@@ -3106,7 +3118,7 @@
       `<div class="who"><b>${isFriendRoom(r) ? '★ ' : ''}${esc(r.name || r.names[0] || L('Стол', 'Table'))}${r.priv ? ' 🔒' : ''}</b>` +
       `<span class="${r.started ? '' : 'go'}">${esc(r.names.join(', '))} · ${status}</span></div>` +
       `<div class="meta"><span>${r.hand}<i>${L('в руке', 'in hand')}</i></span><span>${n}/${r.seats}<i>${L('мест', 'seats')}</i></span><span class="dk">${r.long ? 52 : 36}</span></div>` +
-      `<button class="gearB" data-gear="${esc(r.code)}" aria-label="${L('Настройки комнаты', 'Room settings')}">⚙</button></div>`;
+      `<button class="gearB" data-gear="${esc(r.code)}" aria-label="${L('Настройки комнаты', 'Room settings')}"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/></svg></button></div>`;
   }
   function drawRooms() {
     const el = $('rooms');
@@ -3442,9 +3454,8 @@
     $('hostBox').style.display = 'none';
     $('roomEditBtn').style.display = 'none';
     if (window.drawModeSw) window.drawModeSw();
-    waiting = ctl;
-    document.body.classList.toggle('waiting', ctl);
-    if (ctl) drawWaiting(names); else showOnly('lobby');
+    waiting = true;                                         // everybody waits at the table itself
+    drawWaiting(names);
   }
   // bots get random names, never two the same at one table: "Бот Боря", "Бот Джон"…
   const BOT_EN = ['Bob', 'John', 'Tony', 'Mike', 'Sam', 'Pete', 'Bill', 'Nick', 'Jack', 'Greg', 'Dan', 'Alex', 'Max', 'Oliver',
@@ -3460,27 +3471,36 @@
   }
   let lobbyLong = false;                                    // the room's game is the long one
   // the lobby as the table told it: names, which of them are bots, my place, whether I run the room, its password (mine only)
-  let lobbyBots = [], lobbyMe = 0, lobbyCtl = false, lobbyPw = '', lobbyProto = 0;
+  let lobbyBots = [], lobbyMe = 0, lobbyCtl = false, lobbyPw = '', lobbyProto = 0, lobbySpec = false, lobbySpecN = 0, lobbySpecNames = [];
   const tell = d => { if (mode === 'guest' && hostConn && hostConn.open) hostConn.send(d); };   // a word to the room's table
   const roomLine = (long, hand, n, seats, priv) => L(`Колода ${long ? 52 : 36} · ${hand} ${hand === 5 || hand === 6 ? 'карт' : 'карты'} в руке · мест ${n}/${seats}` + (priv ? ' · приватная' : ''),
     `Deck ${long ? 52 : 36} · ${hand} cards in hand · seats ${n}/${seats}` + (priv ? ' · private' : ''));
 
   // The host waits at an empty table: friends who come in sit down, bots can be added, the game starts on a tap.
   let waiting = false;
+  let specNames = [];
+  function showSpecs(n, names) {
+    specNames = names;
+    const e = $('specEye');
+    e.classList.toggle('on', n > 0);
+    e.querySelector('b').textContent = n;
+  }
+  onTap($('specEye'), () => { if (specNames.length) notifyUser(L('Смотрят: ', 'Watching: ') + specNames.join(', ')); return true; });
   function drawWaiting(names) {
     showOnly(null);
     document.body.classList.remove('myturn');
     $('roundNo').textContent = '—';
-    $('roomTag').innerHTML = '<span class="vtag"> · v' + VERSION + '</span>';
+    $('roomTag').innerHTML = (lobbyRoom && lobbyRoom.name ? ' · ' + esc(lobbyRoom.name) : '') + '<span class="vtag"> · v' + VERSION + '</span>';
     $('compass').style.display = 'none';
     document.body.classList.remove('long', 'ccw');
     $('turnNote').className = '';
-    $('asks').innerHTML = ''; $('specRow').innerHTML = ''; $('status').innerHTML = '';
+    $('asks').innerHTML = ''; $('specRow').innerHTML = '';
+    showSpecs(lobbySpecN, lobbySpecNames);
     const o = $('opps');
     o.className = 'opps' + (names.length > 4 ? ' many' : '');
     const seats = (lobbyRoom && lobbyRoom.seats) || MAX_PLAYERS;
     const others = names.map((n, i) => i).filter(i => i !== lobbyMe);       // my own seat is the bottom of the screen
-    o.innerHTML = others.map(i => `<div class="opp" data-i="${i}"><button class="omenu" data-kick="${i}" aria-label="${L('Убрать', 'Remove')}">✕</button>` +
+    o.innerHTML = others.map(i => `<div class="opp" data-i="${i}">` + (lobbyCtl ? `<button class="omenu" data-kick="${i}" aria-label="${L('Убрать', 'Remove')}">✕</button>` : '') +
       `<div class="name">${nameHtml(names[i])}</div><div class="pts">${lobbyBots[i] ? L('бот', 'bot') : L('за столом', 'seated')}</div></div>`).join('') +
       `<div class="opp free"><div class="name">${L('Место', 'Seat')}</div><div class="pts">${L('свободно', 'free')}</div></div>`.repeat(Math.max(0, seats - names.length));
     o.className = 'opps' + (seats - 1 > 4 ? ' many' : '');
@@ -3488,13 +3508,23 @@
     $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
     $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
     $('myHand').innerHTML = '';
-    $('meBar').textContent = lobbyPw ? L(`Ждём друзей · пароль «${lobbyPw}»`, `Waiting for friends · password "${lobbyPw}"`) : L('Ждём друзей', 'Waiting for friends');
+    $('status').innerHTML = '';
+    // what this person is waiting for, in the line under the table
+    $('meBar').textContent = lobbyCtl ? (names.length < 2 ? L('Ждём друзей', 'Waiting for friends') : L('Можно начинать', 'Ready to start'))
+      : lobbySpec ? L('Вы зритель', 'You are watching') : L('Ждём начала игры', 'Waiting for the start');
     document.body.classList.add('waiting');
+    document.body.classList.toggle('watching', lobbySpec);   // a spectator does not choose the deck
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
-    const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
-    if (names.length < seats) add(L('+ бот', '+ bot'), () => tell({ t: 'addbot' }));
-    if (names.length >= 2) add(L('Начать', 'Start'), () => tell({ t: 'start' }));
+    const add = (text, on, fn) => {
+      const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; b.disabled = !on;
+      onTap(b, () => { if (on) fn(); return true; }); a.appendChild(b);
+    };
+    // both buttons always stand in the same places: one that cannot be pressed yet is only dimmed
+    if (lobbyCtl) {
+      add(L('Начать', 'Start'), names.length >= 2, () => tell({ t: 'start' }));
+      add(L('+ бот', '+ bot'), names.length < seats, () => tell({ t: 'addbot' }));
+    } else if (lobbySpec && names.length < seats) add(L('Сесть за стол', 'Sit down'), true, () => tell({ t: 'seat' }));
     if (window.placeActions) window.placeActions();
   }
 
@@ -3620,7 +3650,8 @@
     // what is under the finger now: the element that was touched may already have been redrawn
     const t = document.elementFromPoint(e.clientX, e.clientY);
     if (!t || !$('app').contains(t)) return false;
-    if (t.closest('.hand-me, .me-bar, .me-row, .zone-line, .actions .btn, .bar, .opp, #asks')) return false;
+    if (t.closest('.hand-me, .me-bar, .me-row, .zone-line, .actions .btn, .bar, .opp, #asks, #specEye')) return false;
+    if (e.clientY >= document.querySelector('.zone-line').getBoundingClientRect().top) return false;   // below the line: my hand, not the table
     const v = view;
     if (!v) return false;
     if ((suitHide && v.choose) || (resHide && v.phase === 'roundEnd')) { suitHide = resHide = false; draw(v); return true; }
@@ -4153,7 +4184,7 @@
     'С ботами': 'With bots', 'карт': 'cards', 'в руке': 'in hand', 'Мик': 'Mic', 'Звук': 'Sound', 'Вибро': 'Vibrate',
     'Проверить связь': 'Test connection', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
     'Вернуть кнопки и окно масти на место': 'Put buttons and the suit window back', 'Фон стола': 'Table background',
-    'Закрыть': 'Close', 'Понятно': 'Got it', 'Компания': 'Group', 'Войти': 'Join', 'Удалить': 'Delete', 'Отмена': 'Cancel',
+    'Закрыть': 'Close', 'Понятно': 'Got it', 'Зрители': 'Spectators', 'Компания': 'Group', 'Войти': 'Join', 'Удалить': 'Delete', 'Отмена': 'Cancel',
     'Название': 'Name', 'Как назвать стол': 'Table name', 'Карт в колоде': 'Cards in deck', 'Мест за столом': 'Seats at the table',
     'Карт в руке': 'Cards in hand', 'Приватная: вход по паролю': 'Private: password required', 'Пароль': 'Password',
     'Придумайте пароль': 'Make up a password', 'Создать': 'Create', 'Приватная комната': 'Private room',
@@ -4230,7 +4261,7 @@
     $('nameHint').textContent = '';
     if (mode === 'guest' && hostConn && hostConn.open) hostConn.send({ t: 'lang', lang });
     if (mode !== 'guest' && players.length) render(); else if (view) { try { draw(view); } catch (e) { console.error(e); } }
-    if (lobby && ($('lobby').classList.contains('show') || document.body.classList.contains('waiting'))) drawLobby();
+    if (lobby && mode === 'guest' && document.body.classList.contains('waiting')) drawLobby();
     try { drawRooms(); drawFriends(); drawTg(); } catch (e) { console.error(e); }
   }
   $('langPick').onclick = e => { const b = e.target.closest('[data-lang]'); if (b) setLang(b.dataset.lang); };

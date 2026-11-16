@@ -57,14 +57,17 @@ function render() {
   save();
 }
 const roomInfo = () => ({ name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv });
+// i: my place in the lobby, -1 for a spectator (somebody who came to watch)
 function lobbyMsg(i, ctl) {
-  return { t: 'lobby', code: roomCode, names: lobby.map(x => x.name), bots: lobby.map(x => !!x.isBot), me: i, ctl: i === ctl,
-    long: longPick, room: roomInfo(), pw: i === ctl ? roomPw : '', vk, ver: VERSION, proto: PROTO, srv: 1 };
+  return { t: 'lobby', code: roomCode, names: lobby.map(x => x.name), bots: lobby.map(x => !!x.isBot), me: i, ctl: i >= 0 && i === ctl, spec: i < 0,
+    specN: specs.size, specNames: [...specs.values()].map(x => x.name),
+    long: longPick, room: roomInfo(), pw: i >= 0 && i === ctl ? roomPw : '', vk, ver: VERSION, proto: PROTO, srv: 1 };
 }
 function drawLobby() {
   if (closed) return;
   const ctl = controller();
   lobby.forEach((s, i) => { if (s.conn && s.conn.open) s.conn.send(lobbyMsg(i, ctl)); });
+  specs.forEach(sp => { if (sp.conn && sp.conn.open) sp.conn.send(lobbyMsg(-1, ctl)); });
   announce(true);
   save();
 }
@@ -84,6 +87,7 @@ function resync(conn, d) {
   if (!started) {
     const i = lobby.findIndex(s => s.conn === conn);
     if (i >= 0) conn.send(lobbyMsg(i, controller()));
+    else if (specs.has(conn.id)) conn.send(lobbyMsg(-1, controller()));
     else conn.send({ t: 'kicked', term });
     return;
   }
@@ -125,6 +129,14 @@ function onMessage(from, q, d) {
     if (p && p.pid) { pidLang.set(p.pid, d.lang === 'en' ? 'en' : 'ru'); render(); }
     return;
   }
+  if (d.t === 'seat') {                                   // before the game: somebody who came to watch sits down
+    const sp = specs.get(conn.id);
+    if (started || !sp || lobby.length >= roomSeats) { resync(conn); return; }
+    specs.delete(conn.id);
+    lobby.push({ name: sp.name, conn, isBot: false, pid: sp.pid });
+    drawLobby();
+    return;
+  }
   if (CMD[d.t]) { if (isCtl(conn)) CMD[d.t](d, conn); else resync(conn); return; }
   if (!started) return;
   const seat = players.findIndex(p => p.conn === conn);
@@ -164,7 +176,14 @@ function onJoin(conn, d) {
   }
   const seat = pid ? lobby.find(x => x.pid === pid && !x.isBot) : null;
   if (seat) { retire(seat.conn); seat.conn = conn; seat.name = name; drawLobby(); return; }
-  if (lobby.length >= roomSeats) { conn.send({ t: 'full' }); return; }
+  // came to watch, or no seat is free: a spectator until the game starts (a free seat can be taken later)
+  if (pid !== ownerPid && (d.want === 'watch' || lobby.length >= roomSeats)) {
+    const old = pid ? [...specs.values()].find(x => x.pid === pid) : null;
+    if (old) { retire(old.conn); specs.delete(old.id); }
+    specs.set(conn.id, { id: conn.id, pid, name, conn, asked: 0, sit: false, open: {}, wait: [] });
+    drawLobby();
+    return;
+  }
   const entry = { name, conn, isBot: false, pid };
   if (pid === ownerPid) { lobby.unshift(entry); lang = d.lang === 'en' ? 'en' : 'ru'; } else lobby.push(entry);
   drawLobby();
@@ -176,6 +195,7 @@ function onGone(conn) {
   const mine = (started ? players : lobby).find(x => x.conn === conn);
   if (mine && mine.pid === ownerPid) { closeTable(); return; }
   if (!started) {
+    if (specs.delete(conn.id)) { drawLobby(); return; }
     lobby = lobby.filter(x => x.conn !== conn);
     if (!lobby.some(x => !x.isBot)) { closeTable(); return; }
     drawLobby();
@@ -306,6 +326,7 @@ function tick() {
     // a phone that wakes up after a long sleep finds the game again
     players.forEach((p, i) => { if (p.conn && p.lost && !p.conn.left) p.conn.send({ t: 'view', v: viewOf(i, null, controller()) }); });
   } else {
+    specs.forEach((sp, id) => { if (sp.conn.left || now - sp.conn.last > LOST_MS * 2) { specs.delete(id); drawLobby(); } });
     const gone = lobby.filter(s => s.conn && (s.conn.left || now - s.conn.last > LOST_MS * 2));
     if (gone.length) { lobby = lobby.filter(s => !gone.includes(s)); if (!lobby.some(x => !x.isBot)) { closeTable(); return; } drawLobby(); }
   }

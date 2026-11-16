@@ -51,6 +51,13 @@ function room(opts) {
   if (r.last('cA', 'lobby').names.length !== 2) bad('owner removed themself');
   r.say('cA', { t: 'room', name: 'Новое', seats: 3, hand: 6, priv: false });
   if (r.last('cB2', 'lobby').room.name !== 'Новое' || r.last('cB2', 'lobby').room.hand !== 6) bad('room settings not applied', r.last('cB2', 'lobby'));
+  r.say('cW', { t: 'join', name: 'Вика', pid: 'pidW', pw: 'kot', want: 'watch' });
+  const wl = r.last('cW', 'lobby');
+  if (!wl || !wl.spec || wl.names.includes('Вика')) bad('"watch" put a spectator at the table', wl);
+  if (r.last('cA', 'lobby').specN !== 1) bad('the owner does not see the spectator', r.last('cA', 'lobby'));
+  r.say('cW', { t: 'seat' });
+  if (!r.last('cW', 'lobby') || r.last('cW', 'lobby').spec || !r.last('cA', 'lobby').names.includes('Вика')) bad('a spectator could not sit down', r.last('cW', 'lobby'));
+  r.say('cW', { t: 'bye' });
   r.say('cB2', { t: 'bye' });
   if (r.last('cA', 'lobby').names.length !== 1) bad('a guest who left is still listed');
   r.say('cA', { t: 'bye' });
