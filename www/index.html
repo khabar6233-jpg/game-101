@@ -389,12 +389,12 @@
   .botHead h3 { flex: 1; white-space: nowrap; letter-spacing: .5px; }
   .botHead .modeSw.small, .botHead .pick.small { gap: 3px; }
   .botHead small { font-size: 11px !important; margin-right: 1px !important; }
-  .botHead .modeSw.small button { min-width: 31px; font-size: 13px; }
+  .botHead .modeSw.small .sl { width: 70px; }
   .botHead .pick.small button { width: 27px; font-size: 13px; }
   @media (max-width: 385px) {
     .botHead { gap: 4px; }
     .botHead h3 { font-size: 12px; letter-spacing: 0; }
-    .botHead .modeSw.small button { min-width: 28px; }
+    .botHead .modeSw.small .sl { width: 64px; }
     .botHead .pick.small button { width: 24px; }
   }
   /* a row of choices: 4 5 6, 2..6 */
@@ -440,14 +440,22 @@
   /* the deck: 36 or 52 cards, an iPhone-style switch between the two numbers */
   .modeSw { display: flex; align-items: center; gap: 6px; flex: none; }
   .modeSw small { font-size: 12px; color: var(--muted); margin-right: 2px; }
-  /* the chosen one looks like the game's buttons, the other one is flat */
-  .modeSw button { min-width: 52px; padding: 8px 0; border-radius: 10px; font: inherit; font-size: 17px; font-weight: 800;
-    border: 1.5px solid #cfd8d3; background: #eee; color: #777; transition: background .2s, color .2s; -webkit-tap-highlight-color: transparent; }
-  .modeSw button.on { background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); color: #fff;
-    border-color: rgba(255,255,255,.5); box-shadow: 0 3px 0 var(--felt-dark); text-shadow: 0 1px 1px rgba(0,0,0,.25); }
-  .modeSw.small button { min-width: 36px; padding: 4px 0; font-size: 14px; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); color: var(--muted); }
-  .modeSw.small button.on { background: linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,.12)), var(--felt); color: #fff;
-    border-color: rgba(255,255,255,.6); box-shadow: 0 2px 0 var(--felt-dark); }
+  .modeSw .sl { position: relative; display: grid; grid-template-columns: 1fr 1fr; width: 124px; height: 44px; padding: 3px; flex: none;
+    border-radius: 13px; border: 1.5px solid #cfd8d3; background: #e9ecea; font: inherit; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+  /* the knob: the same green as the game's buttons */
+  .modeSw .sl i { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 10px;
+    background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); border: 1.5px solid rgba(255,255,255,.5);
+    box-shadow: 0 3px 0 var(--felt-dark); transition: transform .25s ease; }
+  .modeSw.long .sl i { transform: translateX(100%); }
+  .modeSw .sl span { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 800; color: #8a948f; transition: color .25s; }
+  .modeSw .sl span.on { color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+  /* small, on the dark table and the start screen */
+  .modeSw.small .sl { width: 78px; height: 30px; padding: 2px; border-radius: 10px; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.22); }
+  .modeSw.small .sl i { top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px); border-radius: 8px; box-shadow: 0 2px 0 var(--felt-dark);
+    background: linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,.12)), var(--felt); border-color: rgba(255,255,255,.6); }
+  .modeSw.small .sl span { font-size: 13px; color: var(--muted); }
+  .modeSw.small .sl span.on { color: #fff; }
   #waitMode { display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2; }
   body.waiting #waitMode { display: flex; }
   .seg .btn { padding: 13px 0; font-size: 19px; }
@@ -566,7 +574,7 @@
 
   <div class="status" id="status"></div>
   <div class="zone-line"></div>
-  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><small>карт</small><button data-long="0">36</button><button data-long="1">52</button></div></div>
+  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><small>карт</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
 
@@ -602,7 +610,7 @@
 
     <section class="panel">
       <div class="botHead"><h3>С ботами</h3>
-        <div class="modeSw small" id="homeMode"><small>карт</small><button data-long="0">36</button><button data-long="1">52</button></div>
+        <div class="modeSw small" id="homeMode"><small>карт</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div>
         <div class="pick small" id="botHand"><small>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
@@ -691,7 +699,7 @@
     <h2 id="crTitle">Новая игра</h2>
     <div class="col">
       <div class="crField"><span>Название</span><input id="crName" maxlength="30" autocomplete="off" placeholder="Как назвать стол"></div>
-      <div class="crRow"><span>Карт в колоде</span><div class="modeSw" id="crMode"><button data-long="0">36</button><button data-long="1">52</button></div></div>
+      <div class="crRow"><span>Карт в колоде</span><div class="modeSw" id="crMode"><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div></div>
       <div class="crRow"><span>Мест за столом</span></div>
       <div class="pick" id="crSeats"><button data-seats="2">2</button><button data-seats="3">3</button><button data-seats="4">4</button><button data-seats="5">5</button><button data-seats="6">6</button></div>
       <div class="crRow"><span>Карт в руке</span></div>
@@ -736,7 +744,7 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
-      <div class="crRow"><span>Карт в колоде</span><div class="modeSw" id="lobMode"><button data-long="0">36</button><button data-long="1">52</button></div></div>
+      <div class="crRow"><span>Карт в колоде</span><div class="modeSw" id="lobMode"><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div></div>
       <div id="hostBox" class="col">
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
@@ -779,7 +787,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 96;              // keep in sync with www/version.txt
+  const VERSION = 97;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
