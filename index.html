@@ -385,7 +385,18 @@
   .room .meta i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--muted); }
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
   .room .gearB { flex: none; border: 0; background: none; color: var(--muted); font-size: 20px; padding: 6px 6px; font-family: inherit; }
-  .botHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .botHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .botHead h3 { flex: 1; white-space: nowrap; letter-spacing: .5px; }
+  .botHead .modeSw.small, .botHead .pick.small { gap: 3px; }
+  .botHead small { font-size: 11px !important; margin-right: 1px !important; }
+  .botHead .modeSw.small button { min-width: 31px; font-size: 13px; }
+  .botHead .pick.small button { width: 27px; font-size: 13px; }
+  @media (max-width: 385px) {
+    .botHead { gap: 4px; }
+    .botHead h3 { font-size: 12px; letter-spacing: 0; }
+    .botHead .modeSw.small button { min-width: 28px; }
+    .botHead .pick.small button { width: 24px; }
+  }
   /* a row of choices: 4 5 6, 2..6 */
   .pick { display: flex; gap: 6px; justify-content: center; }
   .pick button { flex: 1; border: 1.5px solid #cfd8d3; background: #f3f6f4; color: #222; border-radius: 10px; padding: 10px 0; font: inherit; font-size: 17px; font-weight: 800; }
@@ -393,12 +404,12 @@
   .pick.small { align-items: center; gap: 4px; flex: none; }
   .pick.small small { color: var(--muted); font-size: 12px; margin-right: 2px; }
   .pick.small button { flex: none; width: 34px; padding: 4px 0; font-size: 14px; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); color: var(--text); }
-  .pick.small button.on { background: rgba(255,255,255,.28); border-color: rgba(255,255,255,.7); }
+  .pick.small button.on { background: linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,.12)), var(--felt); color: #fff;
+    border-color: rgba(255,255,255,.6); box-shadow: 0 2px 0 var(--felt-dark); }
   .crField { display: flex; align-items: center; gap: 8px; border: 1.5px solid #cfd8d3; border-radius: 10px; padding: 0 10px; }
   .crField span, .crRow > span { font-size: 14px; color: #555; flex: none; }
   .crField input { flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-size: 17px; padding: 10px 0; background: none; color: #222; }
   .crRow { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
-  #crMode { color: #222; gap: 10px; font-size: 17px; }
   .crPriv { display: flex; align-items: center; gap: 10px; text-align: left; font-size: 14px; color: #333; }
   .crPriv input { width: 22px; height: 22px; flex: none; accent-color: var(--felt); }
   .lobInfo { font-size: 14px; color: #555; margin: 0 0 6px; }
@@ -427,27 +438,18 @@
   .home .sw input { flex: none; width: 22px; height: 22px; padding: 0; accent-color: var(--gold); }
   .seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
   /* the deck: 36 or 52 cards, an iPhone-style switch between the two numbers */
-  .modeSw { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 19px; font-weight: 800; color: inherit; }
-  .modeSw span { opacity: .45; padding: 6px 4px; cursor: pointer; transition: opacity .25s; -webkit-tap-highlight-color: transparent; }
-  .modeSw span.on { opacity: 1; }
-  .modeSw .tg { position: relative; flex: none; width: 51px; height: 31px; padding: 0; border: 0; border-radius: 16px;
-    background: rgba(120,120,128,.36); transition: background .25s; -webkit-tap-highlight-color: transparent; }
-  .modeSw .tg::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
-    box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 3px 1px rgba(0,0,0,.06); transition: transform .25s; }
-  .modeSw .tgw { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .modeSw .tgw i { font-style: normal; font-size: 11px; font-weight: 600; line-height: 1; opacity: .7; }
-  .modeSw.small .tgw i { font-size: 9px; }
-  .modeSw.long .tg { background: #34c759; }
-  .modeSw.long .tg::after { transform: translateX(20px); }
-  #homeMode { color: var(--text); gap: 8px; font-size: 16px; }
-  #lobMode { color: #222; margin: 4px 0; }
-  #waitMode { display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text); z-index: 2; }
+  .modeSw { display: flex; align-items: center; gap: 6px; flex: none; }
+  .modeSw small { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  /* the chosen one looks like the game's buttons, the other one is flat */
+  .modeSw button { min-width: 52px; padding: 8px 0; border-radius: 10px; font: inherit; font-size: 17px; font-weight: 800;
+    border: 1.5px solid #cfd8d3; background: #eee; color: #777; transition: background .2s, color .2s; -webkit-tap-highlight-color: transparent; }
+  .modeSw button.on { background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.08)), var(--felt); color: #fff;
+    border-color: rgba(255,255,255,.5); box-shadow: 0 3px 0 var(--felt-dark); text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+  .modeSw.small button { min-width: 36px; padding: 4px 0; font-size: 14px; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); color: var(--muted); }
+  .modeSw.small button.on { background: linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,.12)), var(--felt); color: #fff;
+    border-color: rgba(255,255,255,.6); box-shadow: 0 2px 0 var(--felt-dark); }
+  #waitMode { display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2; }
   body.waiting #waitMode { display: flex; }
-  .modeSw.small { gap: 8px; font-size: 14px; }
-  .modeSw.small span { padding: 4px 2px; }
-  .modeSw.small .tg { width: 40px; height: 24px; border-radius: 12px; }
-  .modeSw.small .tg::after { width: 20px; height: 20px; }
-  .modeSw.small.long .tg::after { transform: translateX(16px); }
   .seg .btn { padding: 13px 0; font-size: 19px; }
   #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
   #groupList:empty { display: none; }
@@ -564,7 +566,7 @@
 
   <div class="status" id="status"></div>
   <div class="zone-line"></div>
-  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div></div>
+  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><small>карт</small><button data-long="0">36</button><button data-long="1">52</button></div></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
 
@@ -574,7 +576,6 @@
     <div class="brand">
       <img src="icon-192.png?2" alt="">
       <div class="title"><h1>101</h1><span id="ver"></span></div>
-      <div class="modeSw" id="homeMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
     </div>
 
@@ -600,7 +601,8 @@
     </div>
 
     <section class="panel">
-      <div class="botHead"><h3>С ботами <small>· игроков</small></h3>
+      <div class="botHead"><h3>С ботами</h3>
+        <div class="modeSw small" id="homeMode"><small>карт</small><button data-long="0">36</button><button data-long="1">52</button></div>
         <div class="pick small" id="botHand"><small>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
@@ -689,7 +691,7 @@
     <h2 id="crTitle">Новая игра</h2>
     <div class="col">
       <div class="crField"><span>Название</span><input id="crName" maxlength="30" autocomplete="off" placeholder="Как назвать стол"></div>
-      <div class="crRow"><span>Колода</span><div class="modeSw" id="crMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div></div>
+      <div class="crRow"><span>Карт в колоде</span><div class="modeSw" id="crMode"><button data-long="0">36</button><button data-long="1">52</button></div></div>
       <div class="crRow"><span>Мест за столом</span></div>
       <div class="pick" id="crSeats"><button data-seats="2">2</button><button data-seats="3">3</button><button data-seats="4">4</button><button data-seats="5">5</button><button data-seats="6">6</button></div>
       <div class="crRow"><span>Карт в руке</span></div>
@@ -734,7 +736,7 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
-      <div class="modeSw" id="lobMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div>
+      <div class="crRow"><span>Карт в колоде</span><div class="modeSw" id="lobMode"><button data-long="0">36</button><button data-long="1">52</button></div></div>
       <div id="hostBox" class="col">
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
@@ -777,7 +779,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 95;              // keep in sync with www/version.txt
+  const VERSION = 96;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -3809,7 +3811,6 @@
     const on = w.id === 'lobMode' || w.id === 'waitMode' ? roomLong() : longPick;   // the start screen and "Создать игру": this device's choice
     w.classList.toggle('long', on);
     w.querySelectorAll('[data-long]').forEach(b => b.classList.toggle('on', (b.dataset.long === '1') === on));
-    w.querySelector('.tg').setAttribute('aria-checked', on ? 'true' : 'false');
   });
   window.drawModeSw = drawModeSw;
   // the table's game is chosen by anybody in the room: the host keeps the choice and tells everybody
