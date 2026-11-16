@@ -1,26 +1,25 @@
-# Builds every icon (Android launcher, web, home screen) from android\icon-source.png:
-# the card is centred on a black square with a soft golden glow, so nothing of it is cut off.
+# Builds every icon (Android launcher, web, home screen) from android\icon.svg:
+# Edge draws the picture at 1024 px, then it is scaled down to each size.
+# The square has no rounded corners: phones round them by themselves.
 Add-Type -AssemblyName System.Drawing
 $root = $PSScriptRoot
-$src = [System.Drawing.Image]::FromFile("$root\icon-source.png")
+$edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+$tmp = Join-Path $env:TEMP 'g101-icon'
+New-Item -ItemType Directory -Force $tmp | Out-Null
+Copy-Item "$root\icon.svg" "$tmp\icon.svg" -Force
+Set-Content "$tmp\icon.html" -Encoding utf8 '<!doctype html><style>html,body{margin:0;background:#000}img{display:block;width:1024px;height:1024px}</style><img src="icon.svg">'
+$big = "$tmp\icon-1024.png"
+Remove-Item $big -ErrorAction SilentlyContinue
+& $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=1024,1024 "--screenshot=$big" "file:///$tmp\icon.html" 2>$null | Out-Null
+for ($i = 0; $i -lt 50 -and -not (Test-Path $big); $i++) { Start-Sleep -Milliseconds 200 }
+if (-not (Test-Path $big)) { throw "Edge did not draw the icon" }
+$src = [System.Drawing.Image]::FromFile($big)
 
 function Render([int]$n) {
     $b = New-Object System.Drawing.Bitmap $n, $n
     $g = [System.Drawing.Graphics]::FromImage($b)
     $g.InterpolationMode = 'HighQualityBicubic'; $g.PixelOffsetMode = 'HighQuality'; $g.SmoothingMode = 'AntiAlias'
-    $g.Clear([System.Drawing.Color]::Black)
-    # a warm glow behind the card
-    $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $p.AddEllipse([float](-0.1 * $n), [float](-0.1 * $n), [float](1.2 * $n), [float](1.2 * $n))
-    $glow = New-Object System.Drawing.Drawing2D.PathGradientBrush $p
-    $glow.CenterColor = [System.Drawing.Color]::FromArgb(255, 58, 40, 8)
-    $glow.SurroundColors = @([System.Drawing.Color]::FromArgb(255, 0, 0, 0))
-    $g.FillRectangle($glow, 0, 0, $n, $n)
-    # the card: the source without its empty black margins, as tall as the square allows
-    $crop = New-Object System.Drawing.Rectangle 20, 130, ($src.Width - 40), ($src.Height - 230)
-    $h = [float]($n * 0.96); $w = [float]($h * $crop.Width / $crop.Height)
-    $dst = New-Object System.Drawing.RectangleF ([float](($n - $w) / 2)), ([float](($n - $h) / 2)), $w, $h
-    $g.DrawImage($src, $dst, $crop, [System.Drawing.GraphicsUnit]::Pixel)
+    $g.DrawImage($src, 0, 0, $n, $n)
     $g.Dispose()
     return $b
 }
@@ -33,4 +32,5 @@ foreach ($k in $sizes.Keys) {
 }
 foreach ($n in 180, 192, 512) { $b = Render $n; $b.Save("$root\..\www\icon-$n.png", [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose() }
 $b = Render 512; $b.Save("$root\icon-512.png", [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
+$src.Dispose()
 "OK"

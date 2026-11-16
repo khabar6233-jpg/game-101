@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="101">
-<link rel="icon" type="image/png" href="icon-192.png?2">
-<link rel="apple-touch-icon" href="icon-180.png?2">
+<link rel="icon" type="image/png" href="icon-192.png?3">
+<link rel="apple-touch-icon" href="icon-180.png?3">
 <link rel="manifest" href="manifest.webmanifest">
 <title>101</title>
 <style>
@@ -568,6 +568,20 @@
   .dialog.res td i { font-style: normal; color: #e0a400; margin-right: 6px; }
   .dialog.res td:nth-child(2) { color: #8e8e93; }
   .dialog.res #resBtn { width: 100%; border-radius: 14px; }
+  /* a one-on-one game won "всухую": gold, shining, with a crown and twinkling stars */
+  .dialog.res.dry { position: relative; overflow: hidden; background: radial-gradient(circle at 50% -10%, #fff1c2, #fffdf6 55%);
+    box-shadow: 0 0 0 4px #e3b04b, 0 0 46px rgba(255,196,70,.65), 0 20px 50px rgba(0,0,0,.45); }
+  .dialog.res.dry h2 { font-size: 32px; line-height: 1.1; color: transparent; -webkit-background-clip: text; background-clip: text;
+    background-image: linear-gradient(100deg, #9a6a14 0%, #e9b744 25%, #fff4c8 45%, #e9b744 65%, #9a6a14 100%); background-size: 220% 100%;
+    animation: dryShine 2.6s linear infinite; }
+  .dialog.res.dry .dryCrown { display: block; font-size: 54px; line-height: 1; margin-bottom: 4px; animation: dryPop .6s cubic-bezier(.2,1.6,.4,1) both; }
+  .dialog.res.dry #resText { color: #9a6a14; font-weight: 600; }
+  .dialog.res.dry::before, .dialog.res.dry::after { content: '✦'; position: absolute; color: #e3b04b; animation: dryStar 1.6s ease-in-out infinite; }
+  .dialog.res.dry::before { left: 22px; top: 22px; font-size: 24px; }
+  .dialog.res.dry::after { right: 26px; top: 64px; font-size: 18px; animation-delay: .8s; }
+  @keyframes dryShine { to { background-position: -220% 0; } }
+  @keyframes dryPop { from { transform: scale(.3) rotate(-20deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes dryStar { 0%, 100% { opacity: .25; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.2); } }
   .rules { text-align: left; color: #444; font-size: 14px; line-height: 1.45; margin-bottom: 14px; }
   .rules h4 { margin: 12px 0 4px; font-size: 15px; color: #13603a; }
   .rules h4:first-child { margin-top: 0; }
@@ -628,7 +642,7 @@
 <div class="overlay show" id="setup">
   <div class="home">
     <div class="brand">
-      <img src="icon-192.png?2" alt="">
+      <img src="icon-192.png?3" alt="">
       <div class="title"><h1>101</h1><span id="ver"></span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
       <button class="ghost gearH" id="homeGear" aria-label="Настройки"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -877,7 +891,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 106;              // keep in sync with www/version.txt
+  const VERSION = 107;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -968,7 +982,7 @@
     db.seen.push(d.id);
     if (db.seen.length > 60) db.seen.shift();
     const r = db.vs[key] || (db.vs[key] = { w: 0, l: 0 });
-    if (won) r.w++; else r.l++;
+    if (won) { r.w++; if (d.dry) r.dw = (r.dw || 0) + 1; } else { r.l++; if (d.dry) r.dl = (r.dl || 0) + 1; }
     try { localStorage.setItem('g101-duels', JSON.stringify(db)); } catch {}
   }
   let sortOn = false;
@@ -1033,7 +1047,7 @@
     document.body.classList.remove('waiting');
     gameId++;
     newMatch();
-    players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, pid: s.pid || '', hand: [], score: 0, out: false }));
+    players = seats.map(s => ({ name: s.name, isBot: !!s.isBot, conn: s.conn || null, pid: s.pid || '', hand: [], score: 0, out: false, got: false }));
     deckLong = longPick;
     handN = mode === 'solo' ? handPick : roomHand;
     starter = Math.floor(Math.random() * players.length);
@@ -1045,6 +1059,7 @@
 
   function startRound() {
     roundNo++;
+    hint = {};
     deck = [];
     let id = 0;
     for (const s of SUITS) for (let r = deckLong ? 2 : 6; r <= 14; r++) deck.push({ s, r, id: id++ });
@@ -1088,6 +1103,7 @@
 
   function playCard(pi, card, opened, chosenSuit) {
     const p = players[pi];
+    if (hint[pi]) delete hint[pi];                          // whatever we knew about this hand is old now
     const i = p.hand.indexOf(card);
     if (i >= 0) p.hand.splice(i, 1);
     const prev = top();
@@ -1113,10 +1129,12 @@
       if (chosenSuit) {                        // the player picked the suit before laying the queen
         suit = chosenSuit;
         card.as = suit;
+        noteCall(pi);
         say(who(pi, 'заказываете ' + suit, 'заказывает ' + suit, 'call ' + suit, 'calls ' + suit));
       } else if (p.isBot) {
         suit = botSuit(p);
         card.as = suit;
+        noteCall(pi);
         say(LL(`${p.name} заказывает ${suit}`, `${p.name} calls ${suit}`));
       } else {
         phase = 'choose';
@@ -1198,6 +1216,8 @@
   }
 
   function pass() {
+    const t = top();
+    if (t) hint[turn] = { n: players[turn].hand.length, no: suit, noR: t.r };   // nothing in this hand fits this suit and rank
     passStreak++;
     fourBy = -1;
     if (players[turn].hand.length) say(who(turn, 'пасуете', 'пасует', 'pass', 'passes'));
@@ -1250,6 +1270,7 @@
     if (a.t === 'suit') {
       if (phase !== 'choose' || !pendingQueen || pendingQueen.pi !== seat || !SUITS.includes(a.s)) return;
       suit = a.s;
+      noteCall(seat);
       say(who(seat, 'заказываете ' + a.s, 'заказывает ' + a.s, 'call ' + a.s, 'calls ' + a.s));
       phase = 'play';
       const q = pendingQueen; pendingQueen = null;
@@ -1283,10 +1304,39 @@
   }
 
   // ----- bot -----
+  // What the bots remember about the hands of others (only what everybody at the table saw):
+  // { n: cards in hand then, call: the suit they called with a queen } or { n, no, noR: the suit and rank they could not cover }
+  let hint = {};
+  function noteCall(pi) { hint[pi] = { n: players[pi].hand.length, call: suit }; }
+  const stepDir = (i, d) => { let n = i; do { n = (n + d + players.length) % players.length; } while (players[n].out); return n; };
+  // how likely player m, holding one card, goes out on a table of suit s and rank r (0 safe … 1 sure)
+  function outRisk(m, s, r) {
+    const q = players[m];
+    if (!q || q.out || q.hand.length !== 1) return 0;
+    const h = hint[m] && hint[m].n === 1 ? hint[m] : null;
+    if (h && h.call) return s === h.call ? 1 : 0.15;        // they kept a card of the suit they called
+    if (h && h.no) return s === h.no ? (r === h.noR ? 0.05 : 0.15) : 0.4;
+    return 0.35;
+  }
+  // after bot pi plays card c (and calls suit cs with a queen): the risk that the one who moves next goes out
+  function playRisk(pi, c, cs) {
+    if (deckLong && c.r === 8) return 0;                    // an eight: the bot moves again
+    const d = deckLong && c.r === 10 ? -dir : dir;
+    let m = stepDir(pi, d);
+    const s = c.r === 12 ? cs : c.s;
+    if (c.r === 14 || PEN(c)) {                              // ace, or cards to take: the next one misses a turn
+      const m2 = stepDir(m, d);
+      return m2 === pi ? 0 : outRisk(m2, s, c.r) * 0.6;
+    }
+    return outRisk(m, s, c.r);
+  }
+  // a queen calls the bot's longest suit, but never the suit a player with one card is waiting for
   function botSuit(p) {
     const n = {};
     p.hand.forEach(c => { n[c.s] = (n[c.s] || 0) + (c.r === 12 ? 0.5 : 1); });
-    return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || top().s;
+    const pi = players.indexOf(p), q = { r: 12 };
+    const order = SUITS.slice().sort((a, b) => (n[b] || 0) - (n[a] || 0));
+    return order.slice().sort((a, b) => playRisk(pi, q, a) - playRisk(pi, q, b))[0] || top().s;
   }
   function botTurn() {
     const p = players[turn];
@@ -1307,6 +1357,24 @@
     // drop expensive cards first, attack with sixes, keep queens for later
     const w = c => POINTS(c.r) + (PEN(c) ? 6 : 0) + (c.r === 14 ? 3 : 0) - (c.r === 12 && p.hand.length > 2 ? 12 : 0);
     opts.sort((a, b) => w(b) - w(a));
+    // somebody is about to go out with their last card: hold them back first, the points come second
+    const risk = c => playRisk(turn, c, c.r === 12 ? botSuit(p) : null);
+    if (opts.some(c => risk(c) > 0)) {
+      const best = Math.min(...opts.map(risk));
+      // every card leaves them their suit: better draw one more and look for a card that changes it
+      if (best >= 0.9 && !drew && !pendingSix && fourBy !== turn && (deck.length > 0 || pile.length > 1)) {
+        drew = true;
+        const c = drawOne();
+        if (c) {
+          p.hand.push(c);
+          lastEv = { seq: ++evSeq, type: 'draw', pi: turn, k: 1 };
+          say(LL(`${p.name} берёт карту`, `${p.name} draws a card`));
+          later('bot');
+          return;
+        }
+      }
+      opts.sort((a, b) => risk(a) - risk(b) || w(b) - w(a));
+    }
     playCard(turn, opts[0]);
   }
 
@@ -1318,6 +1386,7 @@
       if (p.out) return;
       const add = i === w ? 0 : handPoints(p);
       p.score += add;
+      if (add > 0) p.got = true;                            // "всухую" is lost: this player has taken points in this game
       let note = '';
       if (p.score === RESET_AT) { p.score = 0; note = 'reset'; }
       else if (p.score >= LOSE_AT) { p.out = true; note = 'out'; }
@@ -1333,7 +1402,8 @@
     result = { w, rows, gameOver, champion: left.length === 1 ? players.indexOf(left[0]) : -1 };
     if (gameOver && result.champion >= 0 && duelists().length === 2) {
       const win = players[result.champion], lose = duelists().find(x => x !== win);
-      if (lose) duel = { id: matchId, wk: duelK(win), lk: duelK(lose) };
+      // one on one "всухую": the winner has not taken a single point the whole game (a reset at 101 does not help)
+      if (lose) { duel = { id: matchId, wk: duelK(win), lk: duelK(lose), dry: !win.got }; result.dry = !win.got; }
     }
     render();
   }
@@ -1366,7 +1436,7 @@
       specs.delete(id);
     });
     mySeat = Math.max(players.indexOf(meP), 0);
-    players.forEach(p => { p.score = 0; p.out = false; });
+    players.forEach(p => { p.score = 0; p.out = false; p.got = false; });
     if (active().length < 2) { leave(); return; }             // everybody else was removed
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = [];
@@ -2045,9 +2115,13 @@
     let title, text, tone = '';
     const me = v.seat >= 0 && !v.spec;
     if (r.gameOver) {
-      if (me && r.champion === v.seat) { title = L('Вы выиграли!', 'You won!'); text = L('Игра окончена: все соперники набрали перебор', 'Game over: every rival went over 101'); tone = 'win'; }
+      if (me && r.champion === v.seat && r.dry) {
+        title = `<span class="dryCrown">♛</span>${L('Победа всухую!', 'Flawless victory!')}`;
+        text = L('Ни одного очка за всю игру', 'Not a single point the whole game'); tone = 'win dry';
+      } else if (me && r.champion === v.seat) { title = L('Вы выиграли!', 'You won!'); text = L('Игра окончена: все соперники набрали перебор', 'Game over: every rival went over 101'); tone = 'win'; }
+      else if (me && r.dry) { title = L('Вы проиграли всухую', 'You were shut out'); text = L('Игру выиграл: ', 'Winner: ') + name(r.champion); tone = 'lose'; }
       else if (me) { title = L('Вы проиграли', 'You lost'); text = r.champion >= 0 ? L('Игру выиграл: ', 'Winner: ') + name(r.champion) : L('Игра окончена', 'Game over'); tone = 'lose'; }
-      else { title = L('Игра окончена', 'Game over'); text = r.champion >= 0 ? L('Победитель: ', 'Winner: ') + name(r.champion) : ''; }
+      else { title = L('Игра окончена', 'Game over'); text = r.champion >= 0 ? (r.dry ? L('Победа всухую: ', 'Flawless victory: ') : L('Победитель: ', 'Winner: ')) + name(r.champion) : ''; }
     } else if (r.w < 0) { title = L('Ходов нет', 'No moves'); text = L('Никто не может походить — все считают карты', 'Nobody can move — everyone counts their cards'); }
     else if (me && r.w === v.seat) { title = L('Вы выиграли', 'You won'); text = L(`Раунд ${v.roundNo} за вами`, `Round ${v.roundNo} is yours`); tone = 'win'; }
     else if (me) { title = L('Вы проиграли', 'You lost'); text = L(`Раунд ${v.roundNo} выиграл: ${name(r.w)}`, `Round ${v.roundNo} won by ${name(r.w)}`); tone = 'lose'; }
@@ -2839,7 +2913,7 @@
       handN, room: { name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv, pw: roomPw },
       specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
-        name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
+        name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, got: !!p.got, removed: !!p.removed, emptySince: p.emptySince || 0,
         cid: p.isBot ? null : p.conn ? p.conn.id : i === mySeat ? me : null
       })),
       deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
@@ -2851,7 +2925,7 @@
   }
   function restore(st) {
     gameId++;
-    players = st.players.map(p => ({ name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out,
+    players = st.players.map(p => ({ name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, got: !!p.got,
       removed: !!p.removed, emptySince: p.emptySince, cid: p.cid, conn: null, lost: false }));
     deck = st.deck; pile = st.pile; suit = st.suit; turn = st.turn; drew = st.drew; sixRun = st.sixRun;
     pendingSix = st.pendingSix; emptySeq = st.emptySeq; passStreak = st.passStreak; starter = st.starter;
@@ -3824,7 +3898,8 @@
     const rival = duelOpp(v), tally = p === rival ? duelDb().vs[duelKey(p)] || { w: 0, l: 0 } : null;
     $('oiName').textContent = p.name;
     const rows = [[L('Очки', 'Points'), p.gone ? L('удалён', 'removed') : p.out ? L('выбыл', 'out') : p.score], [L('Карт на руке', 'Cards in hand'), p.count]];
-    if (tally) rows.push([L('Ваши победы', 'Your wins'), tally.w], [L('Ваши поражения', 'Your losses'), tally.l]);
+    const dry = n => (n ? L(` (${n} всухую)`, ` (${n} shutout${n > 1 ? 's' : ''})`) : '');
+    if (tally) rows.push([L('Ваши победы', 'Your wins'), tally.w + dry(tally.dw)], [L('Ваши поражения', 'Your losses'), tally.l + dry(tally.dl)]);
     if (p.lost) rows.push([L('Связь', 'Connection'), L('нет связи', 'offline')]);
     $('oiTable').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${esc(b)}</td></tr>`).join('');
     const t = $('oiTools'); t.innerHTML = '';
