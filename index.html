@@ -685,6 +685,8 @@
       <button class="btn" id="newGameBtn">Новая игра</button>
       <button class="btn plain" id="gearFriends">Друзья</button>
       <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопки и окно масти на место</button>
+      <div class="gl">Язык · Language</div>
+      <div class="pick" id="langPick"><button data-lang="ru">Русский</button><button data-lang="en">English</button></div>
       <div class="gl">Фон стола</div>
       <div class="bgs" id="bgs"></div>
       <button class="btn plain" id="gearClose">Закрыть</button>
@@ -860,8 +862,21 @@
   const SUITS = ['♠', '♣', '♦', '♥'].map(s => s + '︎');
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
+  // ----- language: Russian or English, kept on this device. Who played before keeps Russian;
+  // a new device takes the phone's language. L('по-русски', 'in English') picks one.
+  let lang = 'ru';
+  try {
+    lang = localStorage.getItem('g101-lang') ||
+      (localStorage.getItem('g101-pid') || /^ru|^uk|^be|^kk/i.test(navigator.language || '') ? 'ru' : 'en');
+  } catch {}
+  if (lang !== 'en') lang = 'ru';
+  const L = (ru, en) => (lang === 'en' ? en : ru);
+  const LL = (ru, en) => () => L(ru, en);                    // a log line: the language is picked when it is shown
+  const inLang = (lg, fn) => { const o = lang; lang = lg === 'en' ? 'en' : 'ru'; try { return fn(); } finally { lang = o; } };
+  const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
+  const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 104;              // keep in sync with www/version.txt
+  const VERSION = 105;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -982,16 +997,17 @@
   const top = () => pile[pile.length - 1];
   // a queen goes on any card; while sixes are stacked on you, only another six can be played
   const PEN = c => (deckLong ? (c.r === 7 ? 1 : c.r === 6 ? 2 : 0) : c.r === 6 ? 2 : 0);
-  const PEN_WORD = { 6: 'шестёрку', 7: 'семёрку' };
   const canPlay = c => (pendingSix ? c.r === (deckLong ? top().r : 6) && active().length >= 3 :c.r === 12 || c.s === suit || c.r === top().r);
-  const label = c => RANK_NAME[c.r] + c.s;
+  const label = c => rankName(c.r) + c.s;
   // nobody wins on these cards (and the round does not open with them)
   const isSpecialEnd = c => (deckLong ? c.r === 6 || c.r === 7 || c.r === 8 || c.r === 14 : c.r === 6 || c.r === 14);
   const pointsWord = n => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? 'очков' : b === 1 ? 'очко' : b >= 2 && b <= 4 ? 'очка' : 'очков'; };
   const cardsWord = n => (n === 1 ? 'карту' : n >= 2 && n <= 4 ? 'карты' : 'карт');
+  const cardsEn = n => (n === 1 ? 'card' : 'cards');
   const handPoints = p => p.hand.reduce((n, c) => n + POINTS(c.r), 0);
   // log lines are built per viewer: "Вы кладёте…" for me, "Имя кладёт…" for others
-  const who = (pi, you, they) => me => (pi === me ? 'Вы ' + you : players[pi].name + ' ' + they);
+  // every line in both languages; the host shows each player the one they chose
+  const who = (pi, you, they, youEn, theyEn) => me => (pi === me ? L('Вы ' + you, 'You ' + youEn) : players[pi].name + ' ' + L(they, theyEn));
 
   function nextIdx(i) {
     let n = i;
@@ -1055,7 +1071,7 @@
     deck = shuffle(pile);
     deck.forEach(c => { delete c.as; });       // back in the deck a queen is its own suit again
     pile = [t];
-    say('Колода закончилась: сброс перетасован в новую колоду');
+    say(LL('Колода закончилась: сброс перетасован в новую колоду', 'The deck ran out: the pile was shuffled into a new deck'));
   }
   function drawOne() {
     reshuffleIfEmpty();
@@ -1080,8 +1096,9 @@
     suit = card.s;
     passStreak = 0;
     sixRun = deckLong ? (PEN(card) ? (prev && prev.r === card.r ? sixRun + 1 : 1) : 0) : card.r === 6 ? sixRun + 1 : 0;
-    if (opened) say(me => `Открыта карта ${label(card)} — это ${pi === me ? 'ваш ход' : 'ход: ' + p.name}`);
-    else say(who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card)));
+    if (opened) say(me => L(`Открыта карта ${label(card)} — это ${pi === me ? 'ваш ход' : 'ход: ' + p.name}`,
+      `First card ${label(card)} — played by ${pi === me ? 'you' : p.name}`));
+    else say(me => who(pi, 'кладёте ' + label(card), 'кладёт ' + label(card), 'play ' + label(card), 'plays ' + label(card))(me));
 
     // Nobody wins on a six or an ace: a player left without cards waits until that card is covered.
     // The first ordinary card on the pile ends the round for whoever ran out of cards last.
@@ -1095,11 +1112,11 @@
       if (chosenSuit) {                        // the player picked the suit before laying the queen
         suit = chosenSuit;
         card.as = suit;
-        say(who(pi, 'заказываете ' + suit, 'заказывает ' + suit));
+        say(who(pi, 'заказываете ' + suit, 'заказывает ' + suit, 'call ' + suit, 'calls ' + suit));
       } else if (p.isBot) {
         suit = botSuit(p);
         card.as = suit;
-        say(`${p.name} заказывает ${suit}`);
+        say(LL(`${p.name} заказывает ${suit}`, `${p.name} calls ${suit}`));
       } else {
         phase = 'choose';
         pendingQueen = { pi, card };
@@ -1114,11 +1131,11 @@
     if (card.r === 12) card.as = suit;         // whichever way the suit was chosen
     if (deckLong && card.r === 10) {           // a ten turns the direction of play
       dir = -dir;
-      say('Направление игры сменилось');
+      say(LL('Направление игры сменилось', 'Direction of play reversed'));
     }
     let n = nextIdx(pi);
     if (card.r === 14) {                       // ace: next player skips
-      say(who(n, 'пропускаете ход', 'пропускает ход'));
+      say(who(n, 'пропускаете ход', 'пропускает ход', 'miss a turn', 'misses a turn'));
       n = nextIdx(n);
     } else if (PEN(card)) {
       // Every six lying in a row on the table adds 2 cards, no matter who already took cards in between
@@ -1126,11 +1143,14 @@
       // (The long game: sevens add 1 card each, sixes 2 each, in the same way.)
       pendingSix = PEN(card) * sixRun;
       const k = pendingSix;
-      const or = active().length >= 3 ? ' или подкинуть ' + PEN_WORD[card.r] : '';   // one on one a stack cannot be answered
-      say(who(n, `должны взять ${k} ${cardsWord(k)}${or}`, `должен взять ${k} ${cardsWord(k)}${or}`));
+      const many = active().length >= 3;                     // one on one a stack cannot be answered
+      const or = many ? ' или подкинуть ' + (card.r === 7 ? 'семёрку' : 'шестёрку') : '';
+      const orEn = many ? ' or pass on ' + (card.r === 7 ? 'a seven' : 'a six') : '';
+      say(who(n, `должны взять ${k} ${cardsWord(k)}${or}`, `должен взять ${k} ${cardsWord(k)}${or}`,
+        `must take ${k} ${cardsEn(k)}${orEn}`, `must take ${k} ${cardsEn(k)}${orEn}`));
     } else if (deckLong && card.r === 8) {     // an eight: the same player covers it
       n = pi; fourBy = pi; fourDraw = 0;
-      say(who(pi, 'кроете свою восьмёрку', 'кроет свою восьмёрку'));
+      say(who(pi, 'кроете свою восьмёрку', 'кроет свою восьмёрку', 'cover your own eight', 'covers their own eight'));
     }
     turn = n;
     drew = false;
@@ -1145,7 +1165,8 @@
     const got = give(p, k);
     lastEv = { seq: ++evSeq, type: 'draw', pi, k: got };
     const all = got + (drew ? 1 : 0);
-    say(who(pi, `берёте ${all} ${cardsWord(all)} и пропускаете ход`, `берёт ${all} ${cardsWord(all)} и пропускает ход`));
+    say(who(pi, `берёте ${all} ${cardsWord(all)} и пропускаете ход`, `берёт ${all} ${cardsWord(all)} и пропускает ход`,
+      `take ${all} ${cardsEn(all)} and miss a turn`, `takes ${all} ${cardsEn(all)} and misses a turn`));
     pendingSix = 0;
     turn = nextIdx(pi);
     drew = false;
@@ -1160,8 +1181,8 @@
       fourDraw++;
       p.hand.push(c);
       lastEv = { seq: ++evSeq, type: 'draw', pi, k: 1 };
-      say(me => (me === pi ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
-    } else say(who(pi, 'не можете взять карту', 'не может взять карту'));
+      say(me => (me === pi ? L('Вы берёте карту ', 'You draw ') + label(c) : p.name + L(' берёт карту', ' draws a card')));
+    } else say(who(pi, 'не можете взять карту', 'не может взять карту', 'cannot draw a card', 'cannot draw a card'));
     if (!c || fourDraw >= FOUR_MAX) drew = true;            // no more drawing: cover it or press "Пас"
     step();
   }
@@ -1178,8 +1199,8 @@
   function pass() {
     passStreak++;
     fourBy = -1;
-    if (players[turn].hand.length) say(who(turn, 'пасуете', 'пасует'));
-    else say(who(turn, 'без карт: ждёте, пока накроют', 'без карт: ждёт, пока накроют'));
+    if (players[turn].hand.length) say(who(turn, 'пасуете', 'пасует', 'pass', 'passes'));
+    else say(who(turn, 'без карт: ждёте, пока накроют', 'без карт: ждёт, пока накроют', 'have no cards: waiting to be covered', 'has no cards: waiting to be covered'));
     if (passStreak >= active().length && !deck.length && pile.length <= 1) { endRound(-1); return; }
     turn = nextIdx(turn);
     drew = false;
@@ -1228,7 +1249,7 @@
     if (a.t === 'suit') {
       if (phase !== 'choose' || !pendingQueen || pendingQueen.pi !== seat || !SUITS.includes(a.s)) return;
       suit = a.s;
-      say(who(seat, 'заказываете ' + a.s, 'заказывает ' + a.s));
+      say(who(seat, 'заказываете ' + a.s, 'заказывает ' + a.s, 'call ' + a.s, 'calls ' + a.s));
       phase = 'play';
       const q = pendingQueen; pendingQueen = null;
       later('after', [q.pi, q.card.id], PLAY_PAUSE);
@@ -1247,10 +1268,10 @@
       if (c) {
         p.hand.push(c);
         lastEv = { seq: ++evSeq, type: 'draw', pi: seat, k: 1 };
-        say(me => (me === seat ? 'Вы берёте карту ' + label(c) : p.name + ' берёт карту'));
+        say(me => (me === seat ? L('Вы берёте карту ', 'You draw ') + label(c) : p.name + L(' берёт карту', ' draws a card')));
       } else {
         if (!p.hand.length && !pendingSix) { endRound(seat); return; }   // no cards left anywhere: empty hand wins
-        say(who(seat, 'не можете взять карту', 'не может взять карту'));
+        say(who(seat, 'не можете взять карту', 'не может взять карту', 'cannot draw a card', 'cannot draw a card'));
       }
       step();
     } else if (a.t === 'pass') {
@@ -1278,7 +1299,7 @@
       if (!c) { if (pendingSix) takePenalty(); else if (!p.hand.length) endRound(turn); else pass(); return; }
       p.hand.push(c);
       lastEv = { seq: ++evSeq, type: 'draw', pi: turn, k: 1 };
-      say(`${p.name} берёт карту`);
+      say(LL(`${p.name} берёт карту`, `${p.name} draws a card`));
       later('bot');
       return;
     }
@@ -1297,8 +1318,8 @@
       const add = i === w ? 0 : handPoints(p);
       p.score += add;
       let note = '';
-      if (p.score === RESET_AT) { p.score = 0; note = 'ровно 101 — счёт обнулён'; }
-      else if (p.score >= LOSE_AT) { p.out = true; note = 'перебор — выбывает'; }
+      if (p.score === RESET_AT) { p.score = 0; note = 'reset'; }
+      else if (p.score >= LOSE_AT) { p.out = true; note = 'out'; }
       rows.push({ pi: i, add, score: p.score, note, win: i === w });
     });
     const left = active();
@@ -1357,6 +1378,9 @@
   const face = c => ({ s: c.as || c.s, r: c.r, id: c.id });
 
   // seat -1 with a spectator record gives the view of somebody who only watches
+  // each device tells the host its language when it joins; the log lines it gets are in that language
+  const pidLang = new Map();
+  const langOf = pid => (pid && pid === myPid ? lang : pidLang.get(pid) || lang);
   function viewFor(seat, sp) {
     const t = top(), me = players[seat];
     return {
@@ -1373,7 +1397,7 @@
       asks: me ? [...specs.values()].filter(x => x.asked === roundNo && x.wait.includes(seat)).map(x => ({ id: x.id, name: x.name })) : [],
       specN: specs.size, specNames: [...specs.values()].map(x => x.name),
       sitters: seat === mySeat && mode === 'host' ? [...specs.values()].filter(x => x.sit).map(x => x.name) : [],
-      log: log.slice(-2).map(f => f(seat)),
+      log: log.slice(-2).map(f => inLang(langOf(sp ? sp.pid : me && me.pid), () => f(seat))),
       choose: phase === 'choose' && !!pendingQueen && pendingQueen.pi === seat,
       result, canControl: seat === mySeat,
       ...(sp ? {
@@ -1442,7 +1466,7 @@
     el.className = 'card ' + (RED.has(c.s) ? 'red ' : '') + extra;
     const many = view && view.players && view.players.filter(p => !p.out && !p.gone).length > 2;    // one on one the direction means nothing
     const mk = view && view.long && MARK[c.r] && (c.r !== 10 || many) ? `<span class="mk">${MARK[c.r]}</span>` : '';
-    el.innerHTML = `<div class="tl">${RANK_NAME[c.r]}${mk}<small>${c.s}</small></div>` +
+    el.innerHTML = `<div class="tl">${rankName(c.r)}${mk}<small>${c.s}</small></div>` +
       (ART[c.r] ? `<div class="mid face">${ART[c.r]}<span>${c.s}</span></div>`
                 : `<div class="mid${c.r === 14 ? ' ace' : ''}">${c.s}</div>`);
     if (c.r >= 11 && c.r <= 13) {
@@ -1495,15 +1519,15 @@
     document.body.dataset.back = v.back || 0;
     document.body.classList.toggle('long', !!v.long && v.players.filter(p => !p.out && !p.gone).length > 2);
     document.body.classList.toggle('ccw', !!v.long && v.dir < 0);
-    $('roomTag').textContent = (v.long ? ' · длинная' : '') + ' · v' + VERSION;
+    $('roomTag').textContent = (v.long ? L(' · длинная', ' · long') : '') + ' · v' + VERSION;
     $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
     // spectators ask to see the cards: every player decides for themselves
     const ab = $('asks'); ab.innerHTML = '';
     (v.asks || []).forEach(q => {
       const row = document.createElement('div');
       row.className = 'ask';
-      row.innerHTML = `<span>Зритель «${esc(q.name)}» просит показать ваши карты</span>`;
-      [['Показать', true], ['Нет', false]].forEach(([text, ok]) => {
+      row.innerHTML = L(`<span>Зритель «${esc(q.name)}» просит показать ваши карты</span>`, `<span>Spectator "${esc(q.name)}" asks to see your cards</span>`);
+      [[L('Показать', 'Show'), true], [L('Нет', 'No'), false]].forEach(([text, ok]) => {
         const b = document.createElement('button');
         b.textContent = text;
         if (!ok) b.className = 'no';
@@ -1517,14 +1541,15 @@
       const row = document.createElement('div');
       row.className = 'ask';
       const wait = v.sitters || [];
-      row.innerHTML = `<span>${wait.length > 1 ? 'Ждут' : 'Ждёт'} новую игру: ${esc(wait.join(', '))} · ⚙ → «Новая игра»</span>`;
+      row.innerHTML = L(`<span>${wait.length > 1 ? 'Ждут' : 'Ждёт'} новую игру: ${esc(wait.join(', '))} · ⚙ → «Новая игра»</span>`,
+        `<span>Waiting for a new game: ${esc(wait.join(', '))} · ⚙ → "New game"</span>`);
       if (wait.length) ab.appendChild(row);
     }
     // the room owner's device applies the rules, so a version mismatch matters
     const hv = v.ver || 0;
     $('warn').textContent = mode !== 'guest' || hv === VERSION ? ''
-      : hv < VERSION ? 'У хозяина комнаты старая версия игры: правила могут отличаться. Пусть он обновит игру.'
-      : 'У вас старая версия игры. Выйдите и обновите её.';
+      : hv < VERSION ? L('У хозяина комнаты старая версия игры: правила могут отличаться. Пусть он обновит игру.', 'The host has an old version of the game: the rules may differ. Ask them to update.')
+      : L('У вас старая версия игры. Выйдите и обновите её.', 'Your version of the game is old. Leave and update it.');
 
     if (pendingPlay && (!v.hand.some(c => c.id === pendingPlay.id) || Date.now() - pendingPlay.t > 2500)) {
       pendingPlay.ghost.remove();
@@ -1558,12 +1583,12 @@
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
       const many = o.classList.contains('many'), shown = Math.min(p.count, many ? 5 : 7);
       const fan = k => { const a = (k - (shown - 1) / 2) * (many ? 9 : 8); return `style="rotate:${a}deg;translate:0 ${Math.abs(a) / 3}px"`; };
-      d.innerHTML = `<button class="omenu" data-m="${i}" aria-label="Подробнее">☰</button>` +
+      d.innerHTML = `<button class="omenu" data-m="${i}" aria-label="${L('Подробнее', 'Details')}">☰</button>` +
         `<div class="name">${nameHtml(p.name)}</div>` +
-        (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${RANK_NAME[c.r]}<br>${c.s}</div>`).join('')}</div>`
+        (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${rankName(c.r)}<br>${c.s}</div>`).join('')}</div>`
           : `<div class="minis fan">${Array.from({ length: shown }, (_, k) => `<div class="mini" ${fan(k)}></div>`).join('')}</div>`) +
-        `<div class="pts">${p.gone ? 'удалён' : p.out ? 'выбыл' : `<b>${p.score}</b> оч.`}<span class="sep">·</span><span class="cnt">${p.count}</span> карт</div>` +
-        (p.lost ? '<div class="lost">нет связи</div>' : '');
+        `<div class="pts">${p.gone ? L('удалён', 'removed') : p.out ? L('выбыл', 'out') : `<b>${p.score}</b> ${L('оч.', 'pts')}`}<span class="sep">·</span><span class="cnt">${p.count}</span> ${L('карт', 'cards')}</div>` +
+        (p.lost ? `<div class="lost">${L('нет связи', 'offline')}</div>` : '');
       o.appendChild(d);
     }
 
@@ -1604,13 +1629,13 @@
     (v.hist || tail).forEach(c => hc.appendChild(cardEl(c)));
 
     const mb = $('meBar');
-    const hint = me.out ? ' · вы выбыли'
-      : !v.hand.length && v.phase === 'play' ? (myTurn ? ' · карт нет — возьмите карту из колоды' : ' · карт нет: ждём своего хода')
+    const hint = me.out ? L(' · вы выбыли', ' · you are out')
+      : !v.hand.length && v.phase === 'play' ? (myTurn ? L(' · карт нет — возьмите карту из колоды', ' · no cards — draw one from the deck') : L(' · карт нет: ждём своего хода', ' · no cards: waiting for your move'))
       : !myTurn ? ''
-      : v.pendingSix ? (hasMove ? ' · подкиньте шестёрку или берите карты' : ' · нажмите «Беру»')
-      : hasMove ? '' : v.drew ? ' · карта не подошла — нажмите «Пас»' : ' · нет карты — нажмите на стол, чтобы взять';
-    mb.innerHTML = v.spec ? esc(v.sit ? 'Вы за столом: ждём новую игру' : 'Вы зритель')
-      : `<span class="me-pts">Вы · <b>${me.score}</b> ${pointsWord(me.score)}</span>`;
+      : v.pendingSix ? (hasMove ? L(' · подкиньте шестёрку или берите карты', ' · pass on a six or take the cards') : L(' · нажмите «Беру»', ' · press "Take"'))
+      : hasMove ? '' : v.drew ? L(' · карта не подошла — нажмите «Пас»', ' · no match — press "Pass"') : L(' · нет карты — нажмите на стол, чтобы взять', ' · nothing to play — tap the table to draw');
+    mb.innerHTML = v.spec ? esc(v.sit ? L('Вы за столом: ждём новую игру', 'You are seated: waiting for a new game') : L('Вы зритель', 'You are watching'))
+      : `<span class="me-pts">${L('Вы', 'You')} · <b>${me.score}</b> ${L(pointsWord(me.score), me.score === 1 ? 'point' : 'points')}</span>`;
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
     // The compass needle turns to the player who is to move. While a six is waiting to be taken or
@@ -1718,12 +1743,12 @@
       const left = v.pendingSix - (v.drew ? 1 : 0);
       const b = document.createElement('button');
       b.className = 'btn';
-      b.textContent = v.drew ? `Беру ещё ${left}` : `Беру ${left} ${cardsWord(left)}`;
+      b.textContent = v.drew ? L(`Беру ещё ${left}`, `Take ${left} more`) : L(`Беру ${left} ${cardsWord(left)}`, `Take ${left} ${cardsEn(left)}`);
       onTap(b, () => { action({ t: 'take' }); return true; });
       a.appendChild(b);
     } else if (myTurn && v.drew) {
       const b = document.createElement('button');
-      b.className = 'btn'; b.textContent = 'Пас';
+      b.className = 'btn'; b.textContent = L('Пас', 'Pass');
       onTap(b, () => { action({ t: 'pass' }); return true; });
       a.appendChild(b);
     }
@@ -1734,8 +1759,8 @@
         if (on) onTap(b, () => { action(msg); return true; });
         a.appendChild(b);
       };
-      add(v.canAsk ? 'Попросить открыть карты' : 'Карты уже просили', { t: 'ask' }, v.canAsk);
-      add(v.sit ? 'Не садиться' : 'Сесть в новой игре', { t: 'sit', on: !v.sit }, true);
+      add(v.canAsk ? L('Попросить открыть карты', 'Ask to show cards') : L('Карты уже просили', 'Cards already asked'), { t: 'ask' }, v.canAsk);
+      add(v.sit ? L('Не садиться', 'Don\'t sit down') : L('Сесть в новой игре', 'Sit in the next game'), { t: 'sit', on: !v.sit }, true);
     }
 
     if (window.placeActions) window.placeActions();
@@ -2015,26 +2040,27 @@
     if (!show) resHide = false;
     $('result').classList.toggle('show', show && !resHide);
     if (!show) return;
-    const name = i => (i === v.seat ? 'Вы' : esc(v.players[i].name));
+    const name = i => (i === v.seat ? L('Вы', 'You') : esc(v.players[i].name));
     let title, text, tone = '';
     const me = v.seat >= 0 && !v.spec;
     if (r.gameOver) {
-      if (me && r.champion === v.seat) { title = 'Вы выиграли!'; text = 'Игра окончена: все соперники набрали перебор'; tone = 'win'; }
-      else if (me) { title = 'Вы проиграли'; text = r.champion >= 0 ? 'Игру выиграл: ' + name(r.champion) : 'Игра окончена'; tone = 'lose'; }
-      else { title = 'Игра окончена'; text = r.champion >= 0 ? 'Победитель: ' + name(r.champion) : ''; }
-    } else if (r.w < 0) { title = 'Ходов нет'; text = 'Никто не может походить — все считают карты'; }
-    else if (me && r.w === v.seat) { title = 'Вы выиграли'; text = `Раунд ${v.roundNo} за вами`; tone = 'win'; }
-    else if (me) { title = 'Вы проиграли'; text = `Раунд ${v.roundNo} выиграл: ${name(r.w)}`; tone = 'lose'; }
-    else { title = 'Раунд ' + v.roundNo; text = 'Выиграл: ' + name(r.w); }
+      if (me && r.champion === v.seat) { title = L('Вы выиграли!', 'You won!'); text = L('Игра окончена: все соперники набрали перебор', 'Game over: every rival went over 101'); tone = 'win'; }
+      else if (me) { title = L('Вы проиграли', 'You lost'); text = r.champion >= 0 ? L('Игру выиграл: ', 'Winner: ') + name(r.champion) : L('Игра окончена', 'Game over'); tone = 'lose'; }
+      else { title = L('Игра окончена', 'Game over'); text = r.champion >= 0 ? L('Победитель: ', 'Winner: ') + name(r.champion) : ''; }
+    } else if (r.w < 0) { title = L('Ходов нет', 'No moves'); text = L('Никто не может походить — все считают карты', 'Nobody can move — everyone counts their cards'); }
+    else if (me && r.w === v.seat) { title = L('Вы выиграли', 'You won'); text = L(`Раунд ${v.roundNo} за вами`, `Round ${v.roundNo} is yours`); tone = 'win'; }
+    else if (me) { title = L('Вы проиграли', 'You lost'); text = L(`Раунд ${v.roundNo} выиграл: ${name(r.w)}`, `Round ${v.roundNo} won by ${name(r.w)}`); tone = 'lose'; }
+    else { title = L('Раунд ', 'Round ') + v.roundNo; text = L('Выиграл: ', 'Winner: ') + name(r.w); }
+    const noteText = n => (n === 'reset' ? L('ровно 101 — счёт обнулён', 'exactly 101 — score reset') : n === 'out' ? L('перебор — выбывает', 'over 101 — out') : esc(n));
     $('result').querySelector('.dialog').className = 'dialog res ' + tone;
     $('resTitle').innerHTML = title;
     $('resText').innerHTML = text;
-    $('resTable').innerHTML = '<tr class="hd"><td></td><td>за раунд</td><td>всего</td></tr>' + r.rows.map(x =>
-      `<tr class="${x.pi === v.seat ? 'mine' : ''}${x.win ? ' won' : ''}"><td>${x.win ? '<i>★</i>' : ''}${name(x.pi)}${x.note ? `<span class="note">${x.note}</span>` : ''}</td>` +
+    $('resTable').innerHTML = `<tr class="hd"><td></td><td>${L('за раунд', 'round')}</td><td>${L('всего', 'total')}</td></tr>` + r.rows.map(x =>
+      `<tr class="${x.pi === v.seat ? 'mine' : ''}${x.win ? ' won' : ''}"><td>${x.win ? '<i>★</i>' : ''}${name(x.pi)}${x.note ? `<span class="note">${noteText(x.note)}</span>` : ''}</td>` +
       `<td>${x.win ? '0' : '+' + x.add}</td><td><b>${x.score}</b></td></tr>`).join('');
     const b = $('resBtn');
     b.disabled = !v.canControl;
-    b.textContent = !v.canControl ? 'Ждём хозяина комнаты…' : r.gameOver ? 'Новая игра' : 'Следующий раунд';
+    b.textContent = !v.canControl ? L('Ждём хозяина комнаты…', 'Waiting for the host…') : r.gameOver ? L('Новая игра', 'New game') : L('Следующий раунд', 'Next round');
     b.onclick = v.canControl ? afterResult : null;
   }
 
@@ -2053,13 +2079,14 @@
   const pause = ms => new Promise(r => setTimeout(r, ms));
   const netMsg = t => { $('netMsg').textContent = t || ''; };
   function myName() {
-    const n = $('nick').value.trim().slice(0, 12) || 'Игрок';
-    if (NAME_RE.test(n)) { try { localStorage.setItem('g101-name', n); } catch {} }
+    const n = $('nick').value.trim().slice(0, 12) || L('Игрок', 'Player');
+    if (nameRe().test(n)) { try { localStorage.setItem('g101-name', n); } catch {} }
     return n;
   }
   // a name: Russian letters, a hyphen only between letters ("Анна-Мария")
-  const NAME_RE = /^[А-ЯЁа-яё]+(-[А-ЯЁа-яё]+)*$/;
-  const nameOk = () => NAME_RE.test($('nick').value.trim());
+  const NAME_RE = /^[А-ЯЁа-яё]+(-[А-ЯЁа-яё]+)*$/, NAME_EN = /^[A-Za-z]+(-[A-Za-z]+)*$/;   // in English: Latin letters ("Mary-Ann")
+  const nameRe = () => (lang === 'en' ? NAME_EN : NAME_RE);
+  const nameOk = () => nameRe().test($('nick').value.trim());
   // nobody gets to a table without a name: the field is shown, lit and waits for it
   function needName() {
     if (nameOk()) return false;
@@ -2067,7 +2094,7 @@
     $('setup').classList.add('show');
     f.closest('.field').classList.remove('bad'); void f.offsetWidth;
     f.closest('.field').classList.add('bad');
-    $('nameHint').textContent = f.value.trim() ? 'Имя — только русские буквы, через дефис можно: Анна-Мария' : 'Сначала введите имя';
+    $('nameHint').textContent = f.value.trim() ? L('Имя — только русские буквы, через дефис можно: Анна-Мария', 'Name: Latin letters only, a hyphen is fine: Mary-Ann') : L('Сначала введите имя', 'Enter your name first');
     f.scrollIntoView({ block: 'center', behavior: 'smooth' });
     setTimeout(() => { try { f.focus(); } catch {} }, 250);
     return true;
@@ -2077,7 +2104,7 @@
   // the test for the "Без VPN" mode: short and medium messages through the short-session link
   const testMsg = t => { $('testMsg').textContent = t || ''; };
   async function testLite() {
-    testMsg('Проверяем режим «Без VPN» (15 секунд)…');
+    testMsg(L('Проверяем режим «Без VPN» (15 секунд)…', 'Testing the "No VPN" mode (15 seconds)…'));
     const one = url => new Promise(res => {
       const r = Math.random().toString(36).slice(2, 10), topic = TOPIC + 't/' + r, mid = 'x'.repeat(900);
       let small = 0, medium = 0, k = 0;
@@ -2087,7 +2114,7 @@
       setTimeout(() => { clearInterval(p); l.close(); res({ up: l.up, small, medium }); }, 14000);
     });
     const [r, own] = await Promise.all([Promise.all(BROKERS.slice(0, 2).map(one)), testOwn()]);
-    testMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился' : `короткие ${x.small}/10, средние ${x.medium}/5`)).join(String.fromCharCode(10)));
+    testMsg(own + String.fromCharCode(10) + r.map((x, i) => L(`Сервер ${i + 1}: `, `Server ${i + 1}: `) + (!x.up ? L('не подключился', 'not connected') : L(`короткие ${x.small}/10, средние ${x.medium}/5`, `short ${x.small}/10, medium ${x.medium}/5`))).join(String.fromCharCode(10)));
   }
 
   // the game's own server: do messages of every size come back?
@@ -2097,13 +2124,13 @@
     const l = srvLink((t, text) => { if (text.length < 500) small++; else big += text.length; }, lite);
     l.sub(topic);
     const p = setInterval(() => { if (l.up && k < 30) { wasUp = true; l.pub(topic, k < 10 ? 'm' + k : blob); k++; } }, 150);
-    setTimeout(() => { clearInterval(p); const how = l.bursts ? 'короткими сеансами' : 'напрямую'; l.close();
-      res('Сервер игры: ' + (!wasUp ? 'не подключился' : `подключился ${how}, короткие ${small}/10, длинные ${Math.round(big / 1000)}/40 КБ`)); }, 11000);
+    setTimeout(() => { clearInterval(p); const how = l.bursts ? L('короткими сеансами', 'in short sessions') : L('напрямую', 'directly'); l.close();
+      res(L('Сервер игры: ', 'Game server: ') + (!wasUp ? L('не подключился', 'not connected') : L(`подключился ${how}, короткие ${small}/10, длинные ${Math.round(big / 1000)}/40 КБ`, `connected ${how}, short ${small}/10, long ${Math.round(big / 1000)}/40 KB`))); }, 11000);
   });
 
   async function testNet() {
     if (lite) return testLite();
-    testMsg('Проверяем связь (12 секунд)…');
+    testMsg(L('Проверяем связь (12 секунд)…', 'Testing the connection (12 seconds)…'));
     // step by step for every server: connected? subscribed? do short messages come back? do long ones?
     const one = url => new Promise(res => {
       const r = Math.random().toString(36).slice(2, 10), topic = TOPIC + 't/' + r, blob = 'x'.repeat(2000), t0 = Date.now();
@@ -2120,8 +2147,8 @@
       }, 200);
     });
     const [r, own] = await Promise.all([Promise.all(BROKERS.map(one)), testOwn()]);
-    testMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился'
-      : `подключился, подписка ${x.ack ? 'да' : 'нет'}, короткие ${x.small}/10, длинные ${x.big}/40 КБ`)).join('\n'));
+    testMsg(own + String.fromCharCode(10) + r.map((x, i) => L(`Сервер ${i + 1}: `, `Server ${i + 1}: `) + (!x.up ? L('не подключился', 'not connected')
+      : L(`подключился, подписка ${x.ack ? 'да' : 'нет'}, короткие ${x.small}/10, длинные ${x.big}/40 КБ`, `connected, subscribed ${x.ack ? 'yes' : 'no'}, short ${x.small}/10, long ${x.big}/40 KB`))).join('\n'));
   }
 
   // --- a minimal MQTT 3.1.1 client over WebSocket: connect, subscribe, publish (QoS 0), ping ---
@@ -2770,12 +2797,12 @@
   async function vToggle(mic) {
     if (!mic && (mode === 'solo' || !peer || !vOn())) { spkPref = !spkPref; saveSpk(); vDraw(); return; }   // not in a voice chat: only the choice
     if (mode === 'solo' || !peer) return;
-    if (typeof RTCPeerConnection === 'undefined') { $('warn').textContent = 'Голосовой чат здесь не поддерживается.'; return; }
+    if (typeof RTCPeerConnection === 'undefined') { $('warn').textContent = L('Голосовой чат здесь не поддерживается.', 'Voice chat is not supported here.'); return; }
     vAuto = true;
     if (mic && !vMic && !vStream) {
       const n = peer, st = await vMicAsk();
       if (peer !== n) { if (st) st.getTracks().forEach(t => t.stop()); return; }
-      if (!st) { $('warn').textContent = 'Нет доступа к микрофону: разрешите его для игры в настройках телефона.'; return; }
+      if (!st) { $('warn').textContent = L('Нет доступа к микрофону: разрешите его для игры в настройках телефона.', 'No microphone access: allow it for the game in the phone settings.'); return; }
       vStream = st; vMic = true;
       aStop();
       // the connections were made without a microphone: make them again
@@ -2817,7 +2844,8 @@
       deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
       queen: pendingQueen ? { pi: pendingQueen.pi, id: pendingQueen.card.id } : null,
       result, evSeq, lastEv, viewRev,
-      log: log.slice(-2).map(f => players.map((_, i) => f(i)).concat([f(-1)]))
+      log: log.slice(-2).map(f => players.map((p, i) => inLang(langOf(p.pid), () => f(i))).concat([f(-1)])),
+      langs: [...pidLang, [myPid, lang]]
     };
   }
   function restore(st) {
@@ -2834,6 +2862,7 @@
     pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
     result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
     log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
+    (st.langs || []).forEach(([k, v]) => { if (k !== myPid) pidLang.set(k, v); });
   }
 
   // every few seconds: mark the players we have not heard from, and keep sending them the game
@@ -2915,8 +2944,8 @@
     if (topic === topicOf(code, n.id)) {
       // another device carries this game on with a newer state: join it as a player
       if (d.t === 'view' && d.v && (d.v.term || 0) > term) becomeGuest(n, code, d);
-      else if (d.t === 'kicked' && (d.term || 0) > term) quit('Игра продолжилась без вас: хозяин комнаты убрал вас из игры');
-      else if (d.t === 'closed' && (d.term || 0) > term) quit('Хозяин комнаты вышел из игры. Игра окончена.');
+      else if (d.t === 'kicked' && (d.term || 0) > term) quit(L('Игра продолжилась без вас: хозяин комнаты убрал вас из игры', 'The game went on without you: the host removed you'));
+      else if (d.t === 'closed' && (d.term || 0) > term) quit(L('Хозяин комнаты вышел из игры. Игра окончена.', 'The host left. The game is over.'));
       return;
     }
     if (topic !== hostTopic(code)) return;
@@ -2930,7 +2959,7 @@
       conn.left = true; conn.open = false;
       if (started && from === ownerId) {                    // the room owner left for good
         conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
-        quit('Хозяин комнаты вышел из игры. Игра окончена.');
+        quit(L('Хозяин комнаты вышел из игры. Игра окончена.', 'The host left. The game is over.'));
         return;
       }
       onGuestGone(conn);
@@ -2975,10 +3004,10 @@
     else if (d.t === 'full') {
       if (gJoined) return;
       joinWant = 'watch'; gT0 = Date.now();                 // keep asking: when the game starts, I come in to watch
-      netMsg('Все места заняты. Когда игра начнётся, вы сможете смотреть.');
+      netMsg(L('Все места заняты. Когда игра начнётся, вы сможете смотреть.', 'All seats are taken. You can watch once the game starts.'));
     }
-    else if (d.t === 'kicked') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты убрал вас из игры'); }
-    else if (d.t === 'closed') { if ((d.term || 0) >= gTerm) quit('Хозяин комнаты вышел из игры. Игра окончена.'); }
+    else if (d.t === 'kicked') { if ((d.term || 0) >= gTerm) quit(L('Хозяин комнаты убрал вас из игры', 'The host removed you from the game')); }
+    else if (d.t === 'closed') { if ((d.term || 0) >= gTerm) quit(L('Хозяин комнаты вышел из игры. Игра окончена.', 'The host left. The game is over.')); }
   }
 
   function guestTimer(n, code) {
@@ -2989,15 +3018,15 @@
       if (Date.now() - lastTick > PING_MS * 2.5) gHeard = Date.now();
       lastTick = Date.now();
       if (!gJoined) {
-        if (Date.now() - gT0 > 25000) { quit('Комната не отвечает: неверный код или нет связи с игровыми серверами'); return; }
-        hostConn.send({ t: 'join', name: gName, ver: VERSION, pid: myPid, want: joinWant, pw: joinPw });      // repeated until the room answers
+        if (Date.now() - gT0 > 25000) { quit(L('Комната не отвечает: неверный код или нет связи с игровыми серверами', 'The room does not answer: wrong code or no connection to the game servers')); return; }
+        hostConn.send({ t: 'join', name: gName, ver: VERSION, pid: myPid, want: joinWant, pw: joinPw, lang });      // repeated until the room answers
         return;
       }
       const silent = Date.now() - gHeard;
       hostConn.send({ t: 'ping', rev: gRev, term: gTerm });
       if (silent < TAKE_MS / 2) return;
-      $('warn').textContent = gSnap && view ? 'Хозяин комнаты не отвечает. Если он не вернётся, игра продолжится без него…'
-        : 'Нет связи с комнатой. Пробуем восстановить…';
+      $('warn').textContent = gSnap && view ? L('Хозяин комнаты не отвечает. Если он не вернётся, игра продолжится без него…', 'The host is not answering. If they don\'t come back, the game goes on without them…')
+        : L('Нет связи с комнатой. Пробуем восстановить…', 'Lost the room. Reconnecting…');
       if (!gSnap || !view) return;
       n.send(topicOf(code, n.id), { t: 'echo' });           // does my own connection still work?
       // players take the game over in seat order, each one a little later than the previous
@@ -3034,8 +3063,9 @@
     n.sub(hostTopic(code));
     hostTimer(n, code);
     const name = players[seat].name;
-    say(given ? me => (me === seat ? 'Теперь вы хозяин комнаты' : 'Хозяин комнаты теперь ' + name)
-      : me => (me === seat ? 'Хозяин комнаты не отвечает — игру ведёте вы' : 'Хозяин комнаты не отвечает — игру ведёт ' + name));
+    say(given ? me => (me === seat ? L('Теперь вы хозяин комнаты', 'You are now the host') : L('Хозяин комнаты теперь ', 'The host is now ') + name)
+      : me => (me === seat ? L('Хозяин комнаты не отвечает — игру ведёте вы', 'The host is not answering — you run the game now')
+        : L('Хозяин комнаты не отвечает — игру ведёт ', 'The host is not answering — the game is run by ') + name));
     $('warn').textContent = '';
     if (phase === 'play' && pend) later(pend.k, pend.a, PLAY_PAUSE);
     else if (phase === 'play') step();
@@ -3067,7 +3097,7 @@
   // ----- host -----
   async function createRoom(attempt = 0) {
     if (needName()) return;
-    netMsg('Создаём комнату…');
+    netMsg(L('Создаём комнату…', 'Creating the room…'));
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -3083,7 +3113,7 @@
     });
     peer = n;
     if (!(await n.ready(8000))) {
-      if (peer === n) { n.close(); peer = null; netMsg('Нет связи с игровым сервером. Проверьте интернет.'); startWatch(); }
+      if (peer === n) { n.close(); peer = null; netMsg(L('Нет связи с игровым сервером. Проверьте интернет.', 'No connection to the game server. Check your internet.')); startWatch(); }
       return;
     }
     if (peer !== n) return;
@@ -3107,7 +3137,7 @@
 
   // the room gets the settings this device chose in "Создать игру"
   function takeRoomPicks() {
-    roomName = (namePick() || ('Стол ' + myName())).slice(0, 30);
+    roomName = (namePick() || (L('Стол ', 'Table ') + myName())).slice(0, 30);
     roomSeats = seatsPick; roomHand = handPick; roomPriv = privPick;
     roomPw = roomPriv ? pwPick() : '';
     if (roomPriv && !roomPw) roomPriv = false;              // a private room cannot be without a password
@@ -3115,7 +3145,7 @@
   const pwPick = () => { try { return (localStorage.getItem('g101-rpw') || '').trim().slice(0, 20); } catch { return ''; } };
   const namePick = () => { try { return (localStorage.getItem('g101-rname') || '').trim(); } catch { return ''; } };
   const roomInfoMsg = () => ({ name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv });
-  const lobbyNames = () => lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? ' (другая версия игры)' : ''));
+  const lobbyNames = () => lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? L(' (другая версия игры)', ' (other game version)') : ''));
 
   // send a guest the current state again (answers every ping, so a lost message heals itself)
   function resync(conn, d) {
@@ -3145,6 +3175,7 @@
       if (member) { resync(conn); return; }
       const pid = typeof d.pid === 'string' ? d.pid.slice(0, 24) : '';
       if (pid && banned.has(pid)) { conn.send({ t: 'kicked', term }); return; }
+      if (pid) pidLang.set(pid, d.lang === 'en' ? 'en' : 'ru');
       if (roomPw && String(d.pw || '') !== roomPw) {
         // somebody who already sits here (a reloaded page) comes back without it
         const known = pid && ((lobby && lobby.some(x => x.pid === pid)) || players.some(x => x.pid === pid && !x.isBot && !x.removed) ||
@@ -3163,7 +3194,7 @@
         const old = pid ? [...specs.values()].find(x => x.pid === pid) : null;
         if (old) { retire(old.conn); specs.delete(old.id); }
         // the game is on: come in as a spectator
-        specs.set(conn.id, { id: conn.id, pid, name: String(d.name || 'Зритель').slice(0, 12), conn,
+        specs.set(conn.id, { id: conn.id, pid, name: String(d.name || L('Зритель', 'Spectator')).slice(0, 12), conn,
           asked: old ? old.asked : 0, sit: old ? old.sit : d.want !== 'watch', open: old ? old.open : {}, wait: old ? old.wait : [] });
         render();
         return;
@@ -3171,7 +3202,7 @@
       const seat = pid && lobby ? lobby.find(x => x.pid === pid && x.conn) : null;
       if (seat) { retire(seat.conn); seat.conn = conn; seat.ver = +d.ver || 0; drawLobby(); return; }
       if (!lobby || lobby.length >= roomSeats) { conn.send({ t: 'full' }); return; }
-      lobby.push({ name: String(d.name || 'Игрок').slice(0, 12), conn, isBot: false, ver: +d.ver || 0, pid });
+      lobby.push({ name: String(d.name || L('Игрок', 'Player')).slice(0, 12), conn, isBot: false, ver: +d.ver || 0, pid });
       drawLobby();
       return;
     }
@@ -3182,7 +3213,12 @@
       try { localStorage.setItem('g101-long', longPick ? '1' : '0'); } catch {}
       drawLobby();
       if (window.drawModeSw) window.drawModeSw();
-      notifyUser(`${who.name} выбирает колоду из ${longPick ? 52 : 36} карт`);
+      notifyUser(L(`${who.name} выбирает колоду из ${longPick ? 52 : 36} карт`, `${who.name} picks the ${longPick ? 52 : 36}-card deck`));
+      return;
+    }
+    if (d.t === 'lang') {                                   // a guest switched the language
+      const p = players.find(x => x.conn === conn) || specs.get(conn.id) || (lobby || []).find(x => x.conn === conn);
+      if (p && p.pid) { pidLang.set(p.pid, d.lang === 'en' ? 'en' : 'ru'); render(); }
       return;
     }
     if (!started) return;
@@ -3268,40 +3304,40 @@
   }
   function roomRow(r) {
     const n = r.names.length, full = n >= r.seats;
-    const status = r.started ? 'идёт игра' + (r.spec ? ' · зрителей ' + r.spec : '') : full ? 'мест нет' : 'ждут игроков';
+    const status = r.started ? L('идёт игра', 'playing') + (r.spec ? L(' · зрителей ', ' · watching ') + r.spec : '') : full ? L('мест нет', 'full') : L('ждут игроков', 'waiting for players');
     return `<div class="room${isFriendRoom(r) ? ' fr' : ''}" data-code="${esc(r.code)}">` +
-      `<div class="who"><b>${isFriendRoom(r) ? '★ ' : ''}${esc(r.name || r.names[0] || 'Стол')}${r.priv ? ' 🔒' : ''}</b>` +
+      `<div class="who"><b>${isFriendRoom(r) ? '★ ' : ''}${esc(r.name || r.names[0] || L('Стол', 'Table'))}${r.priv ? ' 🔒' : ''}</b>` +
       `<span class="${r.started ? '' : 'go'}">${esc(r.names.join(', '))} · ${status}</span></div>` +
-      `<div class="meta"><span>${r.hand}<i>в руке</i></span><span>${n}/${r.seats}<i>мест</i></span><span class="dk">${r.long ? 52 : 36}</span></div>` +
-      `<button class="gearB" data-gear="${esc(r.code)}" aria-label="Настройки комнаты">⚙</button></div>`;
+      `<div class="meta"><span>${r.hand}<i>${L('в руке', 'in hand')}</i></span><span>${n}/${r.seats}<i>${L('мест', 'seats')}</i></span><span class="dk">${r.long ? 52 : 36}</span></div>` +
+      `<button class="gearB" data-gear="${esc(r.code)}" aria-label="${L('Настройки комнаты', 'Room settings')}">⚙</button></div>`;
   }
   function drawRooms() {
     const el = $('rooms');
     let html;
-    if (roomList === null) html = '<p class="none">' + (roomListErr > 1 ? 'Нет связи с сервером игры: список не загрузился.' : 'Загружаем список игр…') + '</p>';
-    else if (!roomList.length) html = '<p class="none">Открытых игр сейчас нет. Создайте свою — её увидят все.</p>';
-    else html = roomList.map(roomRow).join('') + (roomListErr > 2 ? '<p class="none">Нет связи с сервером игры: список может быть устаревшим.</p>' : '');
+    if (roomList === null) html = '<p class="none">' + (roomListErr > 1 ? L('Нет связи с сервером игры: список не загрузился.', 'No connection to the game server: the list did not load.') : L('Загружаем список игр…', 'Loading games…')) + '</p>';
+    else if (!roomList.length) html = '<p class="none">' + L('Открытых игр сейчас нет. Создайте свою — её увидят все.', 'No open games right now. Create one — everyone will see it.') + '</p>';
+    else html = roomList.map(roomRow).join('') + (roomListErr > 2 ? '<p class="none">' + L('Нет связи с сервером игры: список может быть устаревшим.', 'No connection to the game server: the list may be out of date.') + '</p>' : '');
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     return;
   }
   function drawRoomsOld() {
     const el = $('rooms');
-    if (!group) { el.dataset.h = ''; el.innerHTML = '<p class="none">Введите код компании. По нему вы с друзьями попадаете за один стол.</p>'; return; }
-    const who = online.size ? `<p class="none">В сети: ${[...online].map(([id, x]) => isFriend(id) ? `<span class="addf">★ ${esc(x.name)}</span>`
+    if (!group) { el.dataset.h = ''; el.innerHTML = '<p class="none">' + L('Введите код компании. По нему вы с друзьями попадаете за один стол.', 'Enter a group code. With it you and your friends get to one table.') + '</p>'; return; }
+    const who = online.size ? `<p class="none">${L('В сети', 'Online')}: ${[...online].map(([id, x]) => isFriend(id) ? `<span class="addf">★ ${esc(x.name)}</span>`
       : `<button class="addf" data-af="${esc(id)}" data-n="${esc(x.name)}">${esc(x.name)} ＋</button>`).join('')}</p>` : '';
     // one company is one table; it is always there: with people or empty, the button is "Войти"
     const r = rooms.get(roomOf(group));
     let row;
     if (!r) {
-      row = `<div class="room"><div class="who"><b>Стол «${esc(group)}»</b><span>${Date.now() - watchAt < 2500 ? 'проверяем…' : 'за столом никого'}</span></div>` +
-        '<button class="btn" data-w="seat">Войти</button></div>';
+      row = `<div class="room"><div class="who"><b>${L('Стол', 'Table')} «${esc(group)}»</b><span>${Date.now() - watchAt < 2500 ? L('проверяем…', 'checking…') : L('за столом никого', 'nobody at the table')}</span></div>` +
+        `<button class="btn" data-w="seat">${L('Войти', 'Join')}</button></div>`;
     } else {
       const full = !r.started && r.names.length >= MAX_PLAYERS;
-      row = `<div class="room${r.mine ? ' mine' : ''}"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` + (r.mine ? 'вы играете здесь · ' : '') +
-        (r.started ? 'идёт игра' + (r.spec ? ', зрителей: ' + r.spec : '') : full ? 'мест нет' : 'ждут игроков') + '</span></div>' +
-        (r.started ? (r.open || r.names.length < MAX_PLAYERS ? '<button class="btn" data-w="seat">Играть</button>' : '') +
-            '<button class="btn plain" data-w="watch">Смотреть</button>'
-          : full ? '' : '<button class="btn" data-w="seat">Войти</button>') + '</div>';
+      row = `<div class="room${r.mine ? ' mine' : ''}"><div class="who"><b>${esc(r.names.join(', '))}</b><span>` + (r.mine ? L('вы играете здесь · ', 'you play here · ') : '') +
+        (r.started ? L('идёт игра', 'playing') + (r.spec ? L(', зрителей: ', ', watching: ') + r.spec : '') : full ? L('мест нет', 'full') : L('ждут игроков', 'waiting for players')) + '</span></div>' +
+        (r.started ? (r.open || r.names.length < MAX_PLAYERS ? `<button class="btn" data-w="seat">${L('Играть', 'Play')}</button>` : '') +
+            `<button class="btn plain" data-w="watch">${L('Смотреть', 'Watch')}</button>`
+          : full ? '' : `<button class="btn" data-w="seat">${L('Войти', 'Join')}</button>`) + '</div>';
     }
     const html = who + row;
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
@@ -3327,9 +3363,9 @@
   }
   function addFriend(id, name) {
     if (!id || id === myPid || id === 'bot' || isFriend(id)) return;
-    friends[id] = String(name || 'Друг').slice(0, 12);
+    friends[id] = String(name || L('Друг', 'Friend')).slice(0, 12);
     saveFriends();
-    notifyUser(`${friends[id]} теперь в друзьях`);
+    notifyUser(L(`${friends[id]} теперь в друзьях`, `${friends[id]} is now your friend`));
   }
   function dropFriend(id) { delete friends[id]; friendSeen.delete(id); friendChat.delete(id); saveFriends(); }
   function drawFriends() {
@@ -3338,21 +3374,21 @@
     ids.sort((a, b) => (seen(b) ? 1 : 0) - (seen(a) ? 1 : 0) || friends[a].localeCompare(friends[b]));
     const html = ids.map(id => {
       const f = seen(id);
-      const st = !f ? 'не в сети' : f.room ? (f.started ? 'играет' : 'ждёт за столом') : 'в сети';
+      const st = !f ? L('не в сети', 'offline') : f.room ? (f.started ? L('играет', 'playing') : L('ждёт за столом', 'waiting at a table')) : L('в сети', 'online');
       return `<div class="frow"><i class="dot${f ? ' on' : ''}${f && f.room ? ' play' : ''}"></i>` +
         `<div class="nm"><b>${esc(friends[id])}</b><span>${st}${friendChat.get(id) ? ' · Telegram' : ''}</span></div>` +
-        `<button class="btn" data-inv="${esc(id)}">Пригласить</button><button class="x" data-del="${esc(id)}" aria-label="Удалить">✕</button></div>`;
+        `<button class="btn" data-inv="${esc(id)}">${L('Пригласить', 'Invite')}</button><button class="x" data-del="${esc(id)}" aria-label="${L('Удалить', 'Remove')}">✕</button></div>`;
     }).join('');
     const el = $('friendList');
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     // people online right now who are not friends yet
     const others = [...online].filter(([id]) => !isFriend(id) && id !== myPid);
-    const nh = others.length ? '<div class="fsub">Сейчас в сети</div>' + others.map(([id, x]) =>
-      `<div class="frow"><i class="dot on"></i><div class="nm"><b>${esc(x.name)}</b><span>в вашей компании</span></div>` +
-      `<button class="btn" data-af="${esc(id)}" data-n="${esc(x.name)}">＋ В друзья</button></div>`).join('') : '';
+    const nh = others.length ? `<div class="fsub">${L('Сейчас в сети', 'Online now')}</div>` + others.map(([id, x]) =>
+      `<div class="frow"><i class="dot on"></i><div class="nm"><b>${esc(x.name)}</b><span>${L('в вашей компании', 'in your group')}</span></div>` +
+      `<button class="btn" data-af="${esc(id)}" data-n="${esc(x.name)}">${L('＋ В друзья', '＋ Add friend')}</button></div>`).join('') : '';
     if ($('friendNew').dataset.h !== nh) { $('friendNew').dataset.h = nh; $('friendNew').innerHTML = nh; }
     const n = ids.filter(seen).length;
-    $('friendsBtn').innerHTML = 'Друзья' + (ids.length ? `<small>${n} в сети</small>` : '');
+    $('friendsBtn').innerHTML = L('Друзья', 'Friends') + (ids.length ? `<small>${n} ${L('в сети', 'online')}</small>` : '');
   }
 
   // invite one friend to my table: a message in their game and, if they connected it, in Telegram
@@ -3360,19 +3396,19 @@
   async function inviteFriend(id) {
     if (!isFriend(id)) return;
     if (mode === 'solo' && phase !== 'setup') {
-      if (!confirm('Закончить игру с ботами и позвать друга за новый стол?')) return;
+      if (!confirm(L('Закончить игру с ботами и позвать друга за новый стол?', 'End the game with bots and invite your friend to a new table?'))) return;
       leave();
     }
     if (mode === 'solo' || !roomCode) {
       $('friendsScr').classList.remove('show');
       if (group) enterRoom('seat'); else createRoom();
       for (let k = 0; k < 40 && !(roomCode && (mode === 'host' || (mode === 'guest' && gJoined))); k++) await pause(400);
-      if (!roomCode || mode === 'solo') { notifyUser('Не получилось войти в комнату'); return; }
+      if (!roomCode || mode === 'solo') { notifyUser(L('Не получилось войти в комнату', 'Could not enter the room')); return; }
     }
-    const name = $('nick').value.trim().slice(0, 12) || 'Друг', chat = friendChat.get(id);
+    const name = $('nick').value.trim().slice(0, 12) || L('Друг', 'Friend'), chat = friendChat.get(id);
     if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid, pw: mode === 'host' ? roomPw : joinPw });
-    if (chat) tgSay(chat, `${name} зовёт вас играть в «101». Войти за стол: ${SITE}?join=${roomCode}`);
-    notifyUser(`Приглашение отправлено: ${friends[id]}${chat ? ' (и в Telegram)' : ''}`);
+    if (chat) tgSay(chat, L(`${name} зовёт вас играть в «101». Войти за стол: ${SITE}?join=${roomCode}`, `${name} invites you to play "101". Join the table: ${SITE}?join=${roomCode}`));
+    notifyUser(L(`Приглашение отправлено: ${friends[id]}${chat ? ' (и в Telegram)' : ''}`, `Invitation sent: ${friends[id]}${chat ? ' (and on Telegram)' : ''}`));
   }
 
   // ----- Telegram: a bot writes to you when a friend comes in or sits at a table, even if the game is closed -----
@@ -3421,8 +3457,8 @@
     const el = $('tgRow');
     if (!TG_TOKEN) { el.innerHTML = ''; return; }
     el.innerHTML = tgChat
-      ? `<span class="tgok">Telegram подключён ✓</span><button class="addf" id="tgOff">отключить</button>`
-      : `<button class="btn" id="tgOn" style="width:100%">Подключить Telegram</button>`;
+      ? `<span class="tgok">${L('Telegram подключён ✓', 'Telegram connected ✓')}</span><button class="addf" id="tgOff">${L('отключить', 'disconnect')}</button>`
+      : `<button class="btn" id="tgOn" style="width:100%">${L('Подключить Telegram', 'Connect Telegram')}</button>`;
   }
   function tgLink() {
     if (!TG_TOKEN || !TG_BOT) return;
@@ -3444,11 +3480,11 @@
     if (tgChat || !tgWaiting()) return;
     const el = $('tgRow').querySelector('.tgok');
     if (!r || !r.ok) {                                      // Telegram's server cannot be reached from this network
-      if (++tgFails >= 2 && el) el.textContent = 'Нет связи с сервером игры. Проверьте интернет и вернитесь сюда.';
+      if (++tgFails >= 2 && el) el.textContent = L('Нет связи с сервером игры. Проверьте интернет и вернитесь сюда.', 'No connection to the game server. Check your internet and come back here.');
       return;
     }
     tgFails = 0;
-    if (el) el.textContent = 'Нажмите «Start» в Telegram и вернитесь сюда…';
+    if (el) el.textContent = L('Нажмите «Start» в Telegram и вернитесь сюда…', 'Press "Start" in Telegram and come back here…');
     if (!r.chat) return;                                    // "Start" has not been pressed yet
     clearInterval(tgPoll);
     tgChat = r.chat;                                        // the bot has already answered "Готово!" by itself
@@ -3460,7 +3496,7 @@
   function tgWait() {
     clearInterval(tgPoll);
     if (!TG_TOKEN || !tgWaiting()) return;
-    $('tgRow').innerHTML = '<span class="tgok">Нажмите «Start» в Telegram и вернитесь сюда…</span><button class="addf" id="tgOff">отмена</button>';
+    $('tgRow').innerHTML = `<span class="tgok">${L('Нажмите «Start» в Telegram и вернитесь сюда…', 'Press "Start" in Telegram and come back here…')}</span><button class="addf" id="tgOff">${L('отмена', 'cancel')}</button>`;
     const t0 = Date.now();
     tgPoll = setInterval(() => {
       if (Date.now() - t0 > 600000) { clearInterval(tgPoll); return; }        // the next return to the game looks again
@@ -3501,7 +3537,7 @@
       // somebody invites me to their table
       if (d.t === 'invite' && topic === TOPIC + 'u/' + myPid + '/in' && ROOM_RE.test(d.room)) {
         if (d.pw) invitedPw.set(d.room, String(d.pw).slice(0, 20));
-        if (d.room !== roomCode) notifyUser(`✉️ ${String(d.name || 'Друг').slice(0, 12)} зовёт вас за стол`, d.room, '');
+        if (d.room !== roomCode) notifyUser(L(`✉️ ${String(d.name || 'Друг').slice(0, 12)} зовёт вас за стол`, `✉️ ${String(d.name || 'Friend').slice(0, 12)} invites you to a table`), d.room, '');
         return;
       }
       // a friend's game: online, sitting at a table, playing
@@ -3512,8 +3548,8 @@
         const room = ROOM_RE.test(d.room) ? d.room : '';
         friendSeen.set(id, { t: Date.now(), room, started: !!d.started });
         if (settled()) {
-          if (!was) notifyUser(room ? `🃏 ${name} за столом` : `🟢 ${name} в сети`, room && room !== roomCode ? room : '', '');
-          else if (room && room !== prev.room && room !== roomCode) notifyUser(`🃏 ${name} за столом`, room, '');
+          if (!was) notifyUser(room ? L(`🃏 ${name} за столом`, `🃏 ${name} is at a table`) : L(`🟢 ${name} в сети`, `🟢 ${name} is online`), room && room !== roomCode ? room : '', '');
+          else if (room && room !== prev.room && room !== roomCode) notifyUser(L(`🃏 ${name} за столом`, `🃏 ${name} is at a table`), room, '');
         }
         drawFriends();
         return;
@@ -3524,19 +3560,19 @@
         const k = tg + '/' + d.code, fresh = !liveRooms.has(k);
         if (d.gone) liveRooms.delete(k); else liveRooms.set(k, Date.now());
         const mineRoom = d.code === roomCode || (Array.isArray(d.pids) && d.pids.includes(myPid));
-        const who = Array.isArray(d.names) && d.names[0] ? String(d.names[0]).slice(0, 12) : 'Друг';
-        if (!d.gone && fresh && settled() && !mineRoom) notifyUser(`${who} зовёт играть · «${tg}»`, d.code, tg);
+        const who = Array.isArray(d.names) && d.names[0] ? String(d.names[0]).slice(0, 12) : L('Друг', 'Friend');
+        if (!d.gone && fresh && settled() && !mineRoom) notifyUser(L(`${who} зовёт играть · «${tg}»`, `${who} invites you to play · "${tg}"`), d.code, tg);
         drawGroups();
       }
       if (tg && d.t === 'here' && typeof d.pid === 'string' && d.pid !== myPid) {
-        const k = tg + '/' + d.pid, name = String(d.name || 'Игрок').slice(0, 12);
-        if (!onlineAll.has(k) && settled()) notifyUser(`${name} в сети · «${tg}»`);
+        const k = tg + '/' + d.pid, name = String(d.name || L('Игрок', 'Player')).slice(0, 12);
+        if (!onlineAll.has(k) && settled()) notifyUser(L(`${name} в сети · «${tg}»`, `${name} is online · "${tg}"`));
         onlineAll.set(k, Date.now());
       }
       if (!g || topic !== groupTopic(g)) return;
       if (d.t === 'here') {                                 // a friend has the game open
         if (typeof d.pid !== 'string' || d.pid === myPid) return;
-        const name = String(d.name || 'Игрок').slice(0, 12);
+        const name = String(d.name || L('Игрок', 'Player')).slice(0, 12);
         online.set(d.pid, { name, t: Date.now() });
         drawRooms();
         return;
@@ -3560,7 +3596,7 @@
     setTimeout(pubChat, 2500);
     setTimeout(pubChat, 15000);
     const here = () => {
-      const name = $('nick').value.trim().slice(0, 12) || 'Игрок';
+      const name = $('nick').value.trim().slice(0, 12) || L('Игрок', 'Player');
       if (g) w.send(groupTopic(g), { t: 'here', pid: myPid, name });
       // for my friends: where am I
       const room = mode !== 'solo' && roomCode ? roomCode : '';
@@ -3600,7 +3636,7 @@
   function seatHuman(i, conn, pid, name) {
     const p = players[i], old = p.name;
     p.isBot = false; p.conn = conn; p.pid = pid; p.name = name; p.lost = false;
-    say(me => (me === i ? 'Вы сели за стол вместо бота' : `${name} садится за стол вместо бота «${old}»`));
+    say(me => (me === i ? L('Вы сели за стол вместо бота', 'You took a bot\'s seat') : L(`${name} садится за стол вместо бота «${old}»`, `${name} takes the seat of bot "${old}"`)));
     if (phase === 'play' && turn === i && pend && pend.k === 'bot') { gameId++; busy = false; pend = null; }   // the bot was about to move
     render();
   }
@@ -3613,7 +3649,7 @@
     kicked.set(p.conn.id, Date.now());
     p.conn.left = true; p.conn.open = false;
     if (p.pid) banned.add(p.pid);
-    p.conn = null; p.isBot = true; p.lost = false; p.pid = ''; p.name += ' (бот)';
+    p.conn = null; p.isBot = true; p.lost = false; p.pid = ''; p.name += L(' (бот)', ' (bot)');
     if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
       suit = botSuit(p); phase = 'play';
       const q = pendingQueen; pendingQueen = null;
@@ -3636,7 +3672,7 @@
     p.out = true; p.removed = true; p.isBot = true; p.lost = false; p.pid = '';
     deck = shuffle(deck.concat(p.hand));
     p.hand = [];
-    say(p.name + ' удалён из игры');
+    say(LL(p.name + ' удалён из игры', p.name + ' was removed from the game'));
     const left = active();
     if (phase === 'roundEnd') {
       if (result && left.length < 2) { result.gameOver = true; result.champion = left.length ? players.indexOf(left[0]) : -1; }
@@ -3673,10 +3709,11 @@
     const ri = host ? roomInfoMsg() : lobbyRoom || {};
     $('lobCode').textContent = ri.name || roomCode;
     $('lobInfo').textContent = roomLine(host ? longPick : lobbyLong, ri.hand || HAND_SIZE, names.length, ri.seats || MAX_PLAYERS, ri.priv);
-    $('lobHint').textContent = host ? (roomPriv ? `Приватная комната: вход по паролю «${roomPw}».` : 'Комнату видят все в списке «Открытые игры».') + ' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
-      : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
+    $('lobHint').textContent = host ? (roomPriv ? L(`Приватная комната: вход по паролю «${roomPw}».`, `Private room: password "${roomPw}".`) : L('Комнату видят все в списке «Открытые игры».', 'Everyone sees the room in "Open games".'))
+        + L(' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.', ' If you leave the app, the others play on without you. "Leave" closes the room for everyone.')
+      : L('Ждём, пока хозяин комнаты начнёт игру…', 'Waiting for the host to start the game…') + (hostVer < VERSION ? L(' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.', ' The host has an old version: the rules may differ. Ask them to update.') : '');
     $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
-      (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
+      (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="${L('Удалить', 'Remove')}">✕</button>` : '') + '</li>').join('');
     $('hostBox').style.display = host ? '' : 'none';
     $('roomEditBtn').style.display = host && !started ? '' : 'none';
     [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length || +b.dataset.n > roomSeats; });
@@ -3688,17 +3725,20 @@
     if (host) roomToServer(roomCode);
   }
   // bots get random names, never two the same at one table: "Бот Боря", "Бот Джон"…
+  const BOT_EN = ['Bob', 'John', 'Tony', 'Mike', 'Sam', 'Pete', 'Bill', 'Nick', 'Jack', 'Greg', 'Dan', 'Alex', 'Max', 'Oliver',
+    'Rob', 'Steve', 'Fred', 'Tim', 'Tom', 'Joe', 'Leo', 'Ned', 'Ray', 'Ted', 'Eddie', 'Mary', 'Kate', 'Olivia', 'Nina', 'Ann'];
   const BOT_NAMES = ['Боря', 'Джон', 'Антон', 'Миша', 'Саша', 'Петя', 'Вася', 'Коля', 'Ваня', 'Гоша', 'Дима', 'Лёша', 'Макс', 'Олег',
     'Рома', 'Стёпа', 'Федя', 'Юра', 'Тимур', 'Майк', 'Том', 'Гриша', 'Жора', 'Сеня', 'Толя', 'Эдик', 'Маша', 'Катя', 'Оля', 'Нина'];
   // "Бот Боря": at a full table there is no room for the word "Бот", the name alone is shown
-  function nameHtml(n) { return n.startsWith('Бот ') ? `<span class="botW">Бот </span>${esc(n.slice(4))}` : esc(n); }
+  function nameHtml(n) { const b = /^(Бот|Bot) /.exec(n); return b ? `<span class="botW">${b[0]}</span>${esc(n.slice(4))}` : esc(n); }
   function botName(seats) {
     const used = new Set(seats.map(x => x.name));
-    const free = BOT_NAMES.map(n => 'Бот ' + n).filter(n => !used.has(n));
-    return free.length ? free[Math.floor(Math.random() * free.length)] : 'Бот ' + (seats.length + 1);
+    const free = L(BOT_NAMES, BOT_EN).map(n => L('Бот ', 'Bot ') + n).filter(n => !used.has(n));
+    return free.length ? free[Math.floor(Math.random() * free.length)] : L('Бот ', 'Bot ') + (seats.length + 1);
   }
   let lobbyLong = false;                                    // a guest: the host has chosen the long game
-  const roomLine = (long, hand, n, seats, priv) => `Колода ${long ? 52 : 36} · ${hand} ${hand === 5 || hand === 6 ? 'карт' : 'карты'} в руке · мест ${n}/${seats}` + (priv ? ' · приватная' : '');
+  const roomLine = (long, hand, n, seats, priv) => L(`Колода ${long ? 52 : 36} · ${hand} ${hand === 5 || hand === 6 ? 'карт' : 'карты'} в руке · мест ${n}/${seats}` + (priv ? ' · приватная' : ''),
+    `Deck ${long ? 52 : 36} · ${hand} cards in hand · seats ${n}/${seats}` + (priv ? ' · private' : ''));
 
   // The host waits at an empty table: friends who come in sit down, bots can be added, the game starts on a tap.
   let waiting = false;
@@ -3713,21 +3753,21 @@
     $('asks').innerHTML = ''; $('specRow').innerHTML = ''; $('status').innerHTML = '';
     const o = $('opps');
     o.className = 'opps' + (names.length > 4 ? ' many' : '');
-    o.innerHTML = names.slice(1).map((n, k) => `<div class="opp" data-i="${k + 1}"><button class="omenu" data-kick="${k + 1}" aria-label="Убрать">✕</button>` +
-      `<div class="name">${nameHtml(n)}</div><div class="pts">${lobby[k + 1] && lobby[k + 1].isBot ? 'бот' : 'за столом'}</div></div>`).join('') +
-      '<div class="opp free"><div class="name">Место</div><div class="pts">свободно</div></div>'.repeat(Math.max(0, roomSeats - names.length));
+    o.innerHTML = names.slice(1).map((n, k) => `<div class="opp" data-i="${k + 1}"><button class="omenu" data-kick="${k + 1}" aria-label="${L('Убрать', 'Remove')}">✕</button>` +
+      `<div class="name">${nameHtml(n)}</div><div class="pts">${lobby[k + 1] && lobby[k + 1].isBot ? L('бот', 'bot') : L('за столом', 'seated')}</div></div>`).join('') +
+      `<div class="opp free"><div class="name">${L('Место', 'Seat')}</div><div class="pts">${L('свободно', 'free')}</div></div>`.repeat(Math.max(0, roomSeats - names.length));
     o.className = 'opps' + (roomSeats - 1 > 4 ? ' many' : '');
     $('deck').className = 'empty-slot'; $('deckCount').textContent = '0';
     $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
     $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
     $('myHand').innerHTML = '';
-    $('meBar').textContent = 'Ждём друзей';
+    $('meBar').textContent = L('Ждём друзей', 'Waiting for friends');
     document.body.classList.add('waiting');
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
     const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
-    if (names.length < roomSeats) add('+ бот', () => { lobby.push({ name: botName(lobby), isBot: true, conn: null }); drawLobby(); });
-    if (names.length >= 2) add('Начать', () => { waiting = false; started = true; startMatch(lobby); });
+    if (names.length < roomSeats) add(L('+ бот', '+ bot'), () => { lobby.push({ name: botName(lobby), isBot: true, conn: null }); drawLobby(); });
+    if (names.length >= 2) add(L('Начать', 'Start'), () => { waiting = false; started = true; startMatch(lobby); });
     if (window.placeActions) window.placeActions();
   }
 
@@ -3736,7 +3776,7 @@
   // and this device starts keeping it.
   function enterRoom(want) {
     if (needName()) return;
-    if (!group) { netMsg('Введите код компании'); return; }
+    if (!group) { netMsg(L('Введите код компании', 'Enter a group code')); return; }
     joinWant = want || 'seat';
     $('codeIn').value = roomOf(group);
     return joinRoom(true);
@@ -3744,8 +3784,8 @@
   async function joinRoom(orHost) {
     if (needName()) return;
     const code = $('codeIn').value.trim();
-    if (!ROOM_RE.test(code)) { netMsg('Неверный код комнаты'); return; }
-    netMsg('Подключаемся…');
+    if (!ROOM_RE.test(code)) { netMsg(L('Неверный код комнаты', 'Wrong room code')); return; }
+    netMsg(L('Подключаемся…', 'Connecting…'));
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
     gName = myName();
@@ -3757,7 +3797,7 @@
       else if (mode === 'host') hostMsg(n, code, topic, from, d);
     });
     peer = n;
-    if (!(await n.ready(8000))) { if (peer === n) quit('Нет связи с игровым сервером. Проверьте интернет.'); return; }
+    if (!(await n.ready(8000))) { if (peer === n) quit(L('Нет связи с игровым сервером. Проверьте интернет.', 'No connection to the game server. Check your internet.')); return; }
     if (peer !== n) return;
     n.sub(topicOf(code, n.id));
     if (!lite) n.sub(TOPIC + code + '/s');
@@ -3782,9 +3822,9 @@
     if (!p) return;
     const rival = duelOpp(v), tally = p === rival ? duelDb().vs[duelKey(p)] || { w: 0, l: 0 } : null;
     $('oiName').textContent = p.name;
-    const rows = [['Очки', p.gone ? 'удалён' : p.out ? 'выбыл' : p.score], ['Карт на руке', p.count]];
-    if (tally) rows.push(['Ваши победы', tally.w], ['Ваши поражения', tally.l]);
-    if (p.lost) rows.push(['Связь', 'нет связи']);
+    const rows = [[L('Очки', 'Points'), p.gone ? L('удалён', 'removed') : p.out ? L('выбыл', 'out') : p.score], [L('Карт на руке', 'Cards in hand'), p.count]];
+    if (tally) rows.push([L('Ваши победы', 'Your wins'), tally.w], [L('Ваши поражения', 'Your losses'), tally.l]);
+    if (p.lost) rows.push([L('Связь', 'Connection'), L('нет связи', 'offline')]);
     $('oiTable').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${esc(b)}</td></tr>`).join('');
     const t = $('oiTools'); t.innerHTML = '';
     if (mode === 'host' && !p.out && i !== mySeat) {
@@ -3794,15 +3834,15 @@
         b.onclick = () => { if (confirm(ask)) { fn(i); $('oppInfo').classList.remove('show'); } };
         t.appendChild(b);
       };
-      if (p.remote && !p.lost) add('Сделать хозяином', `Сделать «${p.name}» хозяином комнаты? Игру дальше будет вести его телефон.`, makeHost);
-      if (p.remote) add('Заменить ботом', `Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`, replaceWithBot);
-      add('Удалить из игры', `Удалить «${p.name}» из игры? Его карты вернутся в колоду.`, removePlayer);
+      if (p.remote && !p.lost) add(L('Сделать хозяином', 'Make host'), L(`Сделать «${p.name}» хозяином комнаты? Игру дальше будет вести его телефон.`, `Make "${p.name}" the host? Their phone will run the game from now on.`), makeHost);
+      if (p.remote) add(L('Заменить ботом', 'Replace with a bot'), L(`Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`, `Replace "${p.name}" with a bot? They won't be able to come back.`), replaceWithBot);
+      add(L('Удалить из игры', 'Remove from game'), L(`Удалить «${p.name}» из игры? Его карты вернутся в колоду.`, `Remove "${p.name}" from the game? Their cards go back to the deck.`), removePlayer);
     }
     if (p.pid && p.pid !== 'bot' && p.pid !== myPid) {
       const b = document.createElement('button');
       const fr = isFriend(p.pid);
       b.className = fr ? 'btn plain' : 'btn';
-      b.textContent = fr ? 'Убрать из друзей' : 'Добавить в друзья';
+      b.textContent = fr ? L('Убрать из друзей', 'Remove friend') : L('Добавить в друзья', 'Add friend');
       b.onclick = () => { if (fr) dropFriend(p.pid); else addFriend(p.pid, p.name); $('oppInfo').classList.remove('show'); };
       t.prepend(b);
     }
@@ -3830,14 +3870,14 @@
     const n = peer;
     if (!n) return;
     vRestart();
-    $('warn').textContent = 'Обновляем связь…';
+    $('warn').textContent = L('Обновляем связь…', 'Reconnecting…');
     n.reconnect();
     const ok = await n.ready(8000);
     if (peer !== n) return;
-    if (!ok) { $('warn').textContent = 'Нет связи с игровым сервером. Проверьте интернет и нажмите ⟳ ещё раз.'; return; }
+    if (!ok) { $('warn').textContent = L('Нет связи с игровым сервером. Проверьте интернет и нажмите ⟳ ещё раз.', 'No connection to the game server. Check your internet and press ⟳ again.'); return; }
     await pause(400);
     if (peer !== n) return;
-    if (mode === 'guest' && hostConn) { $('warn').textContent = 'Связь обновлена, ждём ответ комнаты…'; hostConn.send({ t: 'ping' }); }
+    if (mode === 'guest' && hostConn) { $('warn').textContent = L('Связь обновлена, ждём ответ комнаты…', 'Reconnected, waiting for the room…'); hostConn.send({ t: 'ping' }); }
     else if (mode === 'host') { $('warn').textContent = ''; render(); }
   };
   onTap($('history'), () => { $('history').classList.remove('show'); return true; });
@@ -3877,7 +3917,7 @@
     b.onclick = () => {
       if (needName()) return;
       mode = 'solo'; mySeat = 0; roomCode = '';
-      const seats = [{ name: 'Игрок', pid: myPid }];
+      const seats = [{ name: L('Игрок', 'Player'), pid: myPid }];
       for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: botName(seats), isBot: true });
       startMatch(seats);
     };
@@ -3900,10 +3940,10 @@
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = async () => {
     const b = $('netTest');
-    if (b.dataset.fold) { testMsg(''); b.textContent = 'Проверить связь'; delete b.dataset.fold; return; }
+    if (b.dataset.fold) { testMsg(''); b.textContent = L('Проверить связь', 'Test connection'); delete b.dataset.fold; return; }
     b.disabled = true;
     try { await testNet(); } catch {}
-    b.disabled = false; b.textContent = 'Свернуть'; b.dataset.fold = '1';
+    b.disabled = false; b.textContent = L('Свернуть', 'Hide'); b.dataset.fold = '1';
   };
   const roomLong = () => (mode === 'guest' ? lobbyLong : longPick);
   const drawModeSw = () => document.querySelectorAll('.modeSw').forEach(w => {
@@ -3956,7 +3996,7 @@
   $('homeGear').onclick = () => { vDraw(); $('gear').classList.add('atHome'); $('gear').classList.add('show'); };
   $('gearClose').onclick = () => $('gear').classList.remove('show');
   $('newGameBtn').onclick = () => {
-    if (!players.length || !confirm('Завершить эту игру и начать новую? Очки у всех обнулятся.')) return;
+    if (!players.length || !confirm(L('Завершить эту игру и начать новую? Очки у всех обнулятся.', 'End this game and start a new one? Everyone\'s points go back to zero.'))) return;
     $('gear').classList.remove('show');
     if (mode === 'host') restartMatch();
     else if (mode === 'solo') { duelAbort(); startMatch(players.map(p => ({ name: p.name, isBot: p.isBot, pid: p.pid }))); }
@@ -4215,7 +4255,7 @@
   }
   $('toast').onclick = () => {
     $('toast').classList.remove('show');
-    if (toastCode && mode === 'solo' && phase !== 'setup' && confirm('Закончить игру с ботами и перейти за стол друга?')) leave();
+    if (toastCode && mode === 'solo' && phase !== 'setup' && confirm(L('Закончить игру с ботами и перейти за стол друга?', 'End the game with bots and go to your friend\'s table?'))) leave();
     if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) {
       if (toastGroup && toastGroup !== group) setGroup(toastGroup);
       $('codeIn').value = toastCode; joinWant = 'seat'; joinPw = invitedPw.get(toastCode) || ''; joinRoom();
@@ -4237,8 +4277,8 @@
   function askRoomPw(code, want, wrong) {
     const r = findRoom(code);
     pwFor = { code, want };
-    $('pwTitle').textContent = r ? r.name || 'Приватная комната' : 'Приватная комната';
-    $('pwText').textContent = wrong ? 'Неверный пароль. Попробуйте ещё раз.' : 'Вход по паролю. Спросите его у хозяина комнаты.';
+    $('pwTitle').textContent = (r && r.name) || L('Приватная комната', 'Private room');
+    $('pwText').textContent = wrong ? L('Неверный пароль. Попробуйте ещё раз.', 'Wrong password. Try again.') : L('Вход по паролю. Спросите его у хозяина комнаты.', 'Password required. Ask the host for it.');
     $('pwIn').value = '';
     $('pwDlg').classList.add('show');
     setTimeout(() => { try { $('pwIn').focus(); } catch {} }, 200);
@@ -4260,13 +4300,13 @@
     if (!r) return;
     infoCode = code;
     const n = r.names.length, full = n >= r.seats;
-    $('riName').textContent = r.name || 'Стол';
-    const rows = [['Игроки', r.names.join(', ') || '—'], ['Колода', r.long ? '52 карты' : '36 карт'], ['Карт в руке', r.hand],
-      ['Мест', n + ' из ' + r.seats], ['Комната', r.priv ? 'приватная, вход по паролю' : 'открытая'],
-      ['Сейчас', r.started ? 'идёт игра' + (r.spec ? ', зрителей ' + r.spec : '') : 'ждут игроков']];
+    $('riName').textContent = r.name || L('Стол', 'Table');
+    const rows = [[L('Игроки', 'Players'), r.names.join(', ') || '—'], [L('Колода', 'Deck'), r.long ? L('52 карты', '52 cards') : L('36 карт', '36 cards')], [L('Карт в руке', 'Cards in hand'), r.hand],
+      [L('Мест', 'Seats'), n + L(' из ', ' of ') + r.seats], [L('Комната', 'Room'), r.priv ? L('приватная, вход по паролю', 'private, password') : L('открытая', 'open')],
+      [L('Сейчас', 'Now'), r.started ? L('идёт игра', 'playing') + (r.spec ? L(', зрителей ', ', watching ') + r.spec : '') : L('ждут игроков', 'waiting for players')]];
     $('riTable').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${esc(b)}</td></tr>`).join('');
     $('riSeat').style.display = (!r.started && !full) || (r.started && r.open > 0) ? '' : 'none';
-    $('riSeat').textContent = r.started ? 'Сесть вместо бота' : 'Сесть за стол';
+    $('riSeat').textContent = r.started ? L('Сесть вместо бота', 'Take a bot\'s seat') : L('Сесть за стол', 'Sit down');
     $('roomInfo').classList.add('show');
   }
   $('rooms').onclick = e => {
@@ -4289,8 +4329,8 @@
     if (!edit && needName()) return;
     crEdit = !!edit;
     if (edit) { seatsPick = roomSeats; handPick = roomHand; privPick = roomPriv; }
-    $('crTitle').textContent = edit ? 'Настройки комнаты' : 'Новая игра';
-    $('crGo').textContent = edit ? 'Сохранить' : 'Создать';
+    $('crTitle').textContent = edit ? L('Настройки комнаты', 'Room settings') : L('Новая игра', 'New game');
+    $('crGo').textContent = edit ? L('Сохранить', 'Save') : L('Создать', 'Create');
     $('crName').value = edit ? roomName : namePick();
     $('crPriv').checked = privPick;
     $('crPw').value = edit ? roomPw : pwPick();
@@ -4322,7 +4362,7 @@
     if (crEdit) {
       if (mode !== 'host' || started) return;
       const n = lobby ? lobby.length : 1;
-      if (seatsPick < n) { notifyUser(`За столом уже ${n}: мест не может быть меньше`); seatsPick = n; }
+      if (seatsPick < n) { notifyUser(L(`За столом уже ${n}: мест не может быть меньше`, `${n} already seated: there can't be fewer seats`)); seatsPick = n; }
       takeRoomPicks();
       drawLobby();
       return;
@@ -4341,7 +4381,7 @@
   $('friendsScr').onclick = e => {
     const inv = e.target.closest('[data-inv]'), del = e.target.closest('[data-del]'), af = e.target.closest('[data-af]');
     if (inv) inviteFriend(inv.dataset.inv);
-    else if (del && confirm(`Удалить «${friends[del.dataset.del]}» из друзей?`)) dropFriend(del.dataset.del);
+    else if (del && confirm(L(`Удалить «${friends[del.dataset.del]}» из друзей?`, `Remove "${friends[del.dataset.del]}" from friends?`))) dropFriend(del.dataset.del);
     else if (af) addFriend(af.dataset.af, af.dataset.n);
   };
   drawFriends();
@@ -4357,7 +4397,7 @@
     }
   }
   $('newBtn').onclick = () => {
-    if (mode !== 'solo' && !confirm('Выйти из комнаты?')) return;
+    if (mode !== 'solo' && !confirm(L('Выйти из комнаты?', 'Leave the room?'))) return;
     leave();
   };
   try { $('nick').value = localStorage.getItem('g101-name') || ''; } catch {}
@@ -4386,16 +4426,108 @@
   // typing: only Russian letters and a hyphen get in; a good name is remembered at once
   $('nick').addEventListener('input', () => {
     const f = $('nick');
-    const v = f.value.replace(/[^А-ЯЁа-яё-]/g, '').replace(/-{2,}/g, '-').replace(/^-/, '');
+    const v = f.value.replace(lang === 'en' ? /[^A-Za-z-]/g : /[^А-ЯЁа-яё-]/g, '').replace(/-{2,}/g, '-').replace(/^-/, '');
     if (v !== f.value) f.value = v;
     f.closest('.field').classList.remove('bad');
     $('nameHint').textContent = '';
-    if (NAME_RE.test(v)) { try { localStorage.setItem('g101-name', v); } catch {} }
+    if (nameRe().test(v)) { try { localStorage.setItem('g101-name', v); } catch {} }
   });
   $('nick').addEventListener('blur', () => { if ($('nick').value && !nameOk()) needName(); });
 
+  // ----- the page's own texts in English (keys: the Russian text as it stands in the page) -----
+  const EN_PAGE = {
+    '· раунд': '· round', 'Обновить связь': 'Reconnect', 'Настройки': 'Settings', 'Выйти': 'Leave',
+    'Колода:': 'Deck:', 'Сброс:': 'Pile:', 'Масть': 'Suit', 'Ваш ход': 'Your move', 'Сортировать карты': 'Sort cards',
+    'колода': 'deck', 'Колода: 36 или 52 карты': 'Deck: 36 or 52 cards', 'Правила': 'Rules', 'Имя': 'Name',
+    'Как вас зовут': 'Your name', 'Открытые игры': 'Open games', 'Создать игру': 'Create game', 'Друзья': 'Friends',
+    'С ботами': 'With bots', 'карт': 'cards', 'в руке': 'in hand', 'Мик': 'Mic', 'Звук': 'Sound', 'Вибро': 'Vibrate',
+    'Проверить связь': 'Test connection', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
+    'Вернуть кнопки и окно масти на место': 'Put buttons and the suit window back', 'Фон стола': 'Table background',
+    'Закрыть': 'Close', 'Понятно': 'Got it', 'Компания': 'Group', 'Войти': 'Join', 'Удалить': 'Delete', 'Отмена': 'Cancel',
+    'Название': 'Name', 'Как назвать стол': 'Table name', 'Карт в колоде': 'Cards in deck', 'Мест за столом': 'Seats at the table',
+    'Карт в руке': 'Cards in hand', 'Приватная: вход по паролю': 'Private: password required', 'Пароль': 'Password',
+    'Придумайте пароль': 'Make up a password', 'Создать': 'Create', 'Приватная комната': 'Private room',
+    'Сесть за стол': 'Sit down', 'Смотреть': 'Watch', 'Комната': 'Room',
+    'Играть с ботами: сколько всего за столом': 'Play with bots: how many at the table in all',
+    'Ждать за столом': 'Wait at the table', '⚙ Настройки комнаты': '⚙ Room settings', 'Закажите масть': 'Call a suit',
+    'Последние карты на столе: от старых к новым': 'Last cards on the table: oldest to newest',
+    'Добавить друга: «＋» у имени в строке «В сети» на стартовом экране или ☰ на его панели в игре. «Пригласить» зовёт друга за ваш стол: в игре и сообщением в Telegram.':
+      'Add a friend: "＋" next to a name in the "Online" line on the start screen, or ☰ on their panel in the game. "Invite" calls a friend to your table: in the game and by a Telegram message.',
+    // the rules
+    'Как ходить': 'How to play',
+    'Ходят по очереди. На карту в сброс кладут карту той же масти или того же достоинства.':
+      'Players take turns. On the top card of the pile you play a card of the same suit or the same rank.',
+    'Даму можно положить на любую карту: она заказывает масть, в которую ходят дальше.':
+      'A queen can go on any card: it calls the suit to be played next.',
+    'Нечем ходить — возьмите карту из колоды. Подошла — можно положить, нет — нажмите «Пас».':
+      'Nothing to play — draw a card from the deck. If it fits, you may play it; if not, press "Pass".',
+    'Туз: следующий игрок пропускает ход.': 'Ace: the next player misses a turn.',
+    'Когда колода кончается, сброс перемешивается и становится новой колодой.': 'When the deck runs out, the pile is shuffled and becomes the new deck.',
+    'Колода 36 карт': '36-card deck',
+    'Шестёрка: следующий игрок берёт 2 карты и пропускает ход.': 'Six: the next player takes 2 cards and misses a turn.',
+    'Если за столом трое и больше, шестёрку можно перевести своей шестёркой. Каждая шестёрка подряд добавляет ещё 2 карты: 2, 4, 6, 8…':
+      'With three or more players, a six can be passed on with your own six. Each six in a row adds 2 more cards: 2, 4, 6, 8…',
+    'Колода 52 карты': '52-card deck',
+    'Семёрка: следующий игрок берёт 1 карту и пропускает ход. Каждая семёрка подряд добавляет ещё 1 карту.':
+      'Seven: the next player takes 1 card and misses a turn. Each seven in a row adds 1 more card.',
+    'Шестёрка — как в колоде из 36 карт: 2 карты, каждая подряд ещё 2.': 'Six — as in the 36-card deck: 2 cards, each one in a row adds 2 more.',
+    'Если за столом трое и больше, семёрку и шестёрку можно перевести такой же картой.':
+      'With three or more players, a seven or a six can be passed on with the same card.',
+    'Восьмёрку кроет тот, кто её положил. Нечем — берёт из колоды до 3 карт, не подошло — «Пас».':
+      'An eight is covered by the player who played it. Nothing to cover with — draw up to 3 cards from the deck; if none fits — "Pass".',
+    'Десятка меняет направление игры. Направление показывают стрелки на столе.': 'A ten reverses the direction of play. The arrows on the table show the direction.',
+    'Двойка, тройка, четвёрка и пятёрка — обычные карты.': 'Two, three, four and five are ordinary cards.',
+    'Конец раунда и очки': 'End of a round and points',
+    'Раунд выигрывает тот, кто первым избавится от всех карт.': 'The round is won by whoever gets rid of all their cards first.',
+    'Последней картой нельзя выйти на шестёрке и тузе, в колоде из 52 карт — ещё на семёрке и восьмёрке. Раунд закончится, когда эту карту накроют.':
+      'You cannot go out on a six or an ace, and with the 52-card deck also on a seven or an eight. The round ends when that card is covered.',
+    'Остальные получают очки за карты на руке: от двойки до десятки — по достоинству, валет — 2, дама — 3, король — 4, туз — 11.':
+      'The others score points for the cards in their hand: two to ten — face value, jack — 2, queen — 3, king — 4, ace — 11.',
+    'Набрал 102 очка и больше — выбываешь. Ровно 101 — счёт обнуляется.': 'Reach 102 points or more — you are out. Exactly 101 — your score goes back to zero.',
+    'Побеждает тот, кто остался в игре последним.': 'The last player left in the game wins.',
+    'Настройки стола': 'Table settings',
+    'Колода из 36 или 52 карт, от 4 до 6 карт в руке, от 2 до 6 мест. Выбираются при создании игры.':
+      'A 36- or 52-card deck, 4 to 6 cards in hand, 2 to 6 seats. Chosen when the game is created.'
+  };
+  const pageRu = new WeakMap();                              // a text node → its Russian text
+  const RU_TEXT = /[А-Яа-яЁё]/;
+  function applyLang() {
+    document.documentElement.lang = lang;
+    $('nick').lang = lang;
+    const tr = ru => { const k = ru.trim().replace(/\s+/g, ' '); return lang === 'en' && EN_PAGE[k] ? ru.replace(ru.trim(), EN_PAGE[k]) : ru; };
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (n.parentNode.closest('script,style')) continue;
+      let ru = pageRu.get(n);
+      if (ru === undefined) { if (!RU_TEXT.test(n.nodeValue)) continue; ru = n.nodeValue; pageRu.set(n, ru); }
+      const t = tr(ru);
+      if (n.nodeValue !== t) n.nodeValue = t;
+    }
+    document.querySelectorAll('[placeholder],[aria-label]').forEach(el => ['placeholder', 'aria-label'].forEach(a => {
+      const v = el.getAttribute(a); if (v == null) return;
+      const key = 'data-ru-' + a;
+      if (!el.hasAttribute(key)) { if (!RU_TEXT.test(v)) return; el.setAttribute(key, v); }
+      el.setAttribute(a, tr(el.getAttribute(key)));
+    }));
+    $('langPick').querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === lang));
+  }
+  function setLang(lg) {
+    if (lg === lang) return;
+    lang = lg === 'en' ? 'en' : 'ru';
+    try { localStorage.setItem('g101-lang', lang); } catch {}
+    applyLang();
+    $('ver').textContent = L('версия ', 'version ') + VERSION;
+    $('nameHint').textContent = '';
+    if (mode === 'guest' && hostConn && hostConn.open) hostConn.send({ t: 'lang', lang });
+    if (mode !== 'guest' && players.length) render(); else if (view) { try { draw(view); } catch (e) { console.error(e); } }
+    if (lobby && ($('lobby').classList.contains('show') || document.body.classList.contains('waiting'))) drawLobby();
+    try { drawRooms(); drawFriends(); drawTg(); } catch (e) { console.error(e); }
+  }
+  $('langPick').onclick = e => { const b = e.target.closest('[data-lang]'); if (b) setLang(b.dataset.lang); };
+  applyLang();
+
   // ----- version: shown on the start screen; an old cached page reloads itself -----
-  $('ver').textContent = 'версия ' + VERSION;
+  $('ver').textContent = L('версия ', 'version ') + VERSION;
   function checkVersion() {
     fetch(SITE + 'version.txt?' + Date.now(), { cache: 'no-store' })
       .then(r => (r.ok ? r.text() : ''))
@@ -4405,7 +4537,8 @@
         const onSite = location.href.startsWith(SITE);
         const idle = phase === 'setup' && mode === 'solo' && !peer;   // never reload in the middle of a game
         if (onSite && idle && !location.search.includes('v=' + latest)) location.replace(location.pathname + '?v=' + latest);
-        else $('ver').textContent = `версия ${VERSION} устарела — ${onSite ? 'выйдите на этот экран, игра обновится' : 'скачайте новую'} (${latest})`;
+        else $('ver').textContent = L(`версия ${VERSION} устарела — ${onSite ? 'выйдите на этот экран, игра обновится' : 'скачайте новую'} (${latest})`,
+          `version ${VERSION} is old — ${onSite ? 'come back to this screen to update' : 'download the new one'} (${latest})`);
       })
       .catch(() => {});
   }
