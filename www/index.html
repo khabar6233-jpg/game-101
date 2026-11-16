@@ -402,6 +402,10 @@
   .crPriv { display: flex; align-items: center; gap: 10px; text-align: left; font-size: 14px; color: #333; }
   .crPriv input { width: 22px; height: 22px; flex: none; accent-color: var(--felt); }
   .lobInfo { font-size: 14px; color: #555; margin: 0 0 6px; }
+  #lobCode { font-size: 26px; letter-spacing: 0; line-height: 1.15; overflow-wrap: anywhere; margin-bottom: 4px; }
+  .crField.bad { border-color: #d9534f; box-shadow: 0 0 0 2px rgba(217,83,79,.25); animation: nameShake .35s; }
+  #crPwRow { display: none; }
+  #crPwRow.on { display: flex; }
   .swRow .ghost.small { flex: none; padding: 6px 10px; font-size: 12px; }
   .panel .hint { font-size: 12px; color: var(--muted); }
   .field.bad { border-color: #ff8a80; box-shadow: 0 0 0 2px rgba(255,138,128,.35); animation: nameShake .35s; }
@@ -430,6 +434,9 @@
     background: rgba(120,120,128,.36); transition: background .25s; -webkit-tap-highlight-color: transparent; }
   .modeSw .tg::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
     box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 3px 1px rgba(0,0,0,.06); transition: transform .25s; }
+  .modeSw .tgw { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .modeSw .tgw i { font-style: normal; font-size: 11px; font-weight: 600; line-height: 1; opacity: .7; }
+  .modeSw.small .tgw i { font-size: 9px; }
   .modeSw.long .tg { background: #34c759; }
   .modeSw.long .tg::after { transform: translateX(20px); }
   #homeMode { color: var(--text); gap: 8px; font-size: 16px; }
@@ -557,7 +564,7 @@
 
   <div class="status" id="status"></div>
   <div class="zone-line"></div>
-  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div></div>
+  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
 
@@ -567,7 +574,7 @@
     <div class="brand">
       <img src="icon-192.png?2" alt="">
       <div class="title"><h1>101</h1><span id="ver"></span></div>
-      <div class="modeSw" id="homeMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
+      <div class="modeSw" id="homeMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
     </div>
 
@@ -681,15 +688,28 @@
   <div class="dialog">
     <h2 id="crTitle">Новая игра</h2>
     <div class="col">
-      <div class="crField"><span>Название</span><input id="crName" maxlength="30" autocomplete="off" placeholder="Стол"></div>
-      <div class="crRow"><span>Колода</span><div class="modeSw" id="crMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div></div>
+      <div class="crField"><span>Название</span><input id="crName" maxlength="30" autocomplete="off" placeholder="Как назвать стол"></div>
+      <div class="crRow"><span>Колода</span><div class="modeSw" id="crMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div></div>
       <div class="crRow"><span>Мест за столом</span></div>
       <div class="pick" id="crSeats"><button data-seats="2">2</button><button data-seats="3">3</button><button data-seats="4">4</button><button data-seats="5">5</button><button data-seats="6">6</button></div>
       <div class="crRow"><span>Карт в руке</span></div>
       <div class="pick" id="crHand"><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div>
-      <label class="crPriv"><input type="checkbox" id="crPriv"><span>Приватная: видят только ваши друзья</span></label>
+      <label class="crPriv"><input type="checkbox" id="crPriv"><span>Приватная: вход по паролю</span></label>
+      <div class="crField" id="crPwRow"><span>Пароль</span><input id="crPw" maxlength="20" autocomplete="off" autocapitalize="off" placeholder="Придумайте пароль"></div>
       <button class="btn" id="crGo">Создать</button>
       <button class="btn plain" id="crCancel">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="pwDlg">
+  <div class="dialog">
+    <h2 id="pwTitle">Приватная комната</h2>
+    <p id="pwText" style="margin:0 0 10px;color:#555"></p>
+    <div class="col">
+      <div class="crField"><span>Пароль</span><input id="pwIn" maxlength="20" autocomplete="off" autocapitalize="off"></div>
+      <button class="btn" id="pwGo">Войти</button>
+      <button class="btn plain" id="pwCancel">Отмена</button>
     </div>
   </div>
 </div>
@@ -714,7 +734,7 @@
     <p id="lobHint"></p>
     <ul class="plist" id="lobList"></ul>
     <div class="col">
-      <div class="modeSw" id="lobMode"><span data-long="0">36</span><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button><span data-long="1">52</span></div>
+      <div class="modeSw" id="lobMode"><span data-long="0">36</span><div class="tgw"><i>карт</i><button class="tg" data-flip="1" role="switch" aria-label="Колода из 52 карт"></button></div><span data-long="1">52</span></div>
       <div id="hostBox" class="col">
         <div class="gl">Играть с ботами: сколько всего за столом</div>
         <div class="seg" id="lobBots"><button class="btn" data-n="2">2</button><button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button><button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button></div>
@@ -757,7 +777,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 94;              // keep in sync with www/version.txt
+  const VERSION = 95;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -772,7 +792,8 @@
     privPick = localStorage.getItem('g101-priv') === '1';
   } catch {}
   // the room this device keeps (the host): its name and settings, shown to everybody in the list of games
-  let roomName = '', roomSeats = MAX_PLAYERS, roomHand = HAND_SIZE, roomPriv = false;
+  let roomName = '', roomSeats = MAX_PLAYERS, roomHand = HAND_SIZE, roomPriv = false, roomPw = '';
+  let joinPw = '';                 // the password I give when I come to a private room
   let lobbyRoom = null;            // a guest: the room's settings as its host told them
   const DELAY = 700;        // a bot "thinks" this long before its move
   const PLAY_PAUSE = 650;   // pause after any card is played, before its effect and the next turn
@@ -1391,7 +1412,7 @@
     document.body.dataset.back = v.back || 0;
     document.body.classList.toggle('long', !!v.long && v.players.filter(p => !p.out && !p.gone).length > 2);
     document.body.classList.toggle('ccw', !!v.long && v.dir < 0);
-    $('roomTag').textContent = (v.long ? ' · длинная' : '') + (v.room && !group ? ' · комната ' + v.room : '') + ' · v' + VERSION;
+    $('roomTag').textContent = (v.long ? ' · длинная' : '') + ' · v' + VERSION;
     $('specRow').innerHTML = (v.specNames || []).map(n => `<span>👤 ${esc(n)}</span>`).join('');
     // spectators ask to see the cards: every player decides for themselves
     const ab = $('asks'); ab.innerHTML = '';
@@ -2418,7 +2439,7 @@
     waiting = false; $('compass').style.display = '';
     clearInterval(srvAnnT);
     conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
-    lobbyRoom = null;
+    lobbyRoom = null; roomPw = '';
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
     animRound = 0; prevHand = null; flyingTop = null;
@@ -2698,7 +2719,7 @@
     const me = peer ? peer.id : '';
     return {
       term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup, matchId, duel, long: deckLong, dir, fourBy, fourDraw,
-      handN, room: { name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv },
+      handN, room: { name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv, pw: roomPw },
       specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
         name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, removed: !!p.removed, emptySince: p.emptySince || 0,
@@ -2720,7 +2741,7 @@
     matchId = st.matchId || ''; duel = st.duel || null; deckLong = !!st.long;
     dir = st.dir || 1; fourBy = st.fourBy == null ? -1 : st.fourBy; fourDraw = st.fourDraw || 0;
     handN = st.handN || HAND_SIZE;
-    if (st.room) { roomName = st.room.name || ''; roomSeats = st.room.seats || MAX_PLAYERS; roomHand = st.room.hand || HAND_SIZE; roomPriv = !!st.room.priv; }
+    if (st.room) { roomName = st.room.name || ''; roomSeats = st.room.seats || MAX_PLAYERS; roomHand = st.room.hand || HAND_SIZE; roomPriv = !!st.room.priv; roomPw = st.room.pw || ''; }
     pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
     result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
     log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
@@ -2856,6 +2877,12 @@
       view = d.v;
       try { draw(view); } catch (e) { console.error(e); }
     } else if (d.t === 'ok') { if ((d.term || 0) >= gTerm) gHeard = Date.now(); }
+    else if (d.t === 'badpw') {                               // a private room: the password is asked (again)
+      if (gJoined) return;
+      const want = joinWant, wrong = !!joinPw;
+      leave();
+      if (window.askRoomPw) window.askRoomPw(code, want, wrong);
+    }
     else if (d.t === 'full') {
       if (gJoined) return;
       joinWant = 'watch'; gT0 = Date.now();                 // keep asking: when the game starts, I come in to watch
@@ -2874,7 +2901,7 @@
       lastTick = Date.now();
       if (!gJoined) {
         if (Date.now() - gT0 > 25000) { quit('Комната не отвечает: неверный код или нет связи с игровыми серверами'); return; }
-        hostConn.send({ t: 'join', name: gName, ver: VERSION, pid: myPid, want: joinWant });      // repeated until the room answers
+        hostConn.send({ t: 'join', name: gName, ver: VERSION, pid: myPid, want: joinWant, pw: joinPw });      // repeated until the room answers
         return;
       }
       const silent = Date.now() - gHeard;
@@ -2993,7 +3020,10 @@
   function takeRoomPicks() {
     roomName = (namePick() || ('Стол ' + myName())).slice(0, 30);
     roomSeats = seatsPick; roomHand = handPick; roomPriv = privPick;
+    roomPw = roomPriv ? pwPick() : '';
+    if (roomPriv && !roomPw) roomPriv = false;              // a private room cannot be without a password
   }
+  const pwPick = () => { try { return (localStorage.getItem('g101-rpw') || '').trim().slice(0, 20); } catch { return ''; } };
   const namePick = () => { try { return (localStorage.getItem('g101-rname') || '').trim(); } catch { return ''; } };
   const roomInfoMsg = () => ({ name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv });
   const lobbyNames = () => lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? ' (другая версия игры)' : ''));
@@ -3026,6 +3056,12 @@
       if (member) { resync(conn); return; }
       const pid = typeof d.pid === 'string' ? d.pid.slice(0, 24) : '';
       if (pid && banned.has(pid)) { conn.send({ t: 'kicked', term }); return; }
+      if (roomPw && String(d.pw || '') !== roomPw) {
+        // somebody who already sits here (a reloaded page) comes back without it
+        const known = pid && ((lobby && lobby.some(x => x.pid === pid)) || players.some(x => x.pid === pid && !x.isBot && !x.removed) ||
+          [...specs.values()].some(x => x.pid === pid));
+        if (!known) { conn.send({ t: 'badpw' }); return; }
+      }
       const retire = c => { if (c) { c.left = true; c.open = false; } };
       if (started) {
         // the same device comes back with a reloaded page: it takes its old seat, not a second one
@@ -3100,6 +3136,7 @@
   const rooms = new Map(), online = new Map(), liveRooms = new Map();
   const groupLive = g => [...liveRooms.keys()].some(k => k.startsWith(g + '/'));
   let watch = null, watchT = null, hereT = null, watchAt = 0, joinWant = 'seat', toastT = null, toastCode = '';
+  const invitedPw = new Map();                              // room -> the password that came with an invitation
   let groups = [];
 
   // a short message on top of the screen; when the game is not on the screen, also a phone notification
@@ -3244,7 +3281,7 @@
       if (!roomCode || mode === 'solo') { notifyUser('Не получилось войти в комнату'); return; }
     }
     const name = $('nick').value.trim().slice(0, 12) || 'Друг', chat = friendChat.get(id);
-    if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid });
+    if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid, pw: mode === 'host' ? roomPw : joinPw });
     if (chat) tgSay(chat, `${name} зовёт вас играть в «101». Войти за стол: ${SITE}?join=${roomCode}`);
     notifyUser(`Приглашение отправлено: ${friends[id]}${chat ? ' (и в Telegram)' : ''}`);
   }
@@ -3374,6 +3411,7 @@
       }
       // somebody invites me to their table
       if (d.t === 'invite' && topic === TOPIC + 'u/' + myPid + '/in' && ROOM_RE.test(d.room)) {
+        if (d.pw) invitedPw.set(d.room, String(d.pw).slice(0, 20));
         if (d.room !== roomCode) notifyUser(`✉️ ${String(d.name || 'Друг').slice(0, 12)} зовёт вас за стол`, d.room, '');
         return;
       }
@@ -3546,7 +3584,7 @@
     const ri = host ? roomInfoMsg() : lobbyRoom || {};
     $('lobCode').textContent = ri.name || roomCode;
     $('lobInfo').textContent = roomLine(host ? longPick : lobbyLong, ri.hand || HAND_SIZE, names.length, ri.seats || MAX_PLAYERS, ri.priv);
-    $('lobHint').textContent = host ? (roomPriv ? 'Комнату видят только ваши друзья.' : 'Комнату видят все в списке «Открытые игры».') + ' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
+    $('lobHint').textContent = host ? (roomPriv ? `Приватная комната: вход по паролю «${roomPw}».` : 'Комнату видят все в списке «Открытые игры».') + ' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.'
       : 'Ждём, пока хозяин комнаты начнёт игру…' + (hostVer < VERSION ? ' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.' : '');
     $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
       (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="Удалить">✕</button>` : '') + '</li>').join('');
@@ -3703,7 +3741,7 @@
   };
   onTap($('history'), () => { $('history').classList.remove('show'); return true; });
   // any window closes with a tap outside it (on the dark around it)
-  ['gear', 'oppInfo', 'friendsScr', 'rules', 'chipMenu', 'suitPick', 'result', 'createDlg', 'roomInfo'].forEach(id => {
+  ['gear', 'oppInfo', 'friendsScr', 'rules', 'chipMenu', 'suitPick', 'result', 'createDlg', 'roomInfo', 'pwDlg'].forEach(id => {
     const o = $(id);
     let d = null;
     o.addEventListener('pointerdown', e => { d = e.target === o ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null; });
@@ -4081,7 +4119,7 @@
     if (toastCode && mode === 'solo' && phase !== 'setup' && confirm('Закончить игру с ботами и перейти за стол друга?')) leave();
     if (toastCode && mode === 'solo' && !peer && $('setup').classList.contains('show')) {
       if (toastGroup && toastGroup !== group) setGroup(toastGroup);
-      $('codeIn').value = toastCode; joinWant = 'seat'; joinRoom();
+      $('codeIn').value = toastCode; joinWant = 'seat'; joinPw = invitedPw.get(toastCode) || ''; joinRoom();
     }
   };
   const findRoom = code => (roomList || []).find(r => r.code === code);
@@ -4090,10 +4128,33 @@
     if (needName()) return;
     const r = findRoom(code);
     if (!r) return;
-    joinWant = want || (r.started ? (r.open > 0 ? 'seat' : 'watch') : r.names.length < r.seats ? 'seat' : 'watch');
+    want = want || (r.started ? (r.open > 0 ? 'seat' : 'watch') : r.names.length < r.seats ? 'seat' : 'watch');
+    if (r.priv && !isMine(r) && !invitedPw.has(code)) { askRoomPw(code, want, false); return; }
+    joinWant = want; joinPw = invitedPw.get(code) || '';
     $('codeIn').value = code;
     joinRoom(false);
   }
+  let pwFor = null;
+  function askRoomPw(code, want, wrong) {
+    const r = findRoom(code);
+    pwFor = { code, want };
+    $('pwTitle').textContent = r ? r.name || 'Приватная комната' : 'Приватная комната';
+    $('pwText').textContent = wrong ? 'Неверный пароль. Попробуйте ещё раз.' : 'Вход по паролю. Спросите его у хозяина комнаты.';
+    $('pwIn').value = '';
+    $('pwDlg').classList.add('show');
+    setTimeout(() => { try { $('pwIn').focus(); } catch {} }, 200);
+  }
+  window.askRoomPw = askRoomPw;
+  $('pwCancel').onclick = () => $('pwDlg').classList.remove('show');
+  $('pwGo').onclick = () => {
+    const pw = $('pwIn').value.trim();
+    if (!pw || !pwFor) { $('pwIn').closest('.crField').classList.remove('bad'); void $('pwIn').offsetWidth; $('pwIn').closest('.crField').classList.add('bad'); return; }
+    $('pwDlg').classList.remove('show');
+    joinWant = pwFor.want; joinPw = pw;
+    $('codeIn').value = pwFor.code;
+    joinRoom(false);
+  };
+  $('pwIn').onkeydown = e => { if (e.key === 'Enter') $('pwGo').click(); };
   let infoCode = '';
   function openRoomInfo(code) {
     const r = findRoom(code);
@@ -4102,7 +4163,7 @@
     const n = r.names.length, full = n >= r.seats;
     $('riName').textContent = r.name || 'Стол';
     const rows = [['Игроки', r.names.join(', ') || '—'], ['Колода', r.long ? '52 карты' : '36 карт'], ['Карт в руке', r.hand],
-      ['Мест', n + ' из ' + r.seats], ['Комната', r.priv ? 'приватная' : 'открытая'],
+      ['Мест', n + ' из ' + r.seats], ['Комната', r.priv ? 'приватная, вход по паролю' : 'открытая'],
       ['Сейчас', r.started ? 'идёт игра' + (r.spec ? ', зрителей ' + r.spec : '') : 'ждут игроков']];
     $('riTable').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${esc(b)}</td></tr>`).join('');
     $('riSeat').style.display = (!r.started && !full) || (r.started && r.open > 0) ? '' : 'none';
@@ -4131,8 +4192,11 @@
     if (edit) { seatsPick = roomSeats; handPick = roomHand; privPick = roomPriv; }
     $('crTitle').textContent = edit ? 'Настройки комнаты' : 'Новая игра';
     $('crGo').textContent = edit ? 'Сохранить' : 'Создать';
-    $('crName').value = edit ? roomName : namePick() || ('Стол ' + myName());
+    $('crName').value = edit ? roomName : namePick();
     $('crPriv').checked = privPick;
+    $('crPw').value = edit ? roomPw : pwPick();
+    $('crPwRow').classList.toggle('on', privPick);
+    document.querySelectorAll('#createDlg .crField').forEach(f => f.classList.remove('bad'));
     drawPicks();
     if (window.drawModeSw) window.drawModeSw();
     $('createDlg').classList.add('show');
@@ -4141,15 +4205,19 @@
     try {
       localStorage.setItem('g101-hand', handPick); localStorage.setItem('g101-seats', seatsPick);
       localStorage.setItem('g101-priv', privPick ? '1' : '0'); localStorage.setItem('g101-rname', $('crName').value.trim());
+      localStorage.setItem('g101-rpw', $('crPw').value.trim());
     } catch {}
   };
   $('crSeats').onclick = e => { const b = e.target.closest('[data-seats]'); if (b) { seatsPick = +b.dataset.seats; drawPicks(); } };
   $('crHand').onclick = e => { const b = e.target.closest('[data-hand]'); if (b) { handPick = +b.dataset.hand; drawPicks(); } };
-  $('botHand').onclick = e => { const b = e.target.closest('[data-hand]'); if (b) { handPick = +b.dataset.hand; drawPicks(); savePicks(); } };
-  $('crPriv').onchange = () => { privPick = $('crPriv').checked; };
+  $('botHand').onclick = e => { const b = e.target.closest('[data-hand]'); if (b) { handPick = +b.dataset.hand; drawPicks(); try { localStorage.setItem('g101-hand', handPick); } catch {} } };
+  $('crPriv').onchange = () => { privPick = $('crPriv').checked; $('crPwRow').classList.toggle('on', privPick); if (privPick) setTimeout(() => { try { $('crPw').focus(); } catch {} }, 100); };
   $('crCancel').onclick = () => $('createDlg').classList.remove('show');
   $('crGo').onclick = () => {
     privPick = $('crPriv').checked;
+    const lack = f => { const box = f.closest('.crField'); box.classList.remove('bad'); void box.offsetWidth; box.classList.add('bad'); try { f.focus(); } catch {} };
+    if (!$('crName').value.trim()) { lack($('crName')); return; }            // the table must have a name
+    if (privPick && !$('crPw').value.trim()) { lack($('crPw')); return; }     // a private room must have a password
     savePicks();
     $('createDlg').classList.remove('show');
     if (crEdit) {
@@ -4186,7 +4254,7 @@
     const j = new URLSearchParams(location.search).get('join');
     if (ROOM_RE.test(j || '')) {
       try { history.replaceState(null, '', location.pathname); } catch {}
-      setTimeout(() => { if (mode === 'solo' && !peer) { $('codeIn').value = j; joinWant = 'seat'; joinRoom(); } }, 300);
+      setTimeout(() => { if (mode === 'solo' && !peer) { $('codeIn').value = j; joinWant = 'seat'; joinPw = ''; joinRoom(); } }, 300);
     }
   }
   $('newBtn').onclick = () => {

@@ -34,7 +34,7 @@ export class Relay {
   }
 
   // The list of open rooms. Every host tells about its room every few seconds; a room that has not been
-  // heard of for a while is gone. A private room is shown only to the host's friends and to its players.
+  // heard of for a while is gone.
   rooms_(url, body) {
     const now = Date.now(), json = x => new Response(JSON.stringify(x), { headers: { 'Content-Type': 'application/json' } });
     for (const [k, r] of this.rooms) if (now - r.at > 12000) this.rooms.delete(k);
@@ -52,8 +52,8 @@ export class Relay {
       return json({ ok: true });
     }
     const me = url.searchParams.get('pid') || '', fr = new Set((url.searchParams.get('fr') || '').split(',').filter(Boolean));
-    const out = [...this.rooms.values()].filter(r => !r.priv || r.host === me || fr.has(r.host) || r.pids.includes(me))
-      .map(({ at, ...r }) => r);
+    // private rooms are listed too (with a lock): their host asks everybody who comes for the password
+    const out = [...this.rooms.values()].map(({ at, ...r }) => r);
     return json({ ok: true, rooms: out });
   }
 
