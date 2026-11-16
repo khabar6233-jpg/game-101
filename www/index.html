@@ -897,7 +897,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 108;              // keep in sync with www/version.txt
+  const VERSION = 109;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -914,6 +914,7 @@
   // the room this device keeps (the host): its name and settings, shown to everybody in the list of games
   let roomName = '', roomSeats = MAX_PLAYERS, roomHand = HAND_SIZE, roomPriv = false, roomPw = '';
   let joinPw = '';                 // the password I give when I come to a private room
+  let roomRaw = '', roomKbox = '';   // the room's key (base64) and, for a private room, that key locked with its password
   let lobbyRoom = null;            // a guest: the room's settings as its host told them
   const DELAY = 700;        // a bot "thinks" this long before its move
   const PLAY_PAUSE = 650;   // pause after any card is played, before its effect and the next turn
@@ -2563,34 +2564,88 @@
     };
   }
 
+  // --- sealing: a room's messages travel through public relays, so they are locked with the room's key ---
+  // AES-GCM, 256 bits. An open room's key is given out by the game's own server (never by the relays);
+  // a private room's key is locked with its password, so only those who know the password can open it.
+  const CS = window.crypto && crypto.subtle;
+  const b64e = u8 => { let t = ''; for (let i = 0; i < u8.length; i += 8192) t += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(t); };
+  const b64d = t => { const b = atob(t), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+  const newRaw = () => b64e(crypto.getRandomValues(new Uint8Array(32)));
+  const aesKey = raw => CS.importKey('raw', b64d(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  async function seal(key, text) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await CS.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)));
+    const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+    return b64e(out);
+  }
+  async function unseal(key, b) {
+    try { const u = b64d(b); return new TextDecoder().decode(await CS.decrypt({ name: 'AES-GCM', iv: u.subarray(0, 12) }, key, u.subarray(12))); }
+    catch { return null; }
+  }
+  async function pwKey(pw, code) {
+    const base = await CS.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    return CS.deriveKey({ name: 'PBKDF2', salt: new TextEncoder().encode('g101:' + code), iterations: 150000, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  // the keys of the rooms this device has been in: a reloaded page comes back without asking the password again
+  const savedKeys = () => { try { return JSON.parse(localStorage.getItem('g101-rk')) || {}; } catch { return {}; } };
+  function saveKey(code, raw, kb) {
+    const k = savedKeys(); delete k[code]; k[code] = { raw, kb: kb || '' };
+    const all = Object.keys(k); all.slice(0, Math.max(0, all.length - 6)).forEach(c => delete k[c]);
+    try { localStorage.setItem('g101-rk', JSON.stringify(k)); } catch {}
+  }
+  // only these go unsealed: they say nothing about the game
+  const PLAIN = { probe: 1, taken: 1, echo: 1 };
+
   // --- one handle over all brokers: every message goes through each of them, duplicates are dropped ---
   function netOpen(onMessage) {
     const id = Math.random().toString(36).slice(2, 10);
     const seen = new Set();
     let seq = 0, lastEcho = 0;
+    let ck = null, ckPre = '', inQ = Promise.resolve(), outQ = Promise.resolve();
+    const keyFor = t => (ck && t.startsWith(ckPre) ? ck : null);
     const onText = (topic, text) => {
       let m;
       try { m = JSON.parse(text); } catch { return; }
       if (!m || typeof m.f !== 'string') return;
       if (m.f === id) { if (m.d && m.d.t === 'echo') lastEcho = Date.now(); return; }
-      const key = m.f + ':' + m.q;
-      if (seen.has(key)) return;
-      seen.add(key);
+      const sk = m.f + ':' + m.q;
+      if (seen.has(sk)) return;
+      seen.add(sk);
       if (seen.size > 600) seen.delete(seen.values().next().value);
+      const k = keyFor(topic);
+      if (k) {
+        // the room's topics: only sealed messages count, opened one after another in the order they came
+        if (typeof m.x !== 'string') { if (m.d && PLAIN[m.d.t]) onMessage(topic, m.f, m.d); return; }
+        inQ = inQ.then(() => unseal(k, m.x)).then(t => {
+          if (t == null) return;
+          let d; try { d = JSON.parse(t); } catch { return; }
+          onMessage(topic, m.f, d);
+        }).catch(() => {});
+        return;
+      }
+      if (m.x != null) return;                              // sealed for a room this device is not in
       onMessage(topic, m.f, m.d);
     };
     const links = (lite ? BROKERS.slice(0, 2) : BROKERS).map((u, i) => (lite ? burstLink : mqttLink)(u, 'g101_' + id + '_' + i, onText));
     links.push(srvLink(onText, lite));                      // last: voice (send1) prefers the public relays
     const anyUp = () => links.some(l => l.up);
+    // a message on a room's topic is sealed first; sealed messages leave in the order they were sent
+    const post = (t, d, fire) => {
+      const q = ++seq, k = keyFor(t);
+      if (!k || (d && PLAIN[d.t])) { fire(JSON.stringify({ f: id, q, d })); return; }
+      outQ = outQ.then(() => seal(k, JSON.stringify(d))).then(x => fire(JSON.stringify({ f: id, q, x }))).catch(() => {});
+    };
     return {
       id,
       get up() { return anyUp(); },
       get lastEcho() { return lastEcho; },
       sub(t) { links.forEach(l => l.sub(t)); },
-      send(t, d) { const text = JSON.stringify({ f: id, q: ++seq, d }); links.forEach(l => l.pub(t, text)); },
-      keep(t, d) { const text = JSON.stringify({ f: id, q: ++seq, d }); links.forEach(l => l.pub(t, text, true, true)); },
-      send1(t, d) { const l = links.find(x => x.up); if (l) l.pub(t, JSON.stringify({ f: id, q: ++seq, d }), true); },
-      close() { links.forEach(l => l.close()); },
+      setKey(pre, k) { ckPre = pre; ck = k; },
+      send(t, d) { post(t, d, text => links.forEach(l => l.pub(t, text))); },
+      keep(t, d) { post(t, d, text => links.forEach(l => l.pub(t, text, true, true))); },
+      send1(t, d) { post(t, d, text => { const l = links.find(x => x.up); if (l) l.pub(t, text, true); }); },
+      close() { outQ.then(() => links.forEach(l => l.close())); },     // the last sealed messages ("bye") still go out
       reconnect() { links.forEach(l => l.reconnect()); },
       async ready(ms) {
         const t0 = Date.now();
@@ -2634,7 +2689,7 @@
     waiting = false; $('compass').style.display = '';
     clearInterval(srvAnnT);
     conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
-    lobbyRoom = null; roomPw = '';
+    lobbyRoom = null; roomPw = ''; roomRaw = ''; roomKbox = '';
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
     animRound = 0; prevHand = null; flyingTop = null;
@@ -2918,7 +2973,7 @@
     const me = peer ? peer.id : '';
     return {
       term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup, matchId, duel, long: deckLong, dir, fourBy, fourDraw,
-      handN, room: { name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv, pw: roomPw },
+      handN, room: { name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv, pw: roomPw, kb: roomKbox },
       specs: [...specs.values()].map(({ conn, ...x }) => x),
       players: players.map((p, i) => ({
         name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, got: !!p.got, removed: !!p.removed, emptySince: p.emptySince || 0,
@@ -2941,7 +2996,7 @@
     matchId = st.matchId || ''; duel = st.duel || null; deckLong = !!st.long;
     dir = st.dir || 1; fourBy = st.fourBy == null ? -1 : st.fourBy; fourDraw = st.fourDraw || 0;
     handN = st.handN || HAND_SIZE;
-    if (st.room) { roomName = st.room.name || ''; roomSeats = st.room.seats || MAX_PLAYERS; roomHand = st.room.hand || HAND_SIZE; roomPriv = !!st.room.priv; roomPw = st.room.pw || ''; }
+    if (st.room) { roomName = st.room.name || ''; roomSeats = st.room.seats || MAX_PLAYERS; roomHand = st.room.hand || HAND_SIZE; roomPriv = !!st.room.priv; roomPw = st.room.pw || ''; if (st.room.kb) roomKbox = st.room.kb; }
     pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
     result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
     log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
@@ -2980,6 +3035,7 @@
   // nobody answered in this room: I am the first one here, so my device keeps the table
   function becomeRoomHost(n, code) {
     takeRoomPicks();
+    keyRoom(n, code);
     n.sub(hostTopic(code));
     conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
     mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
@@ -2991,11 +3047,12 @@
   // the list of games on the game's server: who sits here, how many seats, cards in hand, the deck
   let srvAnnT = null;
   function roomToServer(code) {
-    if (mode !== 'host' || !code) return;
+    if (mode !== 'host' || !code || !roomRaw || (roomPriv && !roomKbox)) return;   // a room is listed only with its key ready
     const seated = started ? players.filter(p => !p.removed) : lobby || [];
     srv('/rooms', { code, name: roomName, host: myPid, names: seated.map(p => p.name), pids: seated.map(p => p.pid || '').filter(Boolean),
       seats: roomSeats, hand: started ? handN : roomHand, long: started ? deckLong : longPick, priv: roomPriv, started: !!started,
-      spec: specs.size, open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0, ver: VERSION });
+      spec: specs.size, open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0, ver: VERSION,
+      key: roomPriv ? '' : roomRaw, kbox: roomPriv ? roomKbox : '' });
   }
   function hostTimer(n, code) {
     clearInterval(srvAnnT);
@@ -3180,6 +3237,7 @@
   // ----- host -----
   async function createRoom(attempt = 0) {
     if (needName()) return;
+    if (!CS) { netMsg(L('Этот браузер не умеет защищать игру. Обновите его.', 'This browser cannot protect the game. Please update it.')); return; }
     netMsg(L('Создаём комнату…', 'Creating the room…'));
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} }
@@ -3195,6 +3253,8 @@
       else if (mode === 'guest') guestMsg(n, code, topic, from, d);
     });
     peer = n;
+    roomRaw = newRaw(); roomKbox = '';
+    n.setKey(TOPIC + code + '/', await aesKey(roomRaw));
     if (!(await n.ready(8000))) {
       if (peer === n) { n.close(); peer = null; netMsg(L('Нет связи с игровым сервером. Проверьте интернет.', 'No connection to the game server. Check your internet.')); startWatch(); }
       return;
@@ -3210,6 +3270,7 @@
     if (peer !== n) return;
     if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
     takeRoomPicks();
+    keyRoom(n, code);
     conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
     mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
     lobby = [{ name: myName(), conn: null, isBot: false, pid: myPid }];
@@ -3218,6 +3279,14 @@
     hostTimer(n, code);
   }
 
+  // this device keeps the room: its key (a new one if there is none yet) and, for a private room, the key locked with the password
+  async function keyRoom(n, code) {
+    if (!roomRaw) roomRaw = newRaw();
+    n.setKey(TOPIC + code + '/', await aesKey(roomRaw));
+    roomKbox = roomPriv && roomPw ? await seal(await pwKey(roomPw, code), roomRaw) : '';
+    saveKey(code, roomRaw, roomKbox);
+    roomToServer(code);
+  }
   // the room gets the settings this device chose in "Создать игру"
   function takeRoomPicks() {
     roomName = (namePick() || (L('Стол ', 'Table ') + myName())).slice(0, 30);
@@ -3489,19 +3558,19 @@
       if (!roomCode || mode === 'solo') { notifyUser(L('Не получилось войти в комнату', 'Could not enter the room')); return; }
     }
     const name = $('nick').value.trim().slice(0, 12) || L('Друг', 'Friend'), chat = friendChat.get(id);
-    if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid, pw: mode === 'host' ? roomPw : joinPw });
-    if (chat) tgSay(chat, L(`${name} зовёт вас играть в «101». Войти за стол: ${SITE}?join=${roomCode}`, `${name} invites you to play "101". Join the table: ${SITE}?join=${roomCode}`));
+    // no password in it: the invitation goes through public relays (a friend asks for the password of a private room)
+    if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid });
+    if (chat) srv('/tg/say', { to: id, from: myPid, name, room: roomCode, lang });
     notifyUser(L(`Приглашение отправлено: ${friends[id]}${chat ? ' (и в Telegram)' : ''}`, `Invitation sent: ${friends[id]}${chat ? ' (and on Telegram)' : ''}`));
   }
 
-  // ----- Telegram: a bot writes to you when a friend comes in or sits at a table, even if the game is closed -----
-  // Without a server: the game that comes online writes to the Telegram chats of the people who follow it.
-  // Each follower leaves "my chat" on the relay servers (a kept message), so the friend's game can find it.
-  const TG_TOKEN = '9014907526:AAFEBETcZN-Cvb0SfqEEEcR0uvVL6OVYfU4', TG_BOT = 'game_101_notification_bot';
+  // ----- Telegram: the game's bot brings invitations from friends, even when the game is closed -----
+  // Only the game's server talks to Telegram (the bot's key is kept there); the game says "invite this friend"
+  // and the server writes the text. Friends only learn that a player has Telegram linked, never the chat.
+  const TG_ON = true, TG_BOT = 'game_101_notification_bot';
   let tgChat = 0, tgPoll = null;
   try { tgChat = +localStorage.getItem('g101-tg') || 0; } catch {}
   const followers = new Map();                              // pid -> Telegram chat of a person who follows me
-  const tgApi = (m, q) => fetch(`https://api.telegram.org/bot${TG_TOKEN}/${m}?` + new URLSearchParams(q)).then(r => r.json()).catch(() => null);
   const srv = (path, data) => new Promise(res => {
     let done = false, ws;
     const fin = v => { if (done) return; done = true; try { ws.close(); } catch {} res(v); };
@@ -3511,17 +3580,13 @@
     ws.onerror = () => fin(null);
     setTimeout(() => fin(null), 7000);
   });
-  const tgSay = async (chat, text) => {
-    const r = await srv('/tg/say', { chat, text });
-    if (!r) tgApi('sendMessage', { chat_id: chat, text, disable_web_page_preview: true });      // the server is away: straight to Telegram
-  };
   // "I am here": the game's server keeps the list of players for the developer
   let helloAt = 0, overSeen = false;
   function hello(extra) {
     helloAt = Date.now();
     const ua = navigator.userAgent;
     srv('/hello', Object.assign({
-      pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: mode === 'solo' ? '' : (mode === 'host' ? roomName : (lobbyRoom && lobbyRoom.name) || ''), tg: !!tgChat, chat: tgChat || 0,
+      pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: mode === 'solo' ? '' : (mode === 'host' ? roomName : (lobbyRoom && lobbyRoom.name) || ''), tg: !!tgChat,
       dev: window.App101 ? 'apk' : /iPhone|iPad|iPod/.test(ua) ? 'iphone' : /Android/.test(ua) ? 'android' : 'pc',
       mode: mode === 'solo' ? (phase === 'setup' ? 'menu' : 'bots') : 'table',
       room: mode === 'solo' ? '' : roomCode || '', host: mode === 'host',
@@ -3538,13 +3603,13 @@
   const followTopic = (who, me) => TOPIC + 'u/' + who + '/f/' + me;
   function drawTg() {
     const el = $('tgRow');
-    if (!TG_TOKEN) { el.innerHTML = ''; return; }
+    if (!TG_ON) { el.innerHTML = ''; return; }
     el.innerHTML = tgChat
       ? `<span class="tgok">${L('Telegram подключён ✓', 'Telegram connected ✓')}</span><button class="addf" id="tgOff">${L('отключить', 'disconnect')}</button>`
       : `<button class="btn" id="tgOn" style="width:100%">${L('Подключить Telegram', 'Connect Telegram')}</button>`;
   }
   function tgLink() {
-    if (!TG_TOKEN || !TG_BOT) return;
+    if (!TG_ON || !TG_BOT) return;
     const tgUrl = `https://t.me/${TG_BOT}?start=${encodeURIComponent(myPid)}${lang === 'en' ? '--en' : ''}`;   // the bot answers in this language
     if (window.App101 && window.App101.open) window.App101.open(tgUrl);      // the Android app hands the link to Telegram
     else window.open(tgUrl, '_blank');
@@ -3578,7 +3643,7 @@
   }
   function tgWait() {
     clearInterval(tgPoll);
-    if (!TG_TOKEN || !tgWaiting()) return;
+    if (!TG_ON || !tgWaiting()) return;
     $('tgRow').innerHTML = `<span class="tgok">${L('Нажмите «Start» в Telegram и вернитесь сюда…', 'Press "Start" in Telegram and come back here…')}</span><button class="addf" id="tgOff">${L('отмена', 'cancel')}</button>`;
     const t0 = Date.now();
     tgPoll = setInterval(() => {
@@ -3675,7 +3740,7 @@
     w.sub(TOPIC + 'u/' + myPid + '/in');                    // invitations to me
     fr.forEach(id => w.sub(TOPIC + 'u/' + id + '/c'));       // my friends' Telegram chats
     // my Telegram chat, kept for my friends (0 when it is not connected)
-    const pubChat = () => { if (watch === w && TG_TOKEN) w.keep(TOPIC + 'u/' + myPid + '/c', { t: 'chat', chat: tgChat || 0 }); };
+    const pubChat = () => { if (watch === w && TG_ON) w.keep(TOPIC + 'u/' + myPid + '/c', { t: 'chat', chat: tgChat ? 1 : 0 }); };   // linked or not, never the chat
     setTimeout(pubChat, 2500);
     setTimeout(pubChat, 15000);
     const here = () => {
@@ -3864,13 +3929,44 @@
     $('codeIn').value = roomOf(group);
     return joinRoom(true);
   }
+  // the key of a room I am coming into: from the game's server (an open room), opened with the password (a private one),
+  // or the one this device kept from before; null when there is none (the password is asked, or the room is gone)
+  async function roomKeyFor(code, orHost) {
+    const r = await srv('/rooms?pid=' + encodeURIComponent(myPid));
+    const e = r && r.ok && Array.isArray(r.rooms) ? r.rooms.find(x => x.code === code) : null;
+    if (e && e.key) return e.key;
+    const kept = savedKeys()[code];
+    if (e && e.kbox) {
+      roomKbox = e.kbox;
+      if (kept && kept.kb === e.kbox) return kept.raw;     // this device has been here (a reloaded page)
+      const pw = joinPw || (isMine(e) ? pwPick() : '');
+      if (pw) {
+        const raw = await unseal(await pwKey(pw, code), e.kbox);
+        if (raw) return raw;
+        askRoomPw(code, joinWant, !!joinPw);               // a wrong password: asked again, nothing went anywhere
+        return null;
+      }
+      askRoomPw(code, joinWant, false);
+      return null;
+    }
+    if (e && e.priv) { netMsg(L('Комната ещё открывается, попробуйте через пару секунд', 'The room is still opening, try again in a moment')); return null; }
+    if (kept && !e) return kept.raw;
+    if (orHost === true) return newRaw();                   // a table nobody keeps yet: it may become mine
+    netMsg(r ? L('Этой комнаты уже нет', 'This room is gone') : L('Нет связи с сервером игры. Проверьте интернет.', 'No connection to the game server. Check your internet.'));
+    return null;
+  }
   async function joinRoom(orHost) {
     if (needName()) return;
     const code = $('codeIn').value.trim();
     if (!ROOM_RE.test(code)) { netMsg(L('Неверный код комнаты', 'Wrong room code')); return; }
+    if (!CS) { netMsg(L('Этот браузер не умеет защищать игру. Обновите его.', 'This browser cannot protect the game. Please update it.')); return; }
     netMsg(L('Подключаемся…', 'Connecting…'));
     clearInterval(netTimer);
-    if (peer) { try { peer.close(); } catch {} }
+    if (peer) { try { peer.close(); } catch {} peer = null; }
+    roomKbox = '';
+    const raw = await roomKeyFor(code, orHost);
+    if (!raw || peer) return;                               // no key (the password is asked), or another room was chosen meanwhile
+    roomRaw = raw;
     gName = myName();
     const n = netOpen((topic, from, d) => {
       if (peer !== n || !d || typeof d !== 'object' || roomCode !== code) return;
@@ -3880,6 +3976,8 @@
       else if (mode === 'host') hostMsg(n, code, topic, from, d);
     });
     peer = n;
+    n.setKey(TOPIC + code + '/', await aesKey(raw));
+    saveKey(code, raw, roomKbox);
     if (!(await n.ready(8000))) { if (peer === n) quit(L('Нет связи с игровым сервером. Проверьте интернет.', 'No connection to the game server. Check your internet.')); return; }
     if (peer !== n) return;
     n.sub(topicOf(code, n.id));
@@ -4352,7 +4450,8 @@
     const r = findRoom(code);
     if (!r) return;
     want = want || (r.started ? (r.open > 0 ? 'seat' : 'watch') : r.names.length < r.seats ? 'seat' : 'watch');
-    if (r.priv && !isMine(r) && !invitedPw.has(code)) { askRoomPw(code, want, false); return; }
+    const kept = savedKeys()[code];
+    if (r.priv && !isMine(r) && !invitedPw.has(code) && !(kept && kept.kb === r.kbox)) { askRoomPw(code, want, false); return; }
     joinWant = want; joinPw = invitedPw.get(code) || '';
     $('codeIn').value = code;
     joinRoom(false);
@@ -4448,6 +4547,7 @@
       const n = lobby ? lobby.length : 1;
       if (seatsPick < n) { notifyUser(L(`За столом уже ${n}: мест не может быть меньше`, `${n} already seated: there can't be fewer seats`)); seatsPick = n; }
       takeRoomPicks();
+      if (peer) keyRoom(peer, roomCode);
       drawLobby();
       return;
     }

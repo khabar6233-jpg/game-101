@@ -64,6 +64,7 @@
   <h2>Все игроки</h2>
   <div class="bar"><input id="q" placeholder="Поиск: имя, код компании, устройство"><button id="re">Обновить</button></div>
   <div id="list"></div>
+  <button class="out" id="tghook">Привязать Telegram-бота к серверу (после смены ключа бота)</button>
   <button class="out" id="out">Выйти и забыть пароль на этом устройстве</button>
 </div>
 <script>
@@ -179,6 +180,10 @@
     if (!b || !confirm('Удалить эту запись? Если игрок зайдёт снова, она появится заново.')) return;
     await api('/admin/drop', { method: 'POST', body: JSON.stringify({ pid: b.dataset.pid }) });
     load();
+  };
+  $('tghook').onclick = async () => {
+    const r = await api('/admin/tghook', { method: 'POST', body: '{}' });
+    alert(r && r.ok ? 'Готово: бот @' + r.bot + ' присылает сообщения на этот сервер.' : 'Не получилось: ' + ((r && r.why) || 'нет ответа сервера'));
   };
   setInterval(() => { if (data && !document.hidden) load(); }, 10000);
   if (key) load(); else gate();

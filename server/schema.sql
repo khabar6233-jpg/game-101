@@ -23,3 +23,7 @@ CREATE TABLE IF NOT EXISTS tg (
   at   INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+-- invitations sent to Telegram: from whom, to whom, when (to keep the bot from being used for spam)
+CREATE TABLE IF NOT EXISTS tgsent (fr TEXT NOT NULL, tp TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS tgsent_fr ON tgsent (fr, at);
+CREATE INDEX IF NOT EXISTS tgsent_tp ON tgsent (tp, at);

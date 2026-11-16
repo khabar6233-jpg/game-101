@@ -47,7 +47,10 @@ export class Relay {
       const int = (x, a, b, d) => Math.min(b, Math.max(a, Math.round(+x) || d));
       this.rooms.set(code, { code, at: now, name: str(body.name, 30), host: str(body.host, 40), names: list(body.names, 18), pids: list(body.pids, 40),
         seats: int(body.seats, 2, 6, 6), hand: int(body.hand, 4, 6, 5), long: !!body.long, priv: !!body.priv, started: !!body.started,
-        spec: int(body.spec, 0, 999, 0), open: int(body.open, 0, 6, 0), ver: int(body.ver, 0, 99999, 0) });
+        spec: int(body.spec, 0, 999, 0), open: int(body.open, 0, 6, 0), ver: int(body.ver, 0, 99999, 0),
+        // the key the room's messages are sealed with: an open room shows it to the game, a private one only
+        // the key locked with its password (only those who know the password can open it)
+        key: body.priv ? '' : str(body.key, 64), kbox: body.priv ? str(body.kbox, 400) : '' });
       if (this.rooms.size > 300) this.rooms.delete(this.rooms.keys().next().value);
       return json({ ok: true });
     }
