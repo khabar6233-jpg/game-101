@@ -388,10 +388,13 @@
   .botRow .modeSw small, .botRow .pick.small small { color: var(--muted); font-size: 12px; margin-right: 4px; }
   .botRow .pick.small { gap: 4px; }
   .botRow .pick.small small.lbl2 { width: auto; text-align: right; line-height: 1.1; }
-  .botRow #botHand small { flex: 0 0 auto; width: max-content; }
+  .botRow #botHand small { flex: 0 0 auto; width: max-content; white-space: nowrap; }
+  .botRow .modeSw small { white-space: nowrap; }
   .botRow .modeSw.small .sl { width: 72px; }
   .botRow .pick.small button { width: 30px; }
   @media (max-width: 370px) { .botRow .modeSw.small .sl { width: 64px; } .botRow .pick.small button { width: 26px; } .botRow { gap: 4px; } }
+  @media (max-width: 340px) { .botRow .modeSw.small .sl { width: 58px; } .botRow .pick.small button { width: 24px; }
+    .botRow .modeSw small, .botRow .pick.small small { font-size: 11px; margin-right: 2px; } .botRow .pick.small { gap: 3px; } }
   /* the start screen fills the screen: the list of games takes the room that is left, and scrolls inside */
   .home { height: 100%; }
   .home > * { flex: none; }
@@ -640,7 +643,7 @@
       <h3>С ботами</h3>
       <div class="botRow">
         <div class="modeSw small" id="homeMode"><small>колода</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div>
-        <div class="pick small" id="botHand"><small class="lbl2">карт<br>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
+        <div class="pick small" id="botHand"><small class="lbl2">карт в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
         <button class="btn" data-bots="2">3</button>
@@ -844,7 +847,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 100;              // keep in sync with www/version.txt
+  const VERSION = 101;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
