@@ -56,13 +56,17 @@ async function hello(env, d) {
 async function hook(env, request) {
   const u = await body(request), m = u.message;
   if (m && m.chat && typeof m.text === 'string') {
-    const hit = /^\/start(?:@\w+)?\s+([A-Za-z0-9_-]{4,40})$/.exec(m.text.trim());
+    // "/start <pid>" from the game; "--en" at the end: the game is in English
+    const hit = /^\/start(?:@\w+)?\s+([A-Za-z0-9_-]{4,40}?)(--en)?$/.exec(m.text.trim());
+    const en = hit ? !!hit[2] : !/^(ru|uk|be|kk)/i.test((m.from && m.from.language_code) || 'ru');
     if (hit) {
       await env.DB.prepare('INSERT INTO tg (pid, chat, at) VALUES (?1, ?2, ?3) ON CONFLICT(pid) DO UPDATE SET chat = ?2, at = ?3')
         .bind(hit[1], m.chat.id, Date.now()).run();
-      await tgSend(env, m.chat.id, 'Готово! Сюда будут приходить приглашения друзей в игру «101». Вернитесь в игру.');
+      await tgSend(env, m.chat.id, en ? 'Done! Invitations from your friends to the game "101" will come here. Go back to the game.'
+        : 'Готово! Сюда будут приходить приглашения друзей в игру «101». Вернитесь в игру.');
     } else if (/^\/start/.test(m.text)) {
-      await tgSend(env, m.chat.id, 'Чтобы подключить уведомления, откройте игру «101» → Друзья → «Подключить Telegram».');
+      await tgSend(env, m.chat.id, en ? 'To get notifications, open the game "101" → Friends → "Connect Telegram".'
+        : 'Чтобы подключить уведомления, откройте игру «101» → Друзья → «Подключить Telegram».');
     }
   }
   return json({ ok: true });
