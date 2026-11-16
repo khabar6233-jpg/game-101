@@ -369,6 +369,26 @@
   .panel h3 { margin: 0; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
   .panel h3 small { letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; font-size: 12px; }
   .swRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .brand .gearH { padding: 0; width: 42px; height: 40px; display: flex; align-items: center; justify-content: center; }
+  .brand .gearH svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+  #gear .conn { display: none; flex-direction: column; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
+  #gear.atHome .conn { display: flex; }
+  #gear.atHome #newGameBtn, #gear.atHome #btnReset, #gear.atHome #gearFriends { display: none !important; }
+  .testMsg { font-size: 13px; color: #555; white-space: pre-line; text-align: left; }
+  .testMsg:empty { display: none; }
+  /* the two big buttons: the same height, the friends' count in a small second line */
+  .home .two { grid-template-columns: 1fr 1fr !important; }
+  .home .two .btn { min-height: 52px; padding: 6px 8px; line-height: 1.15; }
+  .home .two .btn small { display: block; font-size: 12px; font-weight: 600; opacity: .8; }
+  /* the bots' block: the title, then the deck on the left and the cards in hand on the right */
+  .botRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .botRow .modeSw small, .botRow .pick.small small { color: var(--muted); font-size: 12px; margin-right: 4px; }
+  .botRow .pick.small { gap: 4px; }
+  .botRow .pick.small small.lbl2 { width: auto; text-align: right; line-height: 1.1; }
+  .botRow #botHand small { flex: 0 0 auto; width: max-content; }
+  .botRow .modeSw.small .sl { width: 72px; }
+  .botRow .pick.small button { width: 30px; }
+  @media (max-width: 370px) { .botRow .modeSw.small .sl { width: 64px; } .botRow .pick.small button { width: 26px; } .botRow { gap: 4px; } }
   /* the start screen fills the screen: the list of games takes the room that is left, and scrolls inside */
   .home { height: 100%; }
   .home > * { flex: none; }
@@ -392,7 +412,7 @@
   .botHead small { font-size: 11px !important; margin-right: 1px !important; }
   .botHead .modeSw.small .sl { width: 70px; }
   .botHead .pick.small button { width: 27px; font-size: 13px; }
-  .pick.small small.two { line-height: 1.05; text-align: right; }
+  .pick.small small.lbl2 { line-height: 1.05; text-align: right; }
   @media (max-width: 385px) {
     .botHead { gap: 4px; }
     .botHead h3 { font-size: 12px; letter-spacing: 0; }
@@ -527,8 +547,11 @@
   .dialog.res td i { font-style: normal; color: #e0a400; margin-right: 6px; }
   .dialog.res td:nth-child(2) { color: #8e8e93; }
   .dialog.res #resBtn { width: 100%; border-radius: 14px; }
-  ul.rules { margin: 0 0 14px; padding-left: 20px; text-align: left; color: #444; font-size: 14px; line-height: 1.45; }
-  ul.rules li { margin-bottom: 6px; }
+  .rules { text-align: left; color: #444; font-size: 14px; line-height: 1.45; margin-bottom: 14px; }
+  .rules h4 { margin: 12px 0 4px; font-size: 15px; color: #13603a; }
+  .rules h4:first-child { margin-top: 0; }
+  .rules ul { margin: 0; padding-left: 20px; }
+  .rules li { margin-bottom: 4px; }
   #specRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
   #specRow:empty { display: none; }
   #specRow span { background: rgba(0,0,0,.2); color: var(--text); border-radius: 12px; padding: 2px 10px; font-size: 12px; }
@@ -587,6 +610,7 @@
       <img src="icon-192.png?2" alt="">
       <div class="title"><h1>101</h1><span id="ver"></span></div>
       <button class="ghost" id="rulesBtn">Правила</button>
+      <button class="ghost gearH" id="homeGear" aria-label="Настройки"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </div>
 
     <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off" autocapitalize="words" lang="ru"></div>
@@ -602,8 +626,6 @@
       <button class="btn wide" id="createBtn">Создать игру</button>
       <button class="btn wide" id="friendsBtn">Друзья</button>
     </div>
-    <div class="swRow"><label class="sw"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее, без голоса</span></label>
-      <button class="ghost small" id="netTest">Проверить связь</button></div>
     <!-- what is left of the company codes: not shown any more, kept for the code that still reads it -->
     <div style="display:none">
       <input id="groupIn"><div id="groupList"></div><div id="groupHint"></div>
@@ -611,9 +633,10 @@
     </div>
 
     <section class="panel">
-      <div class="botHead"><h3>С ботами</h3>
+      <h3>С ботами</h3>
+      <div class="botRow">
         <div class="modeSw small" id="homeMode"><small>колода</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div>
-        <div class="pick small" id="botHand"><small class="two">карт<br>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
+        <div class="pick small" id="botHand"><small class="lbl2">карт<br>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
         <button class="btn" data-bots="2">3</button>
@@ -633,6 +656,11 @@
         <button class="vbtn off" id="micBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Мик</span></button>
         <button class="vbtn off" id="spkBtn" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Звук</span></button>
         <button class="vbtn off" id="vibBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="18" rx="2.2"/><path d="M4.5 8.5v7M1.8 10.5v3M19.5 8.5v7M22.2 10.5v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Вибро</span></button>
+      </div>
+      <div class="conn">
+        <label class="crPriv"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее, без голоса</span></label>
+        <button class="btn plain" id="netTest">Проверить связь</button>
+        <div class="testMsg" id="testMsg"></div>
       </div>
       <button class="btn" id="newGameBtn">Новая игра</button>
       <button class="btn plain" id="gearFriends">Друзья</button>
@@ -668,18 +696,42 @@
 <div class="overlay" id="rules">
   <div class="dialog">
     <h2>Правила</h2>
-    <ul class="rules">
-      <li>Ходите в масть или в значение. Нет карты — берите из колоды.</li>
-      <li>Туз — пропуск хода. Шестёрка — соседу 2 карты и пропуск хода.</li>
-      <li>Втроём и больше шестёрку можно перевести своей шестёркой. Каждая шестёрка подряд на столе — ещё +2 карты: 2, 4, 6, 8…</li>
-      <li>Дама кладётся на любую карту и заказывает масть.</li>
-      <li>На шестёрке и тузе раунд не кончается: в свой ход берёте карту, подошла — накрываете и выигрываете.</li>
-      <li>102 очка — проигрыш, ровно 101 — счёт обнуляется.</li>
-      <li><b>Длинная игра</b> — колода из 52 карт, очки двоек–пятёрок по номиналу. Двойка, тройка, четвёрка и пятёрка — обычные карты.</li>
-      <li>Семёрка — соседу 1 карта и пропуск хода, каждая семёрка подряд — ещё +1. Шестёрка — как в короткой: 2 карты, каждая подряд ещё +2. Втроём и больше их можно перевести такой же картой.</li>
-      <li>Восьмёрку кроет тот, кто её положил. Нечем — берёт до 3 карт, не подошло — пас.</li>
-      <li>Десятка меняет направление игры: его показывают стрелки на столе.</li>
-    </ul>
+    <div class="rules">
+      <h4>Как ходить</h4>
+      <ul>
+        <li>Ходят по очереди. На карту в сброс кладут карту той же масти или того же достоинства.</li>
+        <li>Даму можно положить на любую карту: она заказывает масть, в которую ходят дальше.</li>
+        <li>Нечем ходить — возьмите карту из колоды. Подошла — можно положить, нет — нажмите «Пас».</li>
+        <li>Туз: следующий игрок пропускает ход.</li>
+        <li>Когда колода кончается, сброс перемешивается и становится новой колодой.</li>
+      </ul>
+      <h4>Колода 36 карт</h4>
+      <ul>
+        <li>Шестёрка: следующий игрок берёт 2 карты и пропускает ход.</li>
+        <li>Если за столом трое и больше, шестёрку можно перевести своей шестёркой. Каждая шестёрка подряд добавляет ещё 2 карты: 2, 4, 6, 8…</li>
+      </ul>
+      <h4>Колода 52 карты</h4>
+      <ul>
+        <li>Семёрка: следующий игрок берёт 1 карту и пропускает ход. Каждая семёрка подряд добавляет ещё 1 карту.</li>
+        <li>Шестёрка — как в колоде из 36 карт: 2 карты, каждая подряд ещё 2.</li>
+        <li>Если за столом трое и больше, семёрку и шестёрку можно перевести такой же картой.</li>
+        <li>Восьмёрку кроет тот, кто её положил. Нечем — берёт из колоды до 3 карт, не подошло — «Пас».</li>
+        <li>Десятка меняет направление игры. Направление показывают стрелки на столе.</li>
+        <li>Двойка, тройка, четвёрка и пятёрка — обычные карты.</li>
+      </ul>
+      <h4>Конец раунда и очки</h4>
+      <ul>
+        <li>Раунд выигрывает тот, кто первым избавится от всех карт.</li>
+        <li>Последней картой нельзя выйти на шестёрке и тузе, в колоде из 52 карт — ещё на семёрке и восьмёрке. Раунд закончится, когда эту карту накроют.</li>
+        <li>Остальные получают очки за карты на руке: от двойки до десятки — по достоинству, валет — 2, дама — 3, король — 4, туз — 11.</li>
+        <li>Набрал 102 очка и больше — выбываешь. Ровно 101 — счёт обнуляется.</li>
+        <li>Побеждает тот, кто остался в игре последним.</li>
+      </ul>
+      <h4>Настройки стола</h4>
+      <ul>
+        <li>Колода из 36 или 52 карт, от 4 до 6 карт в руке, от 2 до 6 мест. Выбираются при создании игры.</li>
+      </ul>
+    </div>
     <button class="btn" id="rulesClose" style="width:100%">Понятно</button>
   </div>
 </div>
@@ -789,7 +841,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 98;              // keep in sync with www/version.txt
+  const VERSION = 99;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -2003,8 +2055,9 @@
 
   // "Проверить связь": which relay servers answer from this network
   // the test for the "Без VPN" mode: short and medium messages through the short-session link
+  const testMsg = t => { $('testMsg').textContent = t || ''; };
   async function testLite() {
-    netMsg('Проверяем режим «Без VPN» (15 секунд)…');
+    testMsg('Проверяем режим «Без VPN» (15 секунд)…');
     const one = url => new Promise(res => {
       const r = Math.random().toString(36).slice(2, 10), topic = TOPIC + 't/' + r, mid = 'x'.repeat(900);
       let small = 0, medium = 0, k = 0;
@@ -2014,7 +2067,7 @@
       setTimeout(() => { clearInterval(p); l.close(); res({ up: l.up, small, medium }); }, 14000);
     });
     const [r, own] = await Promise.all([Promise.all(BROKERS.slice(0, 2).map(one)), testOwn()]);
-    netMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился' : `короткие ${x.small}/10, средние ${x.medium}/5`)).join(String.fromCharCode(10)));
+    testMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился' : `короткие ${x.small}/10, средние ${x.medium}/5`)).join(String.fromCharCode(10)));
   }
 
   // the game's own server: do messages of every size come back?
@@ -2030,7 +2083,7 @@
 
   async function testNet() {
     if (lite) return testLite();
-    netMsg('Проверяем связь (12 секунд)…');
+    testMsg('Проверяем связь (12 секунд)…');
     // step by step for every server: connected? subscribed? do short messages come back? do long ones?
     const one = url => new Promise(res => {
       const r = Math.random().toString(36).slice(2, 10), topic = TOPIC + 't/' + r, blob = 'x'.repeat(2000), t0 = Date.now();
@@ -2047,7 +2100,7 @@
       }, 200);
     });
     const [r, own] = await Promise.all([Promise.all(BROKERS.map(one)), testOwn()]);
-    netMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился'
+    testMsg(own + String.fromCharCode(10) + r.map((x, i) => `Сервер ${i + 1}: ` + (!x.up ? 'не подключился'
       : `подключился, подписка ${x.ack ? 'да' : 'нет'}, короткие ${x.small}/10, длинные ${x.big}/40 КБ`)).join('\n'));
   }
 
@@ -3275,7 +3328,7 @@
       `<button class="btn" data-af="${esc(id)}" data-n="${esc(x.name)}">＋ В друзья</button></div>`).join('') : '';
     if ($('friendNew').dataset.h !== nh) { $('friendNew').dataset.h = nh; $('friendNew').innerHTML = nh; }
     const n = ids.filter(seen).length;
-    $('friendsBtn').textContent = 'Друзья' + (ids.length ? ` · ${n} в сети` : '');
+    $('friendsBtn').innerHTML = 'Друзья' + (ids.length ? `<small>${n} в сети</small>` : '');
   }
 
   // invite one friend to my table: a message in their game and, if they connected it, in Telegram
@@ -3811,7 +3864,7 @@
   $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = async () => {
     const b = $('netTest');
-    if (b.dataset.fold) { netMsg(''); b.textContent = 'Проверить связь'; delete b.dataset.fold; return; }
+    if (b.dataset.fold) { testMsg(''); b.textContent = 'Проверить связь'; delete b.dataset.fold; return; }
     b.disabled = true;
     try { await testNet(); } catch {}
     b.disabled = false; b.textContent = 'Свернуть'; b.dataset.fold = '1';
@@ -3865,7 +3918,8 @@
   };
   setBg(bgNo);
   $('bgs').onclick = e => { const b = e.target.closest('[data-bg]'); if (b) setBg(+b.dataset.bg); };
-  $('gearBtn').onclick = () => { vDraw(); $('gear').classList.add('show'); };
+  $('gearBtn').onclick = () => { vDraw(); $('gear').classList.remove('atHome'); $('gear').classList.add('show'); };
+  $('homeGear').onclick = () => { vDraw(); $('gear').classList.add('atHome'); $('gear').classList.add('show'); };
   $('gearClose').onclick = () => $('gear').classList.remove('show');
   $('newGameBtn').onclick = () => {
     if (!players.length || !confirm('Завершить эту игру и начать новую? Очки у всех обнулятся.')) return;
