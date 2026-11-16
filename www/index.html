@@ -331,6 +331,7 @@
   .opps.many { gap: 4px; }
   .opps.many .opp { padding: 6px 2px; font-size: 11px; }
   .opps.many .opp .name { font-size: 12px; }
+  .opps.many .opp .name .botW { display: none; }
   .opp .minis.open { flex-wrap: wrap; height: auto; gap: 1px; }
   .mini.f { margin-left: 0; background: #fff; border: 1px solid #bbb; color: #1b1b1b; font-size: 10px; line-height: 1.15; font-weight: 800; padding-top: 3px; }
   .mini.f.red { color: #c8232c; }
@@ -860,7 +861,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 103;              // keep in sync with www/version.txt
+  const VERSION = 104;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -1558,7 +1559,7 @@
       const many = o.classList.contains('many'), shown = Math.min(p.count, many ? 5 : 7);
       const fan = k => { const a = (k - (shown - 1) / 2) * (many ? 9 : 8); return `style="rotate:${a}deg;translate:0 ${Math.abs(a) / 3}px"`; };
       d.innerHTML = `<button class="omenu" data-m="${i}" aria-label="Подробнее">☰</button>` +
-        `<div class="name">${esc(p.name)}</div>` +
+        `<div class="name">${nameHtml(p.name)}</div>` +
         (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${RANK_NAME[c.r]}<br>${c.s}</div>`).join('')}</div>`
           : `<div class="minis fan">${Array.from({ length: shown }, (_, k) => `<div class="mini" ${fan(k)}></div>`).join('')}</div>`) +
         `<div class="pts">${p.gone ? 'удалён' : p.out ? 'выбыл' : `<b>${p.score}</b> оч.`}<span class="sep">·</span><span class="cnt">${p.count}</span> карт</div>` +
@@ -3686,6 +3687,16 @@
     if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick, room: roomInfoMsg() }); });
     if (host) roomToServer(roomCode);
   }
+  // bots get random names, never two the same at one table: "Бот Боря", "Бот Джон"…
+  const BOT_NAMES = ['Боря', 'Джон', 'Антон', 'Миша', 'Саша', 'Петя', 'Вася', 'Коля', 'Ваня', 'Гоша', 'Дима', 'Лёша', 'Макс', 'Олег',
+    'Рома', 'Стёпа', 'Федя', 'Юра', 'Тимур', 'Майк', 'Том', 'Гриша', 'Жора', 'Сеня', 'Толя', 'Эдик', 'Маша', 'Катя', 'Оля', 'Нина'];
+  // "Бот Боря": at a full table there is no room for the word "Бот", the name alone is shown
+  function nameHtml(n) { return n.startsWith('Бот ') ? `<span class="botW">Бот </span>${esc(n.slice(4))}` : esc(n); }
+  function botName(seats) {
+    const used = new Set(seats.map(x => x.name));
+    const free = BOT_NAMES.map(n => 'Бот ' + n).filter(n => !used.has(n));
+    return free.length ? free[Math.floor(Math.random() * free.length)] : 'Бот ' + (seats.length + 1);
+  }
   let lobbyLong = false;                                    // a guest: the host has chosen the long game
   const roomLine = (long, hand, n, seats, priv) => `Колода ${long ? 52 : 36} · ${hand} ${hand === 5 || hand === 6 ? 'карт' : 'карты'} в руке · мест ${n}/${seats}` + (priv ? ' · приватная' : '');
 
@@ -3703,7 +3714,7 @@
     const o = $('opps');
     o.className = 'opps' + (names.length > 4 ? ' many' : '');
     o.innerHTML = names.slice(1).map((n, k) => `<div class="opp" data-i="${k + 1}"><button class="omenu" data-kick="${k + 1}" aria-label="Убрать">✕</button>` +
-      `<div class="name">${esc(n)}</div><div class="pts">${lobby[k + 1] && lobby[k + 1].isBot ? 'бот' : 'за столом'}</div></div>`).join('') +
+      `<div class="name">${nameHtml(n)}</div><div class="pts">${lobby[k + 1] && lobby[k + 1].isBot ? 'бот' : 'за столом'}</div></div>`).join('') +
       '<div class="opp free"><div class="name">Место</div><div class="pts">свободно</div></div>'.repeat(Math.max(0, roomSeats - names.length));
     o.className = 'opps' + (roomSeats - 1 > 4 ? ' many' : '');
     $('deck').className = 'empty-slot'; $('deckCount').textContent = '0';
@@ -3715,7 +3726,7 @@
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
     const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
-    if (names.length < roomSeats) add('+ бот', () => { lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null }); drawLobby(); });
+    if (names.length < roomSeats) add('+ бот', () => { lobby.push({ name: botName(lobby), isBot: true, conn: null }); drawLobby(); });
     if (names.length >= 2) add('Начать', () => { waiting = false; started = true; startMatch(lobby); });
     if (window.placeActions) window.placeActions();
   }
@@ -3867,7 +3878,7 @@
       if (needName()) return;
       mode = 'solo'; mySeat = 0; roomCode = '';
       const seats = [{ name: 'Игрок', pid: myPid }];
-      for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: 'Бот ' + i, isBot: true });
+      for (let i = 1; i <= +b.dataset.bots; i++) seats.push({ name: botName(seats), isBot: true });
       startMatch(seats);
     };
   });
@@ -3876,7 +3887,7 @@
   $('lobBots').onclick = e => {
     const b = e.target.closest('[data-n]');
     if (!b || mode !== 'host' || !lobby) return;
-    while (lobby.length < +b.dataset.n) lobby.push({ name: 'Бот ' + (lobby.filter(x => x.isBot).length + 1), isBot: true, conn: null });
+    while (lobby.length < +b.dataset.n) lobby.push({ name: botName(lobby), isBot: true, conn: null });
     waiting = false; started = true;
     startMatch(lobby);
   };
