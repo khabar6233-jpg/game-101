@@ -382,6 +382,9 @@
   .home .two .btn small { display: block; font-size: 12px; font-weight: 600; opacity: .8; }
   /* the bots' block: the title, then the deck on the left and the cards in hand on the right */
   .botRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .panel.bots { gap: 6px; padding-top: 10px; padding-bottom: 10px; }
+  .panel.bots .seg { gap: 6px; }
+  .panel.bots .seg .btn { padding: 7px 0; min-height: 40px; font-size: 18px; }
   .botRow .modeSw small, .botRow .pick.small small { color: var(--muted); font-size: 12px; margin-right: 4px; }
   .botRow .pick.small { gap: 4px; }
   .botRow .pick.small small.lbl2 { width: auto; text-align: right; line-height: 1.1; }
@@ -480,6 +483,7 @@
   .modeSw.small .sl span.on { color: #fff; }
   #waitMode { display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2; }
   body.waiting #waitMode { display: flex; }
+  body.waiting #meBar { visibility: hidden; }          /* "ждём друзей" is said at the top of the table already */
   .seg .btn { padding: 13px 0; font-size: 19px; }
   #groupList { display: flex; flex-wrap: wrap; gap: 8px; }
   #groupList:empty { display: none; }
@@ -632,7 +636,7 @@
       <button id="hostBtn"></button><div id="codeRow"><input id="codeIn"><button id="joinBtn"></button></div>
     </div>
 
-    <section class="panel">
+    <section class="panel bots">
       <h3>С ботами</h3>
       <div class="botRow">
         <div class="modeSw small" id="homeMode"><small>колода</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div>
@@ -654,11 +658,10 @@
     <div class="col">
       <div class="vrow" id="voiceRow">
         <button class="vbtn off" id="micBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Мик</span></button>
-        <button class="vbtn off" id="spkBtn" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Звук</span></button>
+        <button class="vbtn off" id="spkBtn"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Звук</span></button>
         <button class="vbtn off" id="vibBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="18" rx="2.2"/><path d="M4.5 8.5v7M1.8 10.5v3M19.5 8.5v7M22.2 10.5v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Вибро</span></button>
       </div>
       <div class="conn">
-        <label class="crPriv"><input type="checkbox" id="liteBox"><span>Без VPN: медленнее, без голоса</span></label>
         <button class="btn plain" id="netTest">Проверить связь</button>
         <div class="testMsg" id="testMsg"></div>
       </div>
@@ -841,7 +844,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 99;              // keep in sync with www/version.txt
+  const VERSION = 100;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -887,8 +890,7 @@
   let group = '', roomGroup = '';
   // "Без VPN": some networks freeze a connection about a second after it opens. In this mode the game
   // talks in short sessions (connect, exchange, hang up, again); no voice, moves take a second or two.
-  let lite = false;
-  try { lite = localStorage.getItem('g101-lite') === '1'; } catch {}
+  const lite = false;               // "Без VPN" is gone: the server link turns to short sessions by itself when it must
   // this device's own mark: with it a player whose page was reloaded gets the old seat back
   let myPid = new URLSearchParams(location.search).get('pid') || '';
   try {
@@ -1512,9 +1514,10 @@
       pendingPlay = null;
     }
     vAutoOn();
-    $('voiceRow').classList.toggle('none', (mode === 'solo' || lite) && !canVib);
+    $('voiceRow').classList.remove('none');
     $('newGameBtn').style.display = mode === 'guest' || (v.spec && mode !== 'host') ? 'none' : '';
-    $('syncBtn').style.display = $('micBtn').style.display = $('spkBtn').style.display = mode === 'solo' ? 'none' : '';
+    $('syncBtn').style.display = $('micBtn').style.display = mode === 'solo' ? 'none' : '';
+    $('spkBtn').style.display = '';
     if (lite) $('micBtn').style.display = $('spkBtn').style.display = 'none';
     // what just happened, so the right card can be animated
     const roundChanged = v.roundNo !== animRound;
@@ -2529,13 +2532,16 @@
     return !!x && Date.now() - x.t < 12000 && !vDirect(id) && ((IOS && x.ios) || Date.now() - x.t0 > 8000);
   };
   let vMic = false, vSpk = false, vStream = null, vHello = null, vAuto = false;
+  let spkPref = true;              // the sound of the others: this device's choice, kept between games
+  try { spkPref = localStorage.getItem('g101-spk') !== '0'; } catch {}
+  const saveSpk = () => { try { localStorage.setItem('g101-spk', spkPref ? '1' : '0'); } catch {} };
   const vOn = () => vMic || vSpk;
   const vSend = (to, kind, data) => { if (peer && roomCode) peer.send(TOPIC + roomCode + '/v', { t: 'v', to, kind, data }); };
   function vDraw() {
     let live = 0;
     vSeen.forEach((x, id) => { if (vDirect(id) || vViaRelay(id)) live++; });
     $('micBtn').className = 'vbtn ' + (vMic ? 'on' : 'off');
-    $('spkBtn').className = 'vbtn ' + (vSpk ? 'on' : 'off');
+    $('spkBtn').className = 'vbtn ' + ((peer && vOn() ? vSpk : spkPref) ? 'on' : 'off');
   }
   const vMicAsk = async () => {
     try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
@@ -2633,7 +2639,7 @@
     const n = peer;
     const st = await vMicAsk();
     if (peer !== n || vOn() || vStream) { if (st) st.getTracks().forEach(t => t.stop()); return; }   // left, or switched by hand meanwhile
-    vStream = st; vMic = !!st; vSpk = true;
+    vStream = st; vMic = !!st; vSpk = spkPref || !vMic;
     aStop();
     vApply();
     vHelloOn();
@@ -2745,6 +2751,7 @@
     vDraw();
   }
   async function vToggle(mic) {
+    if (!mic && (mode === 'solo' || !peer || !vOn())) { spkPref = !spkPref; saveSpk(); vDraw(); return; }   // not in a voice chat: only the choice
     if (mode === 'solo' || !peer) return;
     if (typeof RTCPeerConnection === 'undefined') { $('warn').textContent = 'Голосовой чат здесь не поддерживается.'; return; }
     vAuto = true;
@@ -2758,7 +2765,7 @@
       if (vHello) vSend(null, 'bye');
       [...vPeers.keys()].forEach(vDrop);
     } else if (mic) vMic = !vMic;
-    else vSpk = !vSpk;
+    else { vSpk = !vSpk; spkPref = vSpk; saveSpk(); }
     vApply();
     if (!vOn()) { vStop(true); return; }
     vHelloOn();
@@ -3899,13 +3906,6 @@
     };
   });
   drawModeSw();
-  $('liteBox').checked = lite;
-  $('liteBox').onchange = () => {
-    lite = $('liteBox').checked;
-    try { localStorage.setItem('g101-lite', lite ? '1' : '0'); } catch {}
-    netMsg('');
-    startWatch();
-  };
   // ⚙: sound and microphone, a new game, the table background
   const BGS = [['#13603a', '#0b3f25'], ['#17606b', '#0a323b'], ['#6a2433', '#36101b'], ['#37464d', '#182126'], ['#5d4627', '#2c1f0e'], ['#2c3f73', '#141d3b']];
   let bgNo = 0;
