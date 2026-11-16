@@ -164,7 +164,8 @@
   .middle .slot { position: relative; z-index: 1; }
   .middle .below { z-index: 2; }
   /* ⚙ */
-  #gearBtn { font-size: 20px; line-height: 1; padding: 4px 10px; }
+  #gearBtn { display: flex; align-items: center; justify-content: center; padding: 0 10px; align-self: stretch; }
+  #gearBtn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }   /* the same gear as on the start screen */
   .vrow { display: flex; gap: 8px; }
   .vrow:empty, .vrow.none { display: none; }
   .vbtn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 20px;
@@ -590,7 +591,7 @@
     <span><b>101</b> · раунд <span id="roundNo">1</span><span id="roomTag"></span></span>
     <span style="display:flex;gap:6px">
       <button class="btn-small" id="syncBtn" style="display:none" aria-label="Обновить связь">⟳</button>
-      <button class="btn-small" id="gearBtn" aria-label="Настройки">⚙</button>
+      <button class="btn-small" id="gearBtn" aria-label="Настройки"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/></svg></button>
       <button class="btn-small" id="newBtn">Выйти</button>
     </span>
   </div>
@@ -876,7 +877,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 105;              // keep in sync with www/version.txt
+  const VERSION = 106;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
