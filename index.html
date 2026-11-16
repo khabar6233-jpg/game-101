@@ -386,11 +386,13 @@
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
   .room .gearB { flex: none; border: 0; background: none; color: var(--muted); font-size: 20px; padding: 6px 6px; font-family: inherit; }
   .botHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .botHead h3 { flex: 1; white-space: nowrap; letter-spacing: .5px; }
+  .botHead { flex-wrap: wrap; row-gap: 6px; }
+  .botHead h3 { flex: 0 0 100%; white-space: nowrap; letter-spacing: 1.5px; }
   .botHead .modeSw.small, .botHead .pick.small { gap: 3px; }
   .botHead small { font-size: 11px !important; margin-right: 1px !important; }
   .botHead .modeSw.small .sl { width: 70px; }
   .botHead .pick.small button { width: 27px; font-size: 13px; }
+  .pick.small small.two { line-height: 1.05; text-align: right; }
   @media (max-width: 385px) {
     .botHead { gap: 4px; }
     .botHead h3 { font-size: 12px; letter-spacing: 0; }
@@ -574,7 +576,7 @@
 
   <div class="status" id="status"></div>
   <div class="zone-line"></div>
-  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><small>карт</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div></div>
+  <div class="me-row"><button id="sortBtn" aria-label="Сортировать карты"></button><div class="me-bar" id="meBar"></div><div class="modeSw small" id="waitMode"><small>колода</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div></div>
   <div class="hand-me"><div class="inner" id="myHand"></div></div>
 </div>
 
@@ -610,8 +612,8 @@
 
     <section class="panel">
       <div class="botHead"><h3>С ботами</h3>
-        <div class="modeSw small" id="homeMode"><small>карт</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div>
-        <div class="pick small" id="botHand"><small>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
+        <div class="modeSw small" id="homeMode"><small>колода</small><button class="sl" data-flip="1" role="switch" aria-label="Колода: 36 или 52 карты"><i></i><span data-long="0">36</span><span data-long="1">52</span></button></div>
+        <div class="pick small" id="botHand"><small class="two">карт<br>в руке</small><button data-hand="4">4</button><button data-hand="5">5</button><button data-hand="6">6</button></div></div>
       <div class="seg">
         <button class="btn" data-bots="1">2</button>
         <button class="btn" data-bots="2">3</button>
@@ -787,7 +789,7 @@
   const RED = new Set([SUITS[2], SUITS[3]]);
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 97;              // keep in sync with www/version.txt
+  const VERSION = 98;              // keep in sync with www/version.txt
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
