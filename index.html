@@ -897,7 +897,8 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 109;              // keep in sync with www/version.txt
+  const VERSION = 110;              // keep in sync with www/version.txt
+  const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
   const HISTORY = 10;                      // how many past moves the history list keeps
@@ -914,7 +915,7 @@
   // the room this device keeps (the host): its name and settings, shown to everybody in the list of games
   let roomName = '', roomSeats = MAX_PLAYERS, roomHand = HAND_SIZE, roomPriv = false, roomPw = '';
   let joinPw = '';                 // the password I give when I come to a private room
-  let roomRaw = '', roomKbox = '';   // the room's key (base64) and, for a private room, that key locked with its password
+  let roomVk = '';                 // the room's voice key (base64), given by the game's server to the room's members
   let lobbyRoom = null;            // a guest: the room's settings as its host told them
   const DELAY = 700;        // a bot "thinks" this long before its move
   const PLAY_PAUSE = 650;   // pause after any card is played, before its effect and the next turn
@@ -955,6 +956,7 @@
   const banned = new Set();
   // one game "to 101" between two players; its result goes to both devices
   let matchId = '', duel = null;
+  // @engine-begin(1) — the game's server builds its tables from the code between these marks (server/build-engine.mjs)
   const newMatch = () => { matchId = Math.random().toString(36).slice(2, 10); };
   const duelists = () => players.filter(p => !p.removed);
   // the game was not finished: the one with fewer points wins, cards in hand included
@@ -966,6 +968,7 @@
   }
   // who played: the result names both sides, so it cannot be written down against somebody else
   const duelK = p => (p.isBot ? 'bot' : p.pid || 'name:' + p.name);
+  // @engine-end(1)
   const duelDb = () => {
     let db = null;
     try { db = JSON.parse(localStorage.getItem('g101-duels')); } catch {}
@@ -1015,6 +1018,7 @@
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  // @engine-begin(2) — the rules: the same code plays on this device (with bots) and on the game's server (rooms)
   const active = () => players.filter(p => !p.out);
   const top = () => pile[pile.length - 1];
   // a queen goes on any card; while sixes are stacked on you, only another six can be played
@@ -1484,34 +1488,12 @@
       } : {})
     };
   }
+  // @engine-end(2)
 
-  // The whole game (needed only if another device has to take the game over) is heavy, so it is sent
-  // once for all players, on its own topic, and at most every 1.2 seconds. Moves themselves stay light.
-  let stT = null, stAt = 0;
-  function pushState() {
-    if (stT) return;
-    stT = setTimeout(() => {
-      stT = null; stAt = Date.now();
-      if (mode === 'host' && peer && started && players.length) peer.send(TOPIC + roomCode + '/s', { t: 'st', st: snapshot() });
-    }, Math.max(0, 1200 - (Date.now() - stAt)));
-  }
 
+  // a game with bots on this phone (a room's game is rendered by the game's server and comes as views)
   function render() {
-    if (!players.length) return;
-    if (mode === 'host') {
-      players.forEach((p, i) => {
-        if (!p.conn || !p.conn.open) return;
-        const v = viewFor(i);
-        p.conn.rev = v.rev;
-        p.conn.send({ t: 'view', v });
-      });
-      specs.forEach(sp => {                                 // spectators get the table, never the whole state
-        const v = viewFor(-1, sp);
-        sp.conn.rev = v.rev;
-        sp.conn.send({ t: 'view', v });
-      });
-      pushState();
-    }
+    if (!players.length || mode !== 'solo') return;
     view = viewFor(mySeat);
     try { draw(view); } catch (e) { console.error(e); }
   }
@@ -1614,7 +1596,7 @@
       });
       ab.appendChild(row);
     });
-    if (mode === 'host' && v.canControl && v.phase !== 'roundEnd') {
+    if (mode === 'guest' && v.canControl && v.phase !== 'roundEnd') {
       // the device that runs the game may stop it at any moment to let spectators sit down
       const row = document.createElement('div');
       row.className = 'ask';
@@ -1623,11 +1605,10 @@
         `<span>Waiting for a new game: ${esc(wait.join(', '))} · ⚙ → "New game"</span>`);
       if (wait.length) ab.appendChild(row);
     }
-    // the room owner's device applies the rules, so a version mismatch matters
-    const hv = v.ver || 0;
-    $('warn').textContent = mode !== 'guest' || hv === VERSION ? ''
-      : hv < VERSION ? L('У хозяина комнаты старая версия игры: правила могут отличаться. Пусть он обновит игру.', 'The host has an old version of the game: the rules may differ. Ask them to update.')
-      : L('У вас старая версия игры. Выйдите и обновите её.', 'Your version of the game is old. Leave and update it.');
+    // the game's server applies the rules: only its way of talking to phones must match this one
+    if (!$('warn').dataset.lost) $('warn').textContent = mode !== 'guest' || !v.proto || v.proto === PROTO ? ''
+      : v.proto > PROTO ? L('У вас старая версия игры. Выйдите и обновите её.', 'Your version of the game is old. Leave and update it.')
+      : L('Сервер игры обновляется. Подождите минуту и войдите снова.', 'The game server is being updated. Wait a minute and come in again.');
 
     if (pendingPlay && (!v.hand.some(c => c.id === pendingPlay.id) || Date.now() - pendingPlay.t > 2500)) {
       pendingPlay.ghost.remove();
@@ -1635,7 +1616,7 @@
     }
     vAutoOn();
     $('voiceRow').classList.remove('none');
-    $('newGameBtn').style.display = mode === 'guest' || (v.spec && mode !== 'host') ? 'none' : '';
+    $('newGameBtn').style.display = mode === 'solo' || (mode === 'guest' && v.canControl) ? '' : 'none';
     $('syncBtn').style.display = $('micBtn').style.display = mode === 'solo' ? 'none' : '';
     $('spkBtn').style.display = '';
     if (lite) $('micBtn').style.display = $('spkBtn').style.display = 'none';
@@ -2143,7 +2124,7 @@
     const b = $('resBtn');
     b.disabled = !v.canControl;
     b.textContent = !v.canControl ? L('Ждём хозяина комнаты…', 'Waiting for the host…') : r.gameOver ? L('Новая игра', 'New game') : L('Следующий раунд', 'Next round');
-    b.onclick = v.canControl ? afterResult : null;
+    b.onclick = !v.canControl ? null : mode === 'guest' ? () => tell({ t: 'next' }) : afterResult;
   }
 
   // ================= NETWORK =================
@@ -2154,7 +2135,9 @@
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt',
     'wss://test.mosquitto.org:8081/mqtt', 'wss://broker-cn.emqx.io:8084/mqtt'];
   // the game's own server: it relays the same messages and can be reached without VPN
-  const SRV = 'https://game-101.game-101-server.workers.dev';
+  // a test copy of the server on this computer (wrangler dev) may stand in, only for a page opened from localhost
+  const SRV = (/^localhost$|^127\.0\.0\.1$/.test(location.hostname) && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(new URLSearchParams(location.search).get('srv') || ''))
+    ? new URLSearchParams(location.search).get('srv') : 'https://game-101.game-101-server.workers.dev';
   const TOPIC = 'cardgame101/v1/';
   const PING_MS = 3000, LOST_MS = 60000;
   let netTimer = null;
@@ -2422,7 +2405,7 @@
   // 16 packets through a connection and then freeze it (whatever their size): short sessions, each on a new
   // connection, many messages packed into one packet, everything confirmed and sent again if it got lost.
   // The link starts plain and turns to bursts by itself when the plain connection freezes.
-  const SRV_WS = SRV.replace('https', 'wss');
+  const SRV_WS = SRV.replace(/^http/, 'ws');
   let srvBurst = false;
   try { srvBurst = Date.now() - (+localStorage.getItem('g101-burst') || 0) < 3 * 86400000; } catch {}
   function srvPlain(subs, onMessage, onStall) {
@@ -2587,12 +2570,10 @@
     return CS.deriveKey({ name: 'PBKDF2', salt: new TextEncoder().encode('g101:' + code), iterations: 150000, hash: 'SHA-256' },
       base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   }
-  // the keys of the rooms this device has been in: a reloaded page comes back without asking the password again
-  const savedKeys = () => { try { return JSON.parse(localStorage.getItem('g101-rk')) || {}; } catch { return {}; } };
-  function saveKey(code, raw, kb) {
-    const k = savedKeys(); delete k[code]; k[code] = { raw, kb: kb || '' };
-    const all = Object.keys(k); all.slice(0, Math.max(0, all.length - 6)).forEach(c => delete k[c]);
-    try { localStorage.setItem('g101-rk', JSON.stringify(k)); } catch {}
+  async function takeVk(n, vk) {                            // the table told the room's voice key
+    if (!vk || vk === roomVk || !CS) return;
+    roomVk = vk;
+    n.setKey(await aesKey(vk));
   }
   // only these go unsealed: they say nothing about the game
   const PLAIN = { probe: 1, taken: 1, echo: 1 };
@@ -2602,9 +2583,13 @@
     const id = Math.random().toString(36).slice(2, 10);
     const seen = new Set();
     let seq = 0, lastEcho = 0;
-    let ck = null, ckPre = '', inQ = Promise.resolve(), outQ = Promise.resolve();
-    const keyFor = t => (ck && t.startsWith(ckPre) ? ck : null);
-    const onText = (topic, text) => {
+    // a room: its game topics (the table and my own) travel only through the game's server, which runs the table;
+    // its voice topics go through every relay, sealed with the room's voice key (only members get it)
+    let ck = null, gamePre = '', inQ = Promise.resolve(), outQ = Promise.resolve();
+    const voiceT = t => !!gamePre && (t === gamePre + 'v' || t === gamePre + 'a');
+    const gameT = t => !!gamePre && t.startsWith(gamePre) && !voiceT(t);
+    const keyFor = t => (voiceT(t) ? ck : null);
+    const onText = (topic, text, fromSrv) => {
       let m;
       try { m = JSON.parse(text); } catch { return; }
       if (!m || typeof m.f !== 'string') return;
@@ -2613,10 +2598,12 @@
       if (seen.has(sk)) return;
       seen.add(sk);
       if (seen.size > 600) seen.delete(seen.values().next().value);
+      if (gameT(topic)) { if (fromSrv && m.x == null) onMessage(topic, m.f, m.d); return; }   // nobody else may speak for the table
       const k = keyFor(topic);
+      if (voiceT(topic) && !k) return;
       if (k) {
-        // the room's topics: only sealed messages count, opened one after another in the order they came
-        if (typeof m.x !== 'string') { if (m.d && PLAIN[m.d.t]) onMessage(topic, m.f, m.d); return; }
+        // voice: only sealed messages count, opened one after another in the order they came
+        if (typeof m.x !== 'string') return;
         inQ = inQ.then(() => unseal(k, m.x)).then(t => {
           if (t == null) return;
           let d; try { d = JSON.parse(t); } catch { return; }
@@ -2627,12 +2614,15 @@
       if (m.x != null) return;                              // sealed for a room this device is not in
       onMessage(topic, m.f, m.d);
     };
-    const links = (lite ? BROKERS.slice(0, 2) : BROKERS).map((u, i) => (lite ? burstLink : mqttLink)(u, 'g101_' + id + '_' + i, onText));
-    links.push(srvLink(onText, lite));                      // last: voice (send1) prefers the public relays
+    const links = (lite ? BROKERS.slice(0, 2) : BROKERS).map((u, i) => (lite ? burstLink : mqttLink)(u, 'g101_' + id + '_' + i, (t, x) => onText(t, x, false)));
+    const own = srvLink((t, x) => onText(t, x, true), lite);
+    links.push(own);                                        // last: voice (send1) prefers the public relays
     const anyUp = () => links.some(l => l.up);
     // a message on a room's topic is sealed first; sealed messages leave in the order they were sent
     const post = (t, d, fire) => {
       const q = ++seq, k = keyFor(t);
+      if (gameT(t)) { own.pub(t, JSON.stringify({ f: id, q, d })); return; }   // to the table: only through the game's server
+      if (voiceT(t) && !k) return;                          // no voice before the room has given its key
       if (!k || (d && PLAIN[d.t])) { fire(JSON.stringify({ f: id, q, d })); return; }
       outQ = outQ.then(() => seal(k, JSON.stringify(d))).then(x => fire(JSON.stringify({ f: id, q, x }))).catch(() => {});
     };
@@ -2640,17 +2630,19 @@
       id,
       get up() { return anyUp(); },
       get lastEcho() { return lastEcho; },
-      sub(t) { links.forEach(l => l.sub(t)); },
-      setKey(pre, k) { ckPre = pre; ck = k; },
+      get srvUp() { return own.up; },
+      sub(t) { if (gameT(t)) own.sub(t); else links.forEach(l => l.sub(t)); },
+      setRoom(code) { gamePre = TOPIC + code + '/'; },
+      setKey(k) { ck = k; },
       send(t, d) { post(t, d, text => links.forEach(l => l.pub(t, text))); },
       keep(t, d) { post(t, d, text => links.forEach(l => l.pub(t, text, true, true))); },
       send1(t, d) { post(t, d, text => { const l = links.find(x => x.up); if (l) l.pub(t, text, true); }); },
       close() { outQ.then(() => links.forEach(l => l.close())); },     // the last sealed messages ("bye") still go out
       reconnect() { links.forEach(l => l.reconnect()); },
-      async ready(ms) {
-        const t0 = Date.now();
-        while (!anyUp() && Date.now() - t0 < ms) await pause(100);
-        return anyUp();
+      async ready(ms, srvOnly) {
+        const t0 = Date.now(), up = () => (srvOnly ? own.up : anyUp());
+        while (!up() && Date.now() - t0 < ms) await pause(100);
+        return up();
       }
     };
   }
@@ -2660,14 +2652,6 @@
     // one on one, the game is not finished: it is counted by points
     try {
       if (mode !== 'guest' && players.length && phase !== 'setup') { duelAbort(); if (duel && duel.id === matchId) render(); }
-      else if (mode === 'guest' && gSnap && view) {
-        const st = gSnap, ps = st.players.filter(p => !p.removed);
-        if (ps.length === 2 && st.matchId && !(st.result && st.result.gameOver) && !(st.duel && st.duel.id === st.matchId)) {
-          const tot = p => p.score + (st.phase === 'roundEnd' ? 0 : p.hand.reduce((n, c) => n + POINTS(c.r), 0));
-          const k = q => (q.isBot ? 'bot' : q.pid || 'name:' + q.name), lo = tot(ps[0]) < tot(ps[1]) ? 0 : 1;
-          if (tot(ps[0]) !== tot(ps[1])) duelNote({ id: st.matchId, wk: k(ps[lo]), lk: k(ps[1 - lo]) });
-        }
-      }
     } catch (e) { console.error(e); }
     vStop(true);
     gameId++;
@@ -2675,21 +2659,17 @@
     clearInterval(netTimer);
     if (peer) {
       try {
-        if (mode === 'guest' && hostConn) hostConn.send({ t: 'bye' });
-        // the room owner leaves for good: the room is closed for everybody
-        else if (mode === 'host' && peer.id === ownerId) {
-          conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
-          if (roomGroup) peer.send(groupTopic(roomGroup), { t: 'room', code: roomCode, gone: true });
-          if (roomCode) srv('/rooms', { code: roomCode, gone: 1 });    // gone from the list of games at once
+        if (mode === 'guest' && hostConn) {
+          hostConn.send({ t: 'bye' });                      // the owner's "bye" closes the room on the server
+          srv('/table/say', { code: roomCode, from: peer.id, d: { t: 'bye' } });   // the same word on its own, in case the link closes first
         }
       } catch {}
       try { peer.close(); } catch {}
     }
     vAuto = false;
     waiting = false; $('compass').style.display = '';
-    clearInterval(srvAnnT);
     conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
-    lobbyRoom = null; roomPw = ''; roomRaw = ''; roomKbox = '';
+    lobbyRoom = null; roomPw = ''; roomVk = ''; lobbyCtl = false;
     peer = null; hostConn = null; lobby = null; started = false; roomCode = '';
     mode = 'solo'; mySeat = 0; players = []; hostVer = 0;
     animRound = 0; prevHand = null; flyingTop = null;
@@ -2955,10 +2935,9 @@
   }
 
   // ----- rooms -----
-  // The room owner's device starts as the host: it applies the rules. Every guest also receives the
-  // whole game state, so when the host stops answering (the game was minimised, the phone fell asleep)
-  // another player's device carries the game on, and the old host rejoins it as an ordinary player.
-  // The room is closed only when its owner presses "Выйти".
+  // A room's game runs on the game's server (server/src/table-post.js, with the rules cut out of this page):
+  // phones only show the table and send taps, and each phone gets nothing but its own view. The owner's phone
+  // runs the room (start, bots, settings) by commands; the room is closed when its owner presses "Выйти".
   const TAKE_MS = 12000, TAKE_STEP = 6000;
   const conns = new Map(), kicked = new Map();
   let term = 1, ownerId = '';       // term grows with every change of host; the newest host wins
@@ -2969,159 +2948,19 @@
   const mkConn = (n, code, id) => ({ id, open: true, last: 0, send: x => n.send(topicOf(code, id), x) });
   const quit = text => { leave(); netMsg(text); };
 
-  function snapshot() {
-    const me = peer ? peer.id : '';
-    return {
-      term, owner: ownerId, hostSeat: mySeat, back: backNo, group: roomGroup, matchId, duel, long: deckLong, dir, fourBy, fourDraw,
-      handN, room: { name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv, pw: roomPw, kb: roomKbox },
-      specs: [...specs.values()].map(({ conn, ...x }) => x),
-      players: players.map((p, i) => ({
-        name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, got: !!p.got, removed: !!p.removed, emptySince: p.emptySince || 0,
-        cid: p.isBot ? null : p.conn ? p.conn.id : i === mySeat ? me : null
-      })),
-      deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend,
-      queen: pendingQueen ? { pi: pendingQueen.pi, id: pendingQueen.card.id } : null,
-      result, evSeq, lastEv, viewRev,
-      log: log.slice(-2).map(f => players.map((p, i) => inLang(langOf(p.pid), () => f(i))).concat([f(-1)])),
-      langs: [...pidLang, [myPid, lang]]
-    };
-  }
-  function restore(st) {
-    gameId++;
-    players = st.players.map(p => ({ name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, got: !!p.got,
-      removed: !!p.removed, emptySince: p.emptySince, cid: p.cid, conn: null, lost: false }));
-    deck = st.deck; pile = st.pile; suit = st.suit; turn = st.turn; drew = st.drew; sixRun = st.sixRun;
-    pendingSix = st.pendingSix; emptySeq = st.emptySeq; passStreak = st.passStreak; starter = st.starter;
-    roundNo = st.roundNo; phase = st.phase; pend = st.pend; busy = false; backNo = st.back || 0;
-    matchId = st.matchId || ''; duel = st.duel || null; deckLong = !!st.long;
-    dir = st.dir || 1; fourBy = st.fourBy == null ? -1 : st.fourBy; fourDraw = st.fourDraw || 0;
-    handN = st.handN || HAND_SIZE;
-    if (st.room) { roomName = st.room.name || ''; roomSeats = st.room.seats || MAX_PLAYERS; roomHand = st.room.hand || HAND_SIZE; roomPriv = !!st.room.priv; roomPw = st.room.pw || ''; if (st.room.kb) roomKbox = st.room.kb; }
-    pendingQueen = st.queen ? { pi: st.queen.pi, card: pile.find(c => c.id === st.queen.id) } : null;
-    result = st.result; evSeq = st.evSeq; lastEv = st.lastEv; viewRev = st.viewRev;
-    log = st.log.map(lines => me => (me < 0 ? lines[lines.length - 1] : lines[me]));
-    (st.langs || []).forEach(([k, v]) => { if (k !== myPid) pidLang.set(k, v); });
-  }
 
-  // every few seconds: mark the players we have not heard from, and keep sending them the game
-  let hostBorn = 0, annT = null, annAt = 0;
-  const humansHere = () => (started ? players.filter(p => !p.isBot && !p.removed) : lobby ? lobby.filter(x => !x.isBot) : []).length;
-  function hostAnnounce(n, code) {
-    annAt = Date.now();
-    // friends with the same company code see this room on their start screen
-    if (roomGroup) n.send(groupTopic(roomGroup), { t: 'room', code, started, spec: specs.size,
-      open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0,
-      names: started ? players.filter(p => !p.removed).map(p => p.name) : lobby ? lobby.map(x => x.name) : [],
-      pids: (started ? players.filter(p => !p.removed) : lobby || []).map(p => p.pid || '').filter(Boolean) });
-    n.send(hostTopic(code), { t: 'host', term, started: !!started, hn: humansHere(), born: hostBorn });
-  }
-  // Two devices opened the same empty room at the same moment: one of them stays the host, the other one
-  // (and everybody who had joined it) sits down at its table. Both sides decide by the same rule.
-  function rivalHost(n, code, from, d) {
-    const mine = [started ? 1 : 0, term, humansHere(), -hostBorn], theirs = [d.started ? 1 : 0, +d.term || 0, +d.hn || 0, -(+d.born || 0)];
-    let win = 0;
-    for (let i = 0; i < 4 && !win; i++) win = Math.sign(mine[i] - theirs[i]);
-    if (!win) win = n.id < from ? 1 : -1;
-    if (win > 0) { if (Date.now() - annAt > 800) hostAnnounce(n, code); return; }
-    conns.forEach(c => { if (!c.left) c.send({ t: 'rejoin', term }); });
-    clearInterval(annT);
-    gameId++;
-    players = []; started = false; lobby = null; waiting = false; conns.clear(); kicked.clear(); specs.clear();
-    mode = 'guest'; gName = myName();
-    hostConn = { open: true, send: x => n.send(hostTopic(code), x) };
-    gJoined = false; gHostSeen = true; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now();
-    guestTimer(n, code);
-  }
-  // nobody answered in this room: I am the first one here, so my device keeps the table
-  function becomeRoomHost(n, code) {
-    takeRoomPicks();
-    keyRoom(n, code);
-    n.sub(hostTopic(code));
-    conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
-    mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
-    lobby = [{ name: myName(), conn: null, isBot: false, pid: myPid }];
-    netMsg('');
-    drawLobby();
-    hostTimer(n, code);
-  }
-  // the list of games on the game's server: who sits here, how many seats, cards in hand, the deck
-  let srvAnnT = null;
-  function roomToServer(code) {
-    if (mode !== 'host' || !code || !roomRaw || (roomPriv && !roomKbox)) return;   // a room is listed only with its key ready
-    const seated = started ? players.filter(p => !p.removed) : lobby || [];
-    srv('/rooms', { code, name: roomName, host: myPid, names: seated.map(p => p.name), pids: seated.map(p => p.pid || '').filter(Boolean),
-      seats: roomSeats, hand: started ? handN : roomHand, long: started ? deckLong : longPick, priv: roomPriv, started: !!started,
-      spec: specs.size, open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0, ver: VERSION,
-      key: roomPriv ? '' : roomRaw, kbox: roomPriv ? roomKbox : '' });
-  }
-  function hostTimer(n, code) {
-    clearInterval(srvAnnT);
-    srvAnnT = setInterval(() => { if (peer !== n || mode !== 'host') { clearInterval(srvAnnT); return; } roomToServer(code); }, 3000);
-    setTimeout(() => roomToServer(code), 300);
-    clearInterval(annT);
-    annT = setInterval(() => { if (peer !== n || mode !== 'host') { clearInterval(annT); return; } hostAnnounce(n, code); }, lite ? 3000 : 2000);
-    hostAnnounce(n, code);
-    clearInterval(netTimer);
-    netTimer = setInterval(() => {
-      if (peer !== n || mode !== 'host') return;
-      if (!started) return;
-      const now = Date.now();
-      let changed = false;
-      specs.forEach((sp, id) => { if (sp.conn.left || (sp.conn.last > 0 && now - sp.conn.last > LOST_MS)) { specs.delete(id); changed = true; } });
-      conns.forEach(c => {
-        const p = players.find(x => x.conn === c);
-        const silent = c.left || (c.last > 0 && now - c.last > LOST_MS);
-        if (p && !!p.lost !== !!silent) { p.lost = !!silent; changed = true; }
-      });
-      if (changed) render();
-      // a device that wakes up after a long sleep finds the game again (or learns that it was replaced)
-      players.forEach((p, i) => { if (p.conn && p.lost && !p.conn.left) p.conn.send({ t: 'view', v: viewFor(i) }); });
-      kicked.forEach((t, id) => { if (now - t > 900000) kicked.delete(id); else n.send(topicOf(code, id), { t: 'kicked', term }); });
-    }, PING_MS);
-  }
 
-  function hostMsg(n, code, topic, from, d) {
-    if (topic === topicOf(code, n.id)) {
-      // another device carries this game on with a newer state: join it as a player
-      if (d.t === 'view' && d.v && (d.v.term || 0) > term) becomeGuest(n, code, d);
-      else if (d.t === 'kicked' && (d.term || 0) > term) quit(L('Игра продолжилась без вас: хозяин комнаты убрал вас из игры', 'The game went on without you: the host removed you'));
-      else if (d.t === 'closed' && (d.term || 0) > term) quit(L('Хозяин комнаты вышел из игры. Игра окончена.', 'The host left. The game is over.'));
-      return;
-    }
-    if (topic !== hostTopic(code)) return;
-    if (d.t === 'host') { if (from !== n.id) rivalHost(n, code, from, d); return; }
-    if (d.t === 'probe') { n.send(topicOf(code, from), { t: 'taken' }); return; }
-    let conn = conns.get(from);
-    if (!conn) { conn = mkConn(n, code, from); conns.set(from, conn); }
-    if (conn.left) { if (d.t === 'ping') conn.send({ t: 'kicked', term }); return; }   // left or replaced by a bot
-    conn.last = Date.now();
-    if (d.t === 'bye') {
-      conn.left = true; conn.open = false;
-      if (started && from === ownerId) {                    // the room owner left for good
-        conns.forEach(c => { if (!c.left) c.send({ t: 'closed', term }); });
-        quit(L('Хозяин комнаты вышел из игры. Игра окончена.', 'The host left. The game is over.'));
-        return;
-      }
-      onGuestGone(conn);
-      return;
-    }
-    if (d.t === 'ping') { resync(conn, d); return; }
-    onHostData(conn, d);
-  }
 
   function guestMsg(n, code, topic, from, d) {
-    if (topic === TOPIC + code + '/s') {
-      if (d.t === 'st' && d.st && (d.st.term || 0) >= gTerm && view && !view.spec) gSnap = d.st;
-      return;
-    }
     if (topic !== topicOf(code, n.id)) return;
     gHostSeen = true;
-    if (d.t === 'rejoin') { if ((d.term || 0) >= gTerm && gJoined) { gJoined = false; gT0 = Date.now(); gTerm = 0; gRev = 0; gSnap = null; } return; }
-    if (d.t === 'lead') {                                   // the host hands the game over to this device
-      if (d.st && (d.st.term || 0) >= gTerm && view && !view.spec) { gSnap = d.st; takeOver(n, code, true); }
-      return;
+    if (d.t === 'lobby') {
+      gJoined = true; gHeard = Date.now(); view = null;
+      lobby = d.names || []; lobbyBots = d.bots || []; lobbyMe = +d.me || 0; lobbyCtl = !!d.ctl; lobbyPw = d.pw || '';
+      hostVer = +d.ver || 0; lobbyProto = +d.proto || 0; lobbyLong = !!d.long; lobbyRoom = d.room || null;
+      takeVk(n, d.vk);
+      netMsg(''); drawLobby();
     }
-    if (d.t === 'lobby') { gJoined = true; gHeard = Date.now(); lobby = d.names; hostVer = +d.ver || 0; lobbyLong = !!d.long; lobbyRoom = d.room || null; netMsg(''); drawLobby(); }
     else if (d.t === 'view' && d.v) {
       const t = d.v.term || 0;
       if (t < gTerm) return;                                // a host that has already been replaced
@@ -3130,7 +2969,8 @@
       // messages travel through two relays and may arrive out of order: never go back to an older state
       if (d.v.rev && d.v.rev < gRev) return;
       if (d.v.rev) gRev = d.v.rev;
-      if (d.st) gSnap = d.st;
+      takeVk(n, d.v.vk);
+      waiting = false; lobbyCtl = false; document.body.classList.remove('waiting'); netMsg('');
       $('setup').classList.remove('show'); $('lobby').classList.remove('show');
       view = d.v;
       try { draw(view); } catch (e) { console.error(e); }
@@ -3164,128 +3004,32 @@
       }
       const silent = Date.now() - gHeard;
       hostConn.send({ t: 'ping', rev: gRev, term: gTerm });
-      if (silent < TAKE_MS / 2) return;
-      $('warn').textContent = gSnap && view ? L('Хозяин комнаты не отвечает. Если он не вернётся, игра продолжится без него…', 'The host is not answering. If they don\'t come back, the game goes on without them…')
-        : L('Нет связи с комнатой. Пробуем восстановить…', 'Lost the room. Reconnecting…');
-      if (!gSnap || !view) return;
-      n.send(topicOf(code, n.id), { t: 'echo' });           // does my own connection still work?
-      // players take the game over in seat order, each one a little later than the previous
-      const humans = gSnap.players.map((p, i) => (p.cid && i !== gSnap.hostSeat ? p.cid : null)).filter(Boolean);
-      const rank = humans.indexOf(n.id);
-      if (rank >= 0 && silent > TAKE_MS + rank * TAKE_STEP && Date.now() - n.lastEcho < PING_MS + 1500) takeOver(n, code);
+      if (silent < TAKE_MS / 2) { if ($('warn').dataset.lost) { $('warn').textContent = ''; delete $('warn').dataset.lost; } return; }
+      $('warn').textContent = L('Нет связи с сервером игры. Пробуем восстановить…', 'No connection to the game server. Reconnecting…');
+      $('warn').dataset.lost = '1';
+      if (silent > TAKE_MS * 2) { gJoined = false; gT0 = Date.now(); }   // ask to come in again (the table gives the seat back)
     };
     netTimer = setInterval(tick, PING_MS);
     setTimeout(tick, 400);
   }
 
-  // the host has been silent for too long: this device continues the game from the last state it received
-  function takeOver(n, code, given) {
-    const st = gSnap, seat = st.players.findIndex(p => p.cid === n.id);
-    if (seat < 0) return;
-    restore(st);
-    term = Math.floor(st.term || 1) + 1 + (9 - seat) / 10;   // two devices can never get the same term
-    mode = 'host'; mySeat = seat; started = true; lobby = null; hostConn = null; ownerId = given ? n.id : st.owner || ''; hostBorn = Date.now();
-    conns.clear(); kicked.clear();
-    players.forEach((p, i) => {
-      if (!p.cid || i === seat) return;
-      p.conn = mkConn(n, code, p.cid);
-      p.conn.last = Date.now();
-      conns.set(p.cid, p.conn);
-      if (i === st.hostSeat && !given) { p.conn.last = 1; p.lost = true; }      // silent until it answers again
-    });
-    specs.clear(); roomGroup = st.group || '';
-    (st.specs || []).forEach(x => {
-      const c = mkConn(n, code, x.id);
-      c.last = Date.now();
-      conns.set(x.id, c);
-      specs.set(x.id, { ...x, conn: c });
-    });
-    n.sub(hostTopic(code));
-    hostTimer(n, code);
-    const name = players[seat].name;
-    say(given ? me => (me === seat ? L('Теперь вы хозяин комнаты', 'You are now the host') : L('Хозяин комнаты теперь ', 'The host is now ') + name)
-      : me => (me === seat ? L('Хозяин комнаты не отвечает — игру ведёте вы', 'The host is not answering — you run the game now')
-        : L('Хозяин комнаты не отвечает — игру ведёт ', 'The host is not answering — the game is run by ') + name));
-    $('warn').textContent = '';
-    if (phase === 'play' && pend) later(pend.k, pend.a, PLAY_PAUSE);
-    else if (phase === 'play') step();
-    else render();
-  }
 
-  // the host makes another player the host: that device gets the whole game and carries it on,
-  // this one becomes a player as soon as the new host shows itself
-  function makeHost(i) {
-    const p = players[i], t0 = term;
-    if (mode !== 'host' || !started || !p || !p.conn) return;
-    const give = () => { if (mode === 'host' && term === t0 && players[i] === p && p.conn) p.conn.send({ t: 'lead', st: snapshot() }); };
-    give();
-    setTimeout(give, 2500);
-  }
 
-  // this device was the host, but the game went on without it: continue as a player
-  function becomeGuest(n, code, d) {
-    gameId++;
-    players = []; started = false; conns.clear(); kicked.clear(); specs.clear();
-    mode = 'guest';
-    hostConn = { open: true, send: x => n.send(hostTopic(code), x) };
-    gJoined = true; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null;
-    if (!lite) n.sub(TOPIC + code + '/s');
-    guestTimer(n, code);
-    guestMsg(n, code, topicOf(code, n.id), '', d);
-  }
 
-  // ----- host -----
-  async function createRoom(attempt = 0) {
+
+  // a new room: the game's server opens a table with the settings this phone chose, and the phone sits down first
+  async function createRoom() {
     if (needName()) return;
-    if (!CS) { netMsg(L('Этот браузер не умеет защищать игру. Обновите его.', 'This browser cannot protect the game. Please update it.')); return; }
     netMsg(L('Создаём комнату…', 'Creating the room…'));
-    clearInterval(netTimer);
-    if (peer) { try { peer.close(); } catch {} }
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    let taken = false;
-    const n = netOpen((topic, from, d) => {
-      if (peer !== n || !d || typeof d !== 'object') return;
-      if (d.t === 'taken' && topic === topicOf(code, n.id)) { taken = true; return; }
-      if (roomCode !== code) return;
-      if (topic === TOPIC + code + '/v') { voiceMsg(from, d); return; }
-      if (topic === TOPIC + code + '/a') { audioMsg(from, d); return; }
-      if (mode === 'host') hostMsg(n, code, topic, from, d);
-      else if (mode === 'guest') guestMsg(n, code, topic, from, d);
-    });
-    peer = n;
-    roomRaw = newRaw(); roomKbox = '';
-    n.setKey(TOPIC + code + '/', await aesKey(roomRaw));
-    if (!(await n.ready(8000))) {
-      if (peer === n) { n.close(); peer = null; netMsg(L('Нет связи с игровым сервером. Проверьте интернет.', 'No connection to the game server. Check your internet.')); startWatch(); }
+    takeRoomPicks();
+    const r = await srv('/table', { pid: myPid, name: roomName, seats: roomSeats, hand: roomHand, long: longPick, priv: roomPriv, pw: roomPw, lang });
+    if (!r || !r.ok || !ROOM_RE.test(r.code || '')) {
+      netMsg(L('Нет связи с сервером игры. Проверьте интернет.', 'No connection to the game server. Check your internet.'));
       return;
     }
-    if (peer !== n) return;
-    n.sub(hostTopic(code));
-    n.sub(topicOf(code, n.id));
-    if (!lite) n.sub(TOPIC + code + '/v');
-    if (!lite) n.sub(TOPIC + code + '/a');
-    await pause(400);
-    n.send(hostTopic(code), { t: 'probe' });                // is this code already in use?
-    await pause(1000);
-    if (peer !== n) return;
-    if (taken && attempt < 5) { n.close(); peer = null; createRoom(attempt + 1); return; }
-    takeRoomPicks();
-    keyRoom(n, code);
-    conns.clear(); kicked.clear(); term = 1; ownerId = n.id; hostBorn = Date.now();
-    mode = 'host'; mySeat = 0; started = false; roomCode = code; specs.clear(); roomGroup = group;
-    lobby = [{ name: myName(), conn: null, isBot: false, pid: myPid }];
-    netMsg('');
-    drawLobby();
-    hostTimer(n, code);
-  }
-
-  // this device keeps the room: its key (a new one if there is none yet) and, for a private room, the key locked with the password
-  async function keyRoom(n, code) {
-    if (!roomRaw) roomRaw = newRaw();
-    n.setKey(TOPIC + code + '/', await aesKey(roomRaw));
-    roomKbox = roomPriv && roomPw ? await seal(await pwKey(roomPw, code), roomRaw) : '';
-    saveKey(code, roomRaw, roomKbox);
-    roomToServer(code);
+    joinWant = 'seat'; joinPw = roomPw;
+    $('codeIn').value = r.code;
+    joinRoom();
   }
   // the room gets the settings this device chose in "Создать игру"
   function takeRoomPicks() {
@@ -3296,108 +3040,9 @@
   }
   const pwPick = () => { try { return (localStorage.getItem('g101-rpw') || '').trim().slice(0, 20); } catch { return ''; } };
   const namePick = () => { try { return (localStorage.getItem('g101-rname') || '').trim(); } catch { return ''; } };
-  const roomInfoMsg = () => ({ name: roomName, seats: roomSeats, hand: roomHand, priv: roomPriv });
-  const lobbyNames = () => lobby.map(s => s.name + (s.conn && s.ver !== VERSION ? L(' (другая версия игры)', ' (other game version)') : ''));
 
-  // send a guest the current state again (answers every ping, so a lost message heals itself)
-  function resync(conn, d) {
-    if (!started) {
-      if (lobby && lobby.some(s => s.conn === conn)) conn.send({ t: 'lobby', code: roomCode, names: lobbyNames(), ver: VERSION, long: longPick, room: roomInfoMsg() });
-      return;
-    }
-    const seat = players.findIndex(p => p.conn === conn);
-    if (seat >= 0) {
-      if (d && d.rev && d.rev === conn.rev && d.term === term) { conn.send({ t: 'ok', term }); return; }   // up to date
-      const v = viewFor(seat);
-      conn.rev = v.rev;
-      conn.send({ t: 'view', v, st: snapshot() });
-    } else if (specs.has(conn.id)) {
-      const sp = specs.get(conn.id);
-      if (d && d.rev && d.rev === conn.rev && d.term === term) { conn.send({ t: 'ok', term }); return; }
-      const v = viewFor(-1, sp);
-      conn.rev = v.rev;
-      conn.send({ t: 'view', v });
-    } else conn.send({ t: 'kicked', term });                  // not a player of this game
-  }
 
-  function onHostData(conn, d) {
-    if (!d || typeof d !== 'object') return;
-    if (d.t === 'join') {
-      const member = (lobby && lobby.some(s => s.conn === conn)) || players.some(p => p.conn === conn) || specs.has(conn.id);
-      if (member) { resync(conn); return; }
-      const pid = typeof d.pid === 'string' ? d.pid.slice(0, 24) : '';
-      if (pid && banned.has(pid)) { conn.send({ t: 'kicked', term }); return; }
-      if (pid) pidLang.set(pid, d.lang === 'en' ? 'en' : 'ru');
-      if (roomPw && String(d.pw || '') !== roomPw) {
-        // somebody who already sits here (a reloaded page) comes back without it
-        const known = pid && ((lobby && lobby.some(x => x.pid === pid)) || players.some(x => x.pid === pid && !x.isBot && !x.removed) ||
-          [...specs.values()].some(x => x.pid === pid));
-        if (!known) { conn.send({ t: 'badpw' }); return; }
-      }
-      const retire = c => { if (c) { c.left = true; c.open = false; } };
-      if (started) {
-        // the same device comes back with a reloaded page: it takes its old seat, not a second one
-        const p = pid ? players.find(x => x.pid === pid && !x.isBot && !x.removed) : null;
-        if (p) {
-          if (players.indexOf(p) !== mySeat) { retire(p.conn); p.conn = conn; p.lost = false; }
-          render();
-          return;
-        }
-        const old = pid ? [...specs.values()].find(x => x.pid === pid) : null;
-        if (old) { retire(old.conn); specs.delete(old.id); }
-        // the game is on: come in as a spectator
-        specs.set(conn.id, { id: conn.id, pid, name: String(d.name || L('Зритель', 'Spectator')).slice(0, 12), conn,
-          asked: old ? old.asked : 0, sit: old ? old.sit : d.want !== 'watch', open: old ? old.open : {}, wait: old ? old.wait : [] });
-        render();
-        return;
-      }
-      const seat = pid && lobby ? lobby.find(x => x.pid === pid && x.conn) : null;
-      if (seat) { retire(seat.conn); seat.conn = conn; seat.ver = +d.ver || 0; drawLobby(); return; }
-      if (!lobby || lobby.length >= roomSeats) { conn.send({ t: 'full' }); return; }
-      lobby.push({ name: String(d.name || L('Игрок', 'Player')).slice(0, 12), conn, isBot: false, ver: +d.ver || 0, pid });
-      drawLobby();
-      return;
-    }
-    if (d.t === 'long') {                                   // somebody in the room chose the short or the long game
-      if (started || !lobby || !lobby.some(s => s.conn === conn)) return;
-      const who = lobby.find(s => s.conn === conn);
-      longPick = !!d.on;
-      try { localStorage.setItem('g101-long', longPick ? '1' : '0'); } catch {}
-      drawLobby();
-      if (window.drawModeSw) window.drawModeSw();
-      notifyUser(L(`${who.name} выбирает колоду из ${longPick ? 52 : 36} карт`, `${who.name} picks the ${longPick ? 52 : 36}-card deck`));
-      return;
-    }
-    if (d.t === 'lang') {                                   // a guest switched the language
-      const p = players.find(x => x.conn === conn) || specs.get(conn.id) || (lobby || []).find(x => x.conn === conn);
-      if (p && p.pid) { pidLang.set(p.pid, d.lang === 'en' ? 'en' : 'ru'); render(); }
-      return;
-    }
-    if (!started) return;
-    const seat = players.findIndex(p => p.conn === conn);
-    if (seat >= 0) { act(seat, d); return; }
-    const sp = specs.get(conn.id);
-    if (!sp) return;
-    if (d.t === 'ask') {                                    // once a round: ask every player to show their cards
-      if (sp.asked === roundNo || phase !== 'play') return;
-      sp.asked = roundNo;
-      sp.wait = players.map((p, i) => (!p.out && !p.isBot ? i : -1)).filter(i => i >= 0);
-      render();
-    } else if (d.t === 'sit') { sp.sit = !!d.on; render(); }
-  }
 
-  // a guest pressed "Выйти": in the lobby they just disappear, in a game they are marked as gone
-  function onGuestGone(conn) {
-    if (!started) {
-      if (!lobby) return;
-      lobby = lobby.filter(x => x.conn !== conn);
-      drawLobby();
-      return;
-    }
-    if (specs.delete(conn.id)) { render(); return; }
-    const p = players.find(x => x.conn === conn);
-    if (p) { p.lost = true; duelAbort(); render(); }        // one on one: leaving ends the game
-  }
 
   // ----- the company code: friends who share it see each other's rooms on the start screen -----
   const groupTopic = g => TOPIC + 'g/' + g;
@@ -3553,13 +3198,13 @@
     }
     if (mode === 'solo' || !roomCode) {
       $('friendsScr').classList.remove('show');
-      if (group) enterRoom('seat'); else createRoom();
-      for (let k = 0; k < 40 && !(roomCode && (mode === 'host' || (mode === 'guest' && gJoined))); k++) await pause(400);
+      createRoom();
+      for (let k = 0; k < 40 && !(roomCode && mode === 'guest' && gJoined); k++) await pause(400);
       if (!roomCode || mode === 'solo') { notifyUser(L('Не получилось войти в комнату', 'Could not enter the room')); return; }
     }
     const name = $('nick').value.trim().slice(0, 12) || L('Друг', 'Friend'), chat = friendChat.get(id);
     // no password in it: the invitation goes through public relays (a friend asks for the password of a private room)
-    if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid });
+    if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid });   // a private room: the friend asks for the password
     if (chat) srv('/tg/say', { to: id, from: myPid, name, room: roomCode, lang });
     notifyUser(L(`Приглашение отправлено: ${friends[id]}${chat ? ' (и в Telegram)' : ''}`, `Invitation sent: ${friends[id]}${chat ? ' (and on Telegram)' : ''}`));
   }
@@ -3586,10 +3231,10 @@
     helloAt = Date.now();
     const ua = navigator.userAgent;
     srv('/hello', Object.assign({
-      pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: mode === 'solo' ? '' : (mode === 'host' ? roomName : (lobbyRoom && lobbyRoom.name) || ''), tg: !!tgChat,
+      pid: myPid, name: ($('nick').value || '').trim().slice(0, 12), ver: VERSION, group: mode === 'solo' ? '' : ((lobbyRoom && lobbyRoom.name) || ''), tg: !!tgChat,
       dev: window.App101 ? 'apk' : /iPhone|iPad|iPod/.test(ua) ? 'iphone' : /Android/.test(ua) ? 'android' : 'pc',
       mode: mode === 'solo' ? (phase === 'setup' ? 'menu' : 'bots') : 'table',
-      room: mode === 'solo' ? '' : roomCode || '', host: mode === 'host',
+      room: mode === 'solo' ? '' : roomCode || '', host: mode === 'guest' && !!(view ? view.canControl : lobbyCtl),
       kind: mode === 'solo' && phase === 'setup' ? '' : (mode === 'guest' ? (view && view.long) || lobbyLong : started || mode === 'solo' ? deckLong : longPick) ? 'long' : 'short'
     }, extra));
     helloKey = whereNow();
@@ -3748,7 +3393,7 @@
       if (g) w.send(groupTopic(g), { t: 'here', pid: myPid, name });
       // for my friends: where am I
       const room = mode !== 'solo' && roomCode ? roomCode : '';
-      w.send(myTopic(myPid), { t: 'me', name, room, started: !!started });
+      w.send(myTopic(myPid), { t: 'me', name, room, started: !!(mode === 'guest' && view) });
     };
     hereT = setInterval(here, 3000);
     setTimeout(() => { if (watch === w) here(); }, 1500);
@@ -3780,97 +3425,26 @@
     startWatch();
   }
 
-  // a player who comes while the game is on sits down in a bot's place, with its cards and points
-  function seatHuman(i, conn, pid, name) {
-    const p = players[i], old = p.name;
-    p.isBot = false; p.conn = conn; p.pid = pid; p.name = name; p.lost = false;
-    say(me => (me === i ? L('Вы сели за стол вместо бота', 'You took a bot\'s seat') : L(`${name} садится за стол вместо бота «${old}»`, `${name} takes the seat of bot "${old}"`)));
-    if (phase === 'play' && turn === i && pend && pend.k === 'bot') { gameId++; busy = false; pend = null; }   // the bot was about to move
-    render();
-  }
 
-  // only the device that runs the game can hand a player's seat to a bot
-  function replaceWithBot(i) {
-    const p = players[i];
-    if (mode !== 'host' || !started || !p || !p.conn) return;
-    try { p.conn.send({ t: 'kicked', term }); } catch {}
-    kicked.set(p.conn.id, Date.now());
-    p.conn.left = true; p.conn.open = false;
-    if (p.pid) banned.add(p.pid);
-    p.conn = null; p.isBot = true; p.lost = false; p.pid = ''; p.name += L(' (бот)', ' (bot)');
-    if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
-      suit = botSuit(p); phase = 'play';
-      const q = pendingQueen; pendingQueen = null;
-      afterPlay(q.pi, q.card);
-    } else if (phase === 'play' && turn === i && !busy) step();
-    else render();
-  }
 
-  // The device that runs the game removes a player or a bot: their cards go back into the deck
-  // and the others play on. With one player left the game is over.
-  function removePlayer(i) {
-    const p = players[i];
-    if (mode !== 'host' || !started || !p || p.out || i === mySeat) return;
-    if (p.conn) {
-      try { p.conn.send({ t: 'kicked', term }); } catch {}
-      kicked.set(p.conn.id, Date.now());
-      p.conn.left = true; p.conn.open = false; p.conn = null;
-    }
-    if (p.pid) banned.add(p.pid);
-    p.out = true; p.removed = true; p.isBot = true; p.lost = false; p.pid = '';
-    deck = shuffle(deck.concat(p.hand));
-    p.hand = [];
-    say(LL(p.name + ' удалён из игры', p.name + ' was removed from the game'));
-    const left = active();
-    if (phase === 'roundEnd') {
-      if (result && left.length < 2) { result.gameOver = true; result.champion = left.length ? players.indexOf(left[0]) : -1; }
-      render();
-    } else if (left.length < 2 || !left.some(x => !x.isBot)) {
-      gameId++; busy = false; pend = null; pendingQueen = null;
-      result = { w: -1, gameOver: true, champion: left.length === 1 ? players.indexOf(left[0]) : -1,
-        rows: left.map(x => ({ pi: players.indexOf(x), add: 0, score: x.score, note: '', win: false })) };
-      phase = 'roundEnd';
-      render();
-    } else if (phase === 'choose' && pendingQueen && pendingQueen.pi === i) {
-      suit = top().s; phase = 'play';
-      const q = pendingQueen; pendingQueen = null;
-      afterPlay(q.pi, q.card);
-    } else if (phase === 'play' && turn === i && !(pend && pend.k !== 'bot')) {
-      gameId++; busy = false; pend = null;                  // it was their move: it passes on
-      turn = nextIdx(i); drew = false;
-      step();
-    } else render();
-  }
 
-  // the room owner removes somebody from the list before the game starts
-  function kickFromLobby(i) {
-    if (mode !== 'host' || started || !lobby || i <= 0 || !lobby[i]) return;
-    const c = lobby[i].conn;
-    if (c) { try { c.send({ t: 'kicked', term }); } catch {} c.left = true; c.open = false; }
-    lobby.splice(i, 1);
-    drawLobby();
-  }
 
+  // Before the game. The one who runs the room (its owner, or the first player while the owner is away) waits at the
+  // table itself: "+ бот", "Начать", ✕ on a seat; everybody else sees the list of who has come.
   function drawLobby() {
-    const host = mode === 'host';
-    const names = host ? lobbyNames() : lobby;
-    const ri = host ? roomInfoMsg() : lobbyRoom || {};
+    const ctl = lobbyCtl, names = lobby || [];
+    const ri = lobbyRoom || {};
     $('lobCode').textContent = ri.name || roomCode;
-    $('lobInfo').textContent = roomLine(host ? longPick : lobbyLong, ri.hand || HAND_SIZE, names.length, ri.seats || MAX_PLAYERS, ri.priv);
-    $('lobHint').textContent = host ? (roomPriv ? L(`Приватная комната: вход по паролю «${roomPw}».`, `Private room: password "${roomPw}".`) : L('Комнату видят все в списке «Открытые игры».', 'Everyone sees the room in "Open games".'))
-        + L(' Если свернёте игру, остальные доиграют без вас. «Выйти» закрывает комнату для всех.', ' If you leave the app, the others play on without you. "Leave" closes the room for everyone.')
-      : L('Ждём, пока хозяин комнаты начнёт игру…', 'Waiting for the host to start the game…') + (hostVer < VERSION ? L(' У хозяина старая версия игры: правила могут отличаться. Пусть он обновит игру.', ' The host has an old version: the rules may differ. Ask them to update.') : '');
-    $('lobList').innerHTML = names.map((n, i) => `<li><span>${esc(n)}</span>` +
-      (host && i > 0 ? `<button class="kick" data-k="${i}" aria-label="${L('Удалить', 'Remove')}">✕</button>` : '') + '</li>').join('');
-    $('hostBox').style.display = host ? '' : 'none';
-    $('roomEditBtn').style.display = host && !started ? '' : 'none';
-    [...$('lobBots').children].forEach(b => { b.disabled = +b.dataset.n < names.length || +b.dataset.n > roomSeats; });
+    $('lobInfo').textContent = roomLine(lobbyLong, ri.hand || HAND_SIZE, names.length, ri.seats || MAX_PLAYERS, ri.priv);
+    $('lobHint').textContent = L('Ждём, пока хозяин комнаты начнёт игру…', 'Waiting for the host to start the game…') +
+      (lobbyProto && lobbyProto !== PROTO ? ' ' + L('Версии игры разные: выйдите и обновите игру.', 'Game versions differ: leave and update the game.') : '');
+    $('lobList').innerHTML = names.map(n => `<li><span>${esc(n)}</span></li>`).join('');
+    $('hostBox').style.display = 'none';
+    $('roomEditBtn').style.display = 'none';
     if (window.drawModeSw) window.drawModeSw();
-    if (host && !started) waiting = true;                    // the host always waits at the table itself
-    document.body.classList.toggle('waiting', host && waiting);
-    if (host && waiting) drawWaiting(names); else showOnly('lobby');
-    if (host) lobby.forEach(s => { if (s.conn && s.conn.open) s.conn.send({ t: 'lobby', code: roomCode, names, ver: VERSION, long: longPick, room: roomInfoMsg() }); });
-    if (host) roomToServer(roomCode);
+    waiting = ctl;
+    document.body.classList.toggle('waiting', ctl);
+    if (ctl) drawWaiting(names); else showOnly('lobby');
   }
   // bots get random names, never two the same at one table: "Бот Боря", "Бот Джон"…
   const BOT_EN = ['Bob', 'John', 'Tony', 'Mike', 'Sam', 'Pete', 'Bill', 'Nick', 'Jack', 'Greg', 'Dan', 'Alex', 'Max', 'Oliver',
@@ -3884,7 +3458,10 @@
     const free = L(BOT_NAMES, BOT_EN).map(n => L('Бот ', 'Bot ') + n).filter(n => !used.has(n));
     return free.length ? free[Math.floor(Math.random() * free.length)] : L('Бот ', 'Bot ') + (seats.length + 1);
   }
-  let lobbyLong = false;                                    // a guest: the host has chosen the long game
+  let lobbyLong = false;                                    // the room's game is the long one
+  // the lobby as the table told it: names, which of them are bots, my place, whether I run the room, its password (mine only)
+  let lobbyBots = [], lobbyMe = 0, lobbyCtl = false, lobbyPw = '', lobbyProto = 0;
+  const tell = d => { if (mode === 'guest' && hostConn && hostConn.open) hostConn.send(d); };   // a word to the room's table
   const roomLine = (long, hand, n, seats, priv) => L(`Колода ${long ? 52 : 36} · ${hand} ${hand === 5 || hand === 6 ? 'карт' : 'карты'} в руке · мест ${n}/${seats}` + (priv ? ' · приватная' : ''),
     `Deck ${long ? 52 : 36} · ${hand} cards in hand · seats ${n}/${seats}` + (priv ? ' · private' : ''));
 
@@ -3901,21 +3478,23 @@
     $('asks').innerHTML = ''; $('specRow').innerHTML = ''; $('status').innerHTML = '';
     const o = $('opps');
     o.className = 'opps' + (names.length > 4 ? ' many' : '');
-    o.innerHTML = names.slice(1).map((n, k) => `<div class="opp" data-i="${k + 1}"><button class="omenu" data-kick="${k + 1}" aria-label="${L('Убрать', 'Remove')}">✕</button>` +
-      `<div class="name">${nameHtml(n)}</div><div class="pts">${lobby[k + 1] && lobby[k + 1].isBot ? L('бот', 'bot') : L('за столом', 'seated')}</div></div>`).join('') +
-      `<div class="opp free"><div class="name">${L('Место', 'Seat')}</div><div class="pts">${L('свободно', 'free')}</div></div>`.repeat(Math.max(0, roomSeats - names.length));
-    o.className = 'opps' + (roomSeats - 1 > 4 ? ' many' : '');
+    const seats = (lobbyRoom && lobbyRoom.seats) || MAX_PLAYERS;
+    const others = names.map((n, i) => i).filter(i => i !== lobbyMe);       // my own seat is the bottom of the screen
+    o.innerHTML = others.map(i => `<div class="opp" data-i="${i}"><button class="omenu" data-kick="${i}" aria-label="${L('Убрать', 'Remove')}">✕</button>` +
+      `<div class="name">${nameHtml(names[i])}</div><div class="pts">${lobbyBots[i] ? L('бот', 'bot') : L('за столом', 'seated')}</div></div>`).join('') +
+      `<div class="opp free"><div class="name">${L('Место', 'Seat')}</div><div class="pts">${L('свободно', 'free')}</div></div>`.repeat(Math.max(0, seats - names.length));
+    o.className = 'opps' + (seats - 1 > 4 ? ' many' : '');
     $('deck').className = 'empty-slot'; $('deckCount').textContent = '0';
     $('pile').innerHTML = ''; $('pile').style.width = ''; $('pileCount').textContent = '0';
     $('suitNow').textContent = ''; $('suitNow').className = 'suit-now';
     $('myHand').innerHTML = '';
-    $('meBar').textContent = L('Ждём друзей', 'Waiting for friends');
+    $('meBar').textContent = lobbyPw ? L(`Ждём друзей · пароль «${lobbyPw}»`, `Waiting for friends · password "${lobbyPw}"`) : L('Ждём друзей', 'Waiting for friends');
     document.body.classList.add('waiting');
     $('syncBtn').style.display = '';
     const a = $('actions'); a.innerHTML = '';
     const add = (text, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = text; onTap(b, () => { fn(); return true; }); a.appendChild(b); };
-    if (names.length < roomSeats) add(L('+ бот', '+ bot'), () => { lobby.push({ name: botName(lobby), isBot: true, conn: null }); drawLobby(); });
-    if (names.length >= 2) add(L('Начать', 'Start'), () => { waiting = false; started = true; startMatch(lobby); });
+    if (names.length < seats) add(L('+ бот', '+ bot'), () => tell({ t: 'addbot' }));
+    if (names.length >= 2) add(L('Начать', 'Start'), () => tell({ t: 'start' }));
     if (window.placeActions) window.placeActions();
   }
 
@@ -3926,75 +3505,34 @@
     if (needName()) return;
     if (!group) { netMsg(L('Введите код компании', 'Enter a group code')); return; }
     joinWant = want || 'seat';
-    $('codeIn').value = roomOf(group);
-    return joinRoom(true);
-  }
-  // the key of a room I am coming into: from the game's server (an open room), opened with the password (a private one),
-  // or the one this device kept from before; null when there is none (the password is asked, or the room is gone)
-  async function roomKeyFor(code, orHost) {
-    const r = await srv('/rooms?pid=' + encodeURIComponent(myPid));
-    const e = r && r.ok && Array.isArray(r.rooms) ? r.rooms.find(x => x.code === code) : null;
-    if (e && e.key) return e.key;
-    const kept = savedKeys()[code];
-    if (e && e.kbox) {
-      roomKbox = e.kbox;
-      if (kept && kept.kb === e.kbox) return kept.raw;     // this device has been here (a reloaded page)
-      const pw = joinPw || (isMine(e) ? pwPick() : '');
-      if (pw) {
-        const raw = await unseal(await pwKey(pw, code), e.kbox);
-        if (raw) return raw;
-        askRoomPw(code, joinWant, !!joinPw);               // a wrong password: asked again, nothing went anywhere
-        return null;
-      }
-      askRoomPw(code, joinWant, false);
-      return null;
-    }
-    if (e && e.priv) { netMsg(L('Комната ещё открывается, попробуйте через пару секунд', 'The room is still opening, try again in a moment')); return null; }
-    if (kept && !e) return kept.raw;
-    if (orHost === true) return newRaw();                   // a table nobody keeps yet: it may become mine
-    netMsg(r ? L('Этой комнаты уже нет', 'This room is gone') : L('Нет связи с сервером игры. Проверьте интернет.', 'No connection to the game server. Check your internet.'));
-    return null;
+    return createRoom();
   }
   async function joinRoom(orHost) {
     if (needName()) return;
     const code = $('codeIn').value.trim();
     if (!ROOM_RE.test(code)) { netMsg(L('Неверный код комнаты', 'Wrong room code')); return; }
-    if (!CS) { netMsg(L('Этот браузер не умеет защищать игру. Обновите его.', 'This browser cannot protect the game. Please update it.')); return; }
     netMsg(L('Подключаемся…', 'Connecting…'));
     clearInterval(netTimer);
     if (peer) { try { peer.close(); } catch {} peer = null; }
-    roomKbox = '';
-    const raw = await roomKeyFor(code, orHost);
-    if (!raw || peer) return;                               // no key (the password is asked), or another room was chosen meanwhile
-    roomRaw = raw;
+    roomVk = '';
     gName = myName();
     const n = netOpen((topic, from, d) => {
       if (peer !== n || !d || typeof d !== 'object' || roomCode !== code) return;
       if (topic === TOPIC + code + '/v') { voiceMsg(from, d); return; }
       if (topic === TOPIC + code + '/a') { audioMsg(from, d); return; }
       if (mode === 'guest') guestMsg(n, code, topic, from, d);
-      else if (mode === 'host') hostMsg(n, code, topic, from, d);
     });
     peer = n;
-    n.setKey(TOPIC + code + '/', await aesKey(raw));
-    saveKey(code, raw, roomKbox);
-    if (!(await n.ready(8000))) { if (peer === n) quit(L('Нет связи с игровым сервером. Проверьте интернет.', 'No connection to the game server. Check your internet.')); return; }
+    n.setRoom(code);
+    if (!(await n.ready(8000, true))) { if (peer === n) quit(L('Нет связи с игровым сервером. Проверьте интернет.', 'No connection to the game server. Check your internet.')); return; }
     if (peer !== n) return;
     n.sub(topicOf(code, n.id));
-    if (!lite) n.sub(TOPIC + code + '/s');
     if (!lite) n.sub(TOPIC + code + '/v');
     if (!lite) n.sub(TOPIC + code + '/a');
     mode = 'guest'; roomCode = code;
     hostConn = { open: true, send: d => n.send(hostTopic(code), d) };
     gJoined = false; gHeard = Date.now(); gRev = 0; gTerm = 0; gSnap = null; gT0 = Date.now(); gHostSeen = false;
     guestTimer(n, code);
-    if (orHost === true) {
-      setTimeout(() => { if (peer === n && mode === 'guest' && !gJoined) n.send(hostTopic(code), { t: 'probe' }); }, 400);
-      const empty = () => peer === n && mode === 'guest' && roomCode === code && !gJoined && !gHostSeen;
-      // the start screen has just seen this room alive: then its host only needs more time to answer
-      const wait = rooms.has(code) ? 9000 : lite ? 7000 : 3000;
-      setTimeout(() => { if (empty()) becomeRoomHost(n, code); }, wait);
-    }
   }
 
   // details about an opponent (long press on the panel or its ☰): points, cards, one-on-one score, host tools
@@ -4009,16 +3547,15 @@
     if (p.lost) rows.push([L('Связь', 'Connection'), L('нет связи', 'offline')]);
     $('oiTable').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${esc(b)}</td></tr>`).join('');
     const t = $('oiTools'); t.innerHTML = '';
-    if (mode === 'host' && !p.out && i !== mySeat) {
-      const add = (text, ask, fn) => {
+    if (mode === 'guest' && v.canControl && !p.out && i !== v.seat) {
+      const add = (text, ask, cmd) => {
         const b = document.createElement('button');
         b.className = 'btn plain'; b.textContent = text;
-        b.onclick = () => { if (confirm(ask)) { fn(i); $('oppInfo').classList.remove('show'); } };
+        b.onclick = () => { if (confirm(ask)) { tell({ t: cmd, i }); $('oppInfo').classList.remove('show'); } };
         t.appendChild(b);
       };
-      if (p.remote && !p.lost) add(L('Сделать хозяином', 'Make host'), L(`Сделать «${p.name}» хозяином комнаты? Игру дальше будет вести его телефон.`, `Make "${p.name}" the host? Their phone will run the game from now on.`), makeHost);
-      if (p.remote) add(L('Заменить ботом', 'Replace with a bot'), L(`Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`, `Replace "${p.name}" with a bot? They won't be able to come back.`), replaceWithBot);
-      add(L('Удалить из игры', 'Remove from game'), L(`Удалить «${p.name}» из игры? Его карты вернутся в колоду.`, `Remove "${p.name}" from the game? Their cards go back to the deck.`), removePlayer);
+      if (p.remote) add(L('Заменить ботом', 'Replace with a bot'), L(`Заменить игрока «${p.name}» ботом? Вернуться в игру он не сможет.`, `Replace "${p.name}" with a bot? They won't be able to come back.`), 'replace');
+      add(L('Удалить из игры', 'Remove from game'), L(`Удалить «${p.name}» из игры? Его карты вернутся в колоду.`, `Remove "${p.name}" from the game? Their cards go back to the deck.`), 'remove');
     }
     if (p.pid && p.pid !== 'bot' && p.pid !== myPid) {
       const b = document.createElement('button');
@@ -4060,7 +3597,6 @@
     await pause(400);
     if (peer !== n) return;
     if (mode === 'guest' && hostConn) { $('warn').textContent = L('Связь обновлена, ждём ответ комнаты…', 'Reconnected, waiting for the room…'); hostConn.send({ t: 'ping' }); }
-    else if (mode === 'host') { $('warn').textContent = ''; render(); }
   };
   onTap($('history'), () => { $('history').classList.remove('show'); return true; });
   // any window closes with a tap outside it (on the dark around it)
@@ -4106,20 +3642,11 @@
   });
   $('hostBtn').onclick = () => createRoom();
   $('joinBtn').onclick = () => { joinWant = 'seat'; joinRoom(); };
-  $('lobBots').onclick = e => {
-    const b = e.target.closest('[data-n]');
-    if (!b || mode !== 'host' || !lobby) return;
-    while (lobby.length < +b.dataset.n) lobby.push({ name: botName(lobby), isBot: true, conn: null });
-    waiting = false; started = true;
-    startMatch(lobby);
-  };
-  $('waitBtn').onclick = () => { if (mode !== 'host' || !lobby) return; waiting = true; drawLobby(); };
   $('opps').addEventListener('click', e => {
     const k = e.target.closest('[data-kick]');
-    if (k && waiting && mode === 'host' && !started) kickFromLobby(+k.dataset.kick);
+    if (k && waiting && lobbyCtl) tell({ t: 'kick', i: +k.dataset.kick });
   });
   $('leaveBtn').onclick = leave;
-  $('lobList').onclick = e => { const b = e.target.closest('.kick'); if (b) kickFromLobby(+b.dataset.k); };
   $('netTest').onclick = async () => {
     const b = $('netTest');
     if (b.dataset.fold) { testMsg(''); b.textContent = L('Проверить связь', 'Test connection'); delete b.dataset.fold; return; }
@@ -4143,7 +3670,6 @@
     } else {
       longPick = on;
       try { localStorage.setItem('g101-long', on ? '1' : '0'); } catch {}
-      if (mode === 'host' && lobby && !started) drawLobby();          // the guests see it at once
     }
     drawModeSw();
   }
@@ -4171,7 +3697,7 @@
   $('bgs').onclick = e => { const b = e.target.closest('[data-bg]'); if (b) setBg(+b.dataset.bg); };
   $('gearBtn').onclick = () => {
     vDraw(); $('gear').classList.remove('atHome');
-    $('gearRoom').style.display = mode === 'host' && !started && lobby ? '' : 'none';   // the host, before the game: the room's settings
+    $('gearRoom').style.display = mode === 'guest' && lobbyCtl && waiting ? '' : 'none';   // the one who runs the room, before the game
     $('gear').classList.add('show');
   };
   $('gearRoom').onclick = () => { $('gear').classList.remove('show'); openCreate(true); };
@@ -4180,7 +3706,7 @@
   $('newGameBtn').onclick = () => {
     if (!players.length || !confirm(L('Завершить эту игру и начать новую? Очки у всех обнулятся.', 'End this game and start a new one? Everyone\'s points go back to zero.'))) return;
     $('gear').classList.remove('show');
-    if (mode === 'host') restartMatch();
+    if (mode === 'guest') tell({ t: 'restart' });
     else if (mode === 'solo') { duelAbort(); startMatch(players.map(p => ({ name: p.name, isBot: p.isBot, pid: p.pid }))); }
   };
   $('oiClose').onclick = () => $('oppInfo').classList.remove('show');
@@ -4450,8 +3976,7 @@
     const r = findRoom(code);
     if (!r) return;
     want = want || (r.started ? (r.open > 0 ? 'seat' : 'watch') : r.names.length < r.seats ? 'seat' : 'watch');
-    const kept = savedKeys()[code];
-    if (r.priv && !isMine(r) && !invitedPw.has(code) && !(kept && kept.kb === r.kbox)) { askRoomPw(code, want, false); return; }
+    if (r.priv && !isMine(r) && !invitedPw.has(code)) { askRoomPw(code, want, false); return; }
     joinWant = want; joinPw = invitedPw.get(code) || '';
     $('codeIn').value = code;
     joinRoom(false);
@@ -4511,12 +4036,13 @@
   function openCreate(edit) {
     if (!edit && needName()) return;
     crEdit = !!edit;
-    if (edit) { seatsPick = roomSeats; handPick = roomHand; privPick = roomPriv; }
+    const ri = lobbyRoom || {};
+    if (edit) { seatsPick = ri.seats || seatsPick; handPick = ri.hand || handPick; privPick = !!ri.priv; }
     $('crTitle').textContent = edit ? L('Настройки комнаты', 'Room settings') : L('Новая игра', 'New game');
     $('crGo').textContent = edit ? L('Сохранить', 'Save') : L('Создать', 'Create');
-    $('crName').value = edit ? roomName : namePick();
+    $('crName').value = edit ? ri.name || '' : namePick();
     $('crPriv').checked = privPick;
-    $('crPw').value = edit ? roomPw : pwPick();
+    $('crPw').value = edit ? lobbyPw : pwPick();
     $('crPwRow').classList.toggle('on', privPick);
     document.querySelectorAll('#createDlg .crField').forEach(f => f.classList.remove('bad'));
     drawPicks();
@@ -4543,12 +4069,10 @@
     savePicks();
     $('createDlg').classList.remove('show');
     if (crEdit) {
-      if (mode !== 'host' || started) return;
+      if (mode !== 'guest' || !lobbyCtl) return;
       const n = lobby ? lobby.length : 1;
       if (seatsPick < n) { notifyUser(L(`За столом уже ${n}: мест не может быть меньше`, `${n} already seated: there can't be fewer seats`)); seatsPick = n; }
-      takeRoomPicks();
-      if (peer) keyRoom(peer, roomCode);
-      drawLobby();
+      tell({ t: 'room', name: $('crName').value.trim(), seats: seatsPick, hand: handPick, priv: privPick, pw: $('crPw').value.trim() });
       return;
     }
     createRoom();
