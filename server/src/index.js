@@ -5,7 +5,8 @@
 //   POST /tg/hook/…  Telegram tells the bot what people wrote to it
 //   GET  /ws         the relay of game messages (see relay.js)
 //   GET  /rpc        any of the requests above as one question and one answer over a fresh WebSocket
-//   GET  /rooms      the open rooms; POST /rooms: a host tells about its room
+//   GET  /rooms      the open rooms; POST /rooms: a table tells about its room
+//   POST /table      a new room: the game runs on the server, phones only show it (see relay.js, table-post.js)
 //   GET  /admin      the developer's page (behind a password that only the owner knows)
 import ADMIN_PAGE from './admin.html';
 export { Relay } from './relay.js';
@@ -153,6 +154,7 @@ async function route(request, env) {
       if (p === '/ping') return json({ ok: true, time: Date.now() });
       if (p === '/ws') return env.RELAY.get(env.RELAY.idFromName('main')).fetch(request);      // game messages
       if (p === '/rooms') return env.RELAY.get(env.RELAY.idFromName('rooms')).fetch(request);  // the list of open rooms (an instance of its own)
+      if (p === '/table' || p === '/table/say') return env.RELAY.get(env.RELAY.idFromName('main')).fetch(request);    // a new room; a word to a table
       if (p === '/hello' && request.method === 'POST') return await hello(env, await body(request));
       if (p === '/tg/chat') {
         const pid = url.searchParams.get('pid') || '';

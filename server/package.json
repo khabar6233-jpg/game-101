@@ -1,7 +1,10 @@
 {
   "name": "game-101-server",
   "private": true,
+  "type": "module",
   "scripts": {
+    "build": "node build-engine.mjs",
+    "test": "node build-engine.mjs && node test-table.mjs",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev"
   },

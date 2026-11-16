@@ -3,5 +3,6 @@ android/build/
 /101.apk
 *.idsig
 server/node_modules/
+server/src/engine.gen.js
 server/.wrangler/
 server/.tg-hook.txt

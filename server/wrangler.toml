@@ -3,6 +3,10 @@ main = "src/index.js"
 compatibility_date = "2026-06-01"
 workers_dev = true
 
+# the room tables are cut out of ../www/index.html before every deploy (see build-engine.mjs)
+[build]
+command = "node build-engine.mjs"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "game101"

@@ -13,13 +13,18 @@
 //   -> {"e": epoch, "a": last number received, "s": [topics], "o": [{"i": id, "p": topic, "m": text, "k": 1}]}
 //   <- {"e": epoch, "k": [ids received], "q": [{"n": number, "t": topic, "m": text}]}
 // Both sides count the packets of a session; after FRAMES of them the game opens a new connection.
+import { makeTable } from './engine.gen.js';
 const PRE = 'cardgame101/v1/';
+const HOST_T = /^cardgame101\/v1\/(\d{4,10})\/h$/;     // the topic a room's phones talk to its table on
 const MAX_MSG = 200000, MAX_SUBS = 60, KEEP_MS = 30 * 86400000;
 const FRAMES = 10, QUEUE = 300, IDLE_MS = 90000;
 
 export class Relay {
-  constructor(state) {
+  constructor(state, env) {
     this.state = state;
+    this.env = env;
+    this.tables = new Map();                                // room code -> its table (the game runs here, not on a phone)
+    this.sseq = 0;
     this.subs = new Map();                                  // plain socket -> Set of topics
     this.clients = new Map();                               // burst client id -> its state
     this.epoch = Math.random().toString(36).slice(2, 8);    // changes when the relay starts anew and has forgotten everybody
@@ -48,8 +53,7 @@ export class Relay {
       this.rooms.set(code, { code, at: now, name: str(body.name, 30), host: str(body.host, 40), names: list(body.names, 18), pids: list(body.pids, 40),
         seats: int(body.seats, 2, 6, 6), hand: int(body.hand, 4, 6, 5), long: !!body.long, priv: !!body.priv, started: !!body.started,
         spec: int(body.spec, 0, 999, 0), open: int(body.open, 0, 6, 0), ver: int(body.ver, 0, 99999, 0),
-        // the key the room's messages are sealed with: an open room shows it to the game, a private one only
-        // the key locked with its password (only those who know the password can open it)
+        // version 109 sealed its rooms itself and kept the key here; tables on the server do not need it
         key: body.priv ? '' : str(body.key, 64), kbox: body.priv ? str(body.kbox, 400) : '' });
       if (this.rooms.size > 300) this.rooms.delete(this.rooms.keys().next().value);
       return json({ ok: true });
@@ -60,8 +64,55 @@ export class Relay {
     return json({ ok: true, rooms: out });
   }
 
+  // ----- the game's tables: one per room, kept in this relay's storage between restarts -----
+  async table(code, create) {
+    let t = this.tables.get(code);
+    if (t && !t.closed) return t;
+    const saved = create ? null : await this.state.storage.get('t:' + code);
+    if (!saved && !create) return null;
+    const H = {
+      send: (id, d) => { this.publish(PRE + code + '/c/' + id, JSON.stringify({ f: 'srv-' + code, q: ++this.sseq, d })); },
+      announce: info => {
+        const body = JSON.stringify(info || { code, gone: 1 });
+        this.env.RELAY.get(this.env.RELAY.idFromName('rooms')).fetch('https://relay/rooms', { method: 'POST', body }).catch(() => {});
+      },
+      save: st => { this.state.storage.put('t:' + code, st).catch(() => {}); },
+      drop: () => { this.tables.delete(code); this.state.storage.delete('t:' + code).catch(() => {}); }
+    };
+    t = makeTable(H, create ? { code, ...create } : { code, saved });
+    this.tables.set(code, t);
+    return t;
+  }
+  async newTable(d) {
+    const pid = String(d.pid || '');
+    if (!/^[A-Za-z0-9_-]{4,40}$/.test(pid)) return { ok: false };
+    if (this.tables.size > 400) return { ok: false, why: 'busy' };
+    let code = '';
+    for (let i = 0; i < 20 && !code; i++) {
+      const c = String(100000 + Math.floor(Math.random() * 900000));
+      if (!this.tables.has(c) && !(await this.state.storage.get('t:' + c))) code = c;
+    }
+    if (!code) return { ok: false };
+    const vk = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
+    await this.table(code, { owner: pid, lang: d.lang, vk, room: { name: d.name, seats: d.seats, hand: d.hand, long: !!d.long, priv: !!d.priv, pw: d.pw } });
+    return { ok: true, code };
+  }
+
   async fetch(request) {
     const url0 = new URL(request.url);
+    // a word to a table that does not need the relay (a phone leaving: its relay link may close before the word goes out)
+    if (url0.pathname === '/table/say' && request.method === 'POST') {
+      let d = {};
+      try { d = JSON.parse(await request.text()) || {}; } catch {}
+      const code = String(d.code || ''), table = /^\d{4,10}$/.test(code) ? await this.table(code) : null;
+      if (table && typeof d.from === 'string' && d.d && d.d.t === 'bye') table.onMessage(d.from, null, { t: 'bye' });
+      return new Response(JSON.stringify({ ok: !!table }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url0.pathname === '/table' && request.method === 'POST') {
+      let d = {};
+      try { d = JSON.parse(await request.text()) || {}; } catch {}
+      return new Response(JSON.stringify(await this.newTable(d)), { headers: { 'Content-Type': 'application/json' } });
+    }
     if (url0.pathname === '/rooms') {
       let body = null;
       if (request.method === 'POST') { try { body = JSON.parse(await request.text()) || {}; } catch { body = {}; } }
@@ -92,6 +143,17 @@ export class Relay {
 
   async publish(t, m, keep) {
     if (typeof t !== 'string' || typeof m !== 'string' || !t.startsWith(PRE) || t.length > 120) return;
+    // a message for a room's table: the table answers it; it is not passed on to anybody
+    const hm = HOST_T.exec(t);
+    if (hm) {
+      const table = await this.table(hm[1]);
+      if (table) {
+        let x = null;
+        try { x = JSON.parse(m); } catch {}
+        if (x && typeof x.f === 'string') { try { table.onMessage(x.f, x.q, x.d); } catch (e) { console.log('table', hm[1], e && e.stack); } }
+        return;
+      }
+    }
     if (keep) {
       if (m && m.length <= 2000) await this.state.storage.put('k:' + t, { m, at: Date.now() });
       else await this.state.storage.delete('k:' + t);
