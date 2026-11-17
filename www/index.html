@@ -932,17 +932,18 @@
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   // ----- language: Russian or English, kept on this device. Who played before keeps Russian;
   // a new device takes the phone's language. L('по-русски', 'in English') picks one.
-  // the same page runs on the game's site, in the Android app and on Yandex Games (an archive made by yandex/build.mjs):
+  // the same page runs on the game's site, in the Android app and on Yandex Games (an archive made by yandex/build.py):
   // there the platform's rules apply — no links out, the language from the platform, no voice chat
   const YA = window.PLATFORM_101 === 'yandex';
   // VK Games open the game's own site inside VK, with VK's launch parameters in the address
-  const CG = window.PLATFORM_101 === 'crazygames';          // CrazyGames: an archive made by stores/build.py crazygames
+  const CG = window.PLATFORM_101 === 'crazygames';          // CrazyGames: an archive made by crazygames/build.py
   const VK = !YA && !CG && /(^|[?&])(vk_app_id|api_id)=/.test(location.search);
   const EMBED = YA || VK || CG;          // inside another platform: its rules — no links out, no voice chat, no notifications
   let lang = 'ru';
   try {
     lang = localStorage.getItem('g101-lang') ||
-      (localStorage.getItem('g101-pid') || /^ru|^uk|^be|^kk/i.test(navigator.language || '') ? 'ru' : 'en');
+      (CG ? 'en' :                                            // CrazyGames: English unless the player picks Russian in ⚙
+        localStorage.getItem('g101-pid') || /^ru|^uk|^be|^kk/i.test(navigator.language || '') ? 'ru' : 'en');
   } catch {}
   if (lang !== 'en') lang = 'ru';
   const L = (ru, en) => (lang === 'en' ? en : ru);
@@ -951,7 +952,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 118;              // keep in sync with www/version.txt
+  const VERSION = 119;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
