@@ -431,6 +431,7 @@
   .room .meta i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--muted); }
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
   .room .gearB { flex: none; border: 0; background: none; color: var(--muted); padding: 6px; display: flex; align-items: center; }
+  .privLink { display: block; text-align: center; color: var(--muted); font-size: 13px; margin: 4px 0 2px; }
   .roomsH { margin: 10px 4px 2px; font-size: 13px; font-weight: 700; color: var(--muted); text-align: left; text-transform: uppercase; letter-spacing: .04em; }
   .roomsH:first-child { margin-top: 0; }
   .room .gearB svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; pointer-events: none; }
@@ -722,6 +723,7 @@
       <div class="pick" id="langPick"><button data-lang="ru">Русский</button><button data-lang="en">English</button></div>
       <div class="gl">Фон стола</div>
       <div class="bgs" id="bgs"></div>
+      <a class="privLink" id="privLink" href="https://khabar6233-jpg.github.io/game-101/privacy.html" target="_blank" rel="noopener">Политика конфиденциальности</a>
       <button class="btn plain" id="gearClose">Закрыть</button>
     </div>
   </div>
@@ -909,7 +911,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 112;              // keep in sync with www/version.txt
+  const VERSION = 113;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -4194,7 +4196,7 @@
     'колода': 'deck', 'Колода: 36 или 52 карты': 'Deck: 36 or 52 cards', 'Правила': 'Rules', 'Имя': 'Name',
     'Как вас зовут': 'Your name', 'Открытые игры': 'Open games', 'Создать игру': 'Create game', 'Друзья': 'Friends',
     'С ботами': 'With bots', 'карт': 'cards', 'в руке': 'in hand', 'Мик': 'Mic', 'Звук': 'Sound', 'Вибро': 'Vibrate',
-    'Проверить связь': 'Test connection', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
+    'Политика конфиденциальности': 'Privacy policy', 'Проверить связь': 'Test connection', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
     'Вернуть кнопки и окно масти на место': 'Put buttons and the suit window back', 'Фон стола': 'Table background',
     'Закрыть': 'Close', 'Понятно': 'Got it', 'Зрители': 'Spectators', 'Компания': 'Group', 'Войти': 'Join', 'Удалить': 'Delete', 'Отмена': 'Cancel',
     'Название': 'Name', 'Как назвать стол': 'Table name', 'Карт в колоде': 'Cards in deck', 'Мест за столом': 'Seats at the table',
@@ -4269,6 +4271,7 @@
     lang = lg === 'en' ? 'en' : 'ru';
     try { localStorage.setItem('g101-lang', lang); } catch {}
     applyLang();
+    $('privLink').href = 'https://khabar6233-jpg.github.io/game-101/privacy.html?lang=' + lang;
     $('ver').textContent = L('версия ', 'version ') + VERSION;
     $('nameHint').textContent = '';
     if (mode === 'guest' && hostConn && hostConn.open) hostConn.send({ t: 'lang', lang });
