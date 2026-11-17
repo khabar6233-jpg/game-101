@@ -373,6 +373,17 @@
   .voice.off { opacity: .55; }
   .voice.off::after { content: ''; position: absolute; left: 5px; right: 5px; top: 50%; height: 2px; background: #fff; transform: rotate(-45deg); }
   .voice.on { background: var(--gold); color: #222; }
+  #coach { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 52px); z-index: 30; display: none;
+    width: min(340px, calc(100vw - 32px)); background: #fffaf0; color: #222; border-radius: 14px; padding: 12px 14px 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.5); font-size: 15px; line-height: 1.35; text-align: left; }
+  #coach.show { display: block; animation: coachIn .3s ease; }
+  #coach .cb { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 10px; }
+  #coach button { border: 0; font: inherit; cursor: pointer; }
+  #coach .ok { background: var(--felt); color: #fff; font-weight: 700; border-radius: 10px; padding: 7px 16px; }
+  #coach .off { background: none; color: #777; font-size: 13px; text-decoration: underline; padding: 6px 0; }
+  @keyframes coachIn { from { opacity: 0; translate: 0 10px; } }
+  .coachT { outline: 3px solid var(--gold); outline-offset: 5px; border-radius: 10px; animation: coachGlow 1.3s ease-in-out infinite; }
+  @keyframes coachGlow { 50% { outline-color: transparent; } }
   #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60; max-width: 92vw; display: none;
     background: #fff; color: #222; border-radius: 12px; padding: 10px 16px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
   #toast.show { display: block; animation: toastIn .35s ease; touch-action: none; }
@@ -745,6 +756,7 @@
         <button class="vbtn off" id="micBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Мик</span></button>
         <button class="vbtn off" id="spkBtn"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Голос</span></button>
         <button class="vbtn on" id="sfxBtn"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="10" height="14" rx="1.6" transform="rotate(-10 9 12)"/><rect x="10" y="5" width="10" height="14" rx="1.6" transform="rotate(8 15 12)" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Звуки</span></button>
+        <button class="vbtn on" id="tutBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.3 9.4a2.8 2.8 0 1 1 3.9 2.6c-.8.4-1.2 1-1.2 1.9v.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.3"/></svg><span>Подсказки</span></button>
         <button class="vbtn off" id="vibBtn" style="display:none"><svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="18" rx="2.2"/><path d="M4.5 8.5v7M1.8 10.5v3M19.5 8.5v7M22.2 10.5v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Вибро</span></button>
       </div>
       <div class="conn">
@@ -955,7 +967,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 123;              // keep in sync with www/version.txt
+  const VERSION = 124;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -1087,16 +1099,43 @@
   document.addEventListener('visibilitychange', () => (document.hidden ? sPause() : sWake()));
   addEventListener('blur', sPause);
   addEventListener('focus', sWake);
-  // one short "fft" of a card: a burst of noise through a band filter
-  function sCard(at, { f = 2600, q = 1.2, dur = 0.07, vol = 0.35, low = false } = {}) {
+  // a card sliding: a breath of noise through a band filter that glides from f to f2
+  function sSwish(at, { f = 1400, f2 = 900, q = 0.9, dur = 0.12, vol = 0.25, att = 0.02 } = {}) {
     const c = sCtx, src = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
     src.buffer = sNoise;
-    flt.type = low ? 'lowpass' : 'bandpass'; flt.frequency.value = f; flt.Q.value = q;
+    flt.type = 'bandpass'; flt.Q.value = q;
+    flt.frequency.setValueAtTime(f, at); flt.frequency.exponentialRampToValueAtTime(f2, at + dur);
     g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(vol, at + 0.006);
+    g.gain.linearRampToValueAtTime(vol, at + att);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     src.connect(flt); flt.connect(g); g.connect(c.destination);
-    src.start(at, Math.random() * 0.4); src.stop(at + dur + 0.02);
+    src.start(at, Math.random() * 0.3); src.stop(at + dur + 0.03);
+  }
+  // a card landing on the table: a short soft knock, low
+  function sThud(at, vol = 0.4) {
+    const c = sCtx, src = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = sNoise;
+    flt.type = 'lowpass'; flt.frequency.value = 420; flt.Q.value = 0.6;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(vol, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.08);
+    src.connect(flt); flt.connect(g); g.connect(c.destination);
+    src.start(at, Math.random() * 0.3); src.stop(at + 0.1);
+  }
+  // a riffle: one stream of paper noise whose loudness flutters unevenly (an even beat sounds like a ratchet)
+  function sRiffle(at, len = 0.55, vol = 0.22) {
+    const c = sCtx, src = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = sNoise; src.loop = true;
+    flt.type = 'bandpass'; flt.frequency.value = 1300; flt.Q.value = 0.7;
+    g.gain.setValueAtTime(0.0001, at);
+    for (let x = 0.01; x < len; x += 0.006 + Math.random() * 0.012) {
+      const env = Math.sin(Math.PI * x / len) ** 0.6;
+      g.gain.linearRampToValueAtTime(vol * env * (0.25 + Math.random() * 0.75), at + x);
+    }
+    g.gain.linearRampToValueAtTime(0.0001, at + len + 0.02);
+    flt.frequency.setValueAtTime(1500, at); flt.frequency.linearRampToValueAtTime(1000, at + len);
+    src.connect(flt); flt.connect(g); g.connect(c.destination);
+    src.start(at); src.stop(at + len + 0.05);
   }
   function sTone(at, freq, dur, vol, type = 'sine') {
     const c = sCtx, o = c.createOscillator(), g = c.createGain();
@@ -1111,24 +1150,22 @@
     if (!sfxOn || sfxMuted || document.hidden) return;
     const c = sGet();
     if (!c || c.state !== 'running') return;
-    const t = c.currentTime + 0.01, r = () => 0.85 + Math.random() * 0.3;
-    if (kind === 'play') {                 // a card put on the pile: a slide and a soft slap
-      sCard(t, { f: 3200 * r(), dur: 0.05, vol: 0.22 });
-      sCard(t + 0.045, { f: 900 * r(), q: 0.7, dur: 0.09, vol: 0.45, low: true });
+    const t = c.currentTime + 0.01, r = () => 0.9 + Math.random() * 0.2;
+    if (kind === 'play') {                 // a card put on the pile: a slide and a soft knock
+      sSwish(t, { f: 1500 * r(), f2: 700, dur: 0.11, vol: 0.2 });
+      sThud(t + 0.09, 0.45);
     } else if (kind === 'draw') {          // cards taken from the deck: a quick slide each
-      for (let k = 0; k < Math.min(n, 6); k++) sCard(t + k * 0.13, { f: 2200 * r(), dur: 0.08, vol: 0.3 });
-    } else if (kind === 'shuffle') {       // a riffle: many short flicks, then the deck squared up
-      for (let k = 0; k < 18; k++) sCard(t + k * 0.032 + Math.random() * 0.01, { f: 3000 * r(), q: 1.6, dur: 0.035, vol: 0.18 });
-      sCard(t + 0.66, { f: 700, q: 0.7, dur: 0.12, vol: 0.4, low: true });
+      for (let k = 0; k < Math.min(n, 6); k++) sSwish(t + k * 0.15, { f: 900 * r(), f2: 1500, dur: 0.14, vol: 0.18, att: 0.04 });
+    } else if (kind === 'shuffle') {       // a riffle, then the deck squared up
+      sRiffle(t);
+      sThud(t + 0.62, 0.35); sThud(t + 0.7, 0.25);
     } else if (kind === 'deal') {          // the deal: a shuffle, then the cards go round
       sfx('shuffle');
-      for (let k = 0; k < Math.min(n, 12); k++) sCard(t + 0.85 + k * 0.09, { f: 2400 * r(), dur: 0.06, vol: 0.26 });
+      for (let k = 0; k < Math.min(n, 12); k++) sSwish(t + 0.9 + k * 0.11, { f: 1300 * r(), f2: 800, dur: 0.08, vol: 0.15, att: 0.012 });
     } else if (kind === 'win') {
-      [523, 659, 784, 1047].forEach((f, k) => sTone(t + k * 0.11, f, 0.35, 0.12, 'triangle'));
+      [523, 659, 784].forEach((f, k) => sTone(t + k * 0.11, f / 2, 0.35, 0.09, 'triangle'));
     } else if (kind === 'lose') {
-      [392, 330, 262].forEach((f, k) => sTone(t + k * 0.14, f, 0.4, 0.1, 'sine'));
-    } else if (kind === 'turn') {          // my move: a quiet tick
-      sTone(t, 880, 0.12, 0.05, 'sine');
+      [392, 330, 262].forEach((f, k) => sTone(t + k * 0.14, f / 2, 0.4, 0.08, 'triangle'));
     }
   }
   function buzz(ms) {
@@ -1698,7 +1735,7 @@
     const hasMove = v.hand.some(c => c.ok);
     if (localQueen !== null && (!myTurn || !v.hand.some(c => c.id === localQueen))) localQueen = null;
     if (myTurn && !wasMyTurn) {
-      buzz(250); sfx('turn');      // "your move"
+      buzz(250);      // "your move"
       // the table was tapped while the previous card was still landing: take the card now
       if (Date.now() - drawWish < 900 && !v.drew && !v.pendingSix) setTimeout(() => action({ t: 'draw' }), 0);
     }
@@ -1962,7 +1999,75 @@
     if (window.placeSuit && $('suitPick').classList.contains('show')) window.placeSuit();
     $('suitCancel').style.display = localQueen !== null ? '' : 'none';
     drawResult(v);
+    coach(v, ev);
   }
+
+  // ----- tips for the first game: one short hint at a time, each shown once; off in ⚙ "Подсказки" -----
+  let tutOn = true, tutSeen = {};
+  try { tutOn = localStorage.getItem('g101-tut') !== '0'; tutSeen = JSON.parse(localStorage.getItem('g101-tut-seen') || '{}') || {}; } catch {}
+  const tutSave = () => { try { localStorage.setItem('g101-tut', tutOn ? '1' : '0'); localStorage.setItem('g101-tut-seen', JSON.stringify(tutSeen)); } catch {} };
+  let coachKey = '', coachTarget = null, coachMoved = false;
+  function coachTips(v) {
+    const myTurn = v.phase === 'play' && v.turn === v.seat && !v.busy, t = v.top;
+    const ok = v.hand.some(c => c.ok), play = v.phase === 'play';
+    const left = v.pendingSix - (v.drew ? 1 : 0), seven = t && t.r === 7;
+    return [
+      ['goal', play && !coachMoved, '#pile',
+        L('Цель — первым избавиться от всех карт. На карту в сбросе кладут карту той же масти или того же достоинства.',
+          'The goal: be the first to get rid of all your cards. On the top card of the pile you put a card of the same suit or the same rank.')],
+      ['take', myTurn && !!v.pendingSix, '#actions',
+        L(`${seven ? 'Семёрка' : 'Шестёрка'}: нужно взять ${left} ${cardsWord(left)} и пропустить ход — нажмите «Беру».` + (ok ? ` Или переведите её дальше: положите ${seven ? 'свою семёрку' : 'свою шестёрку'}.` : ''),
+          `A ${seven ? 'seven' : 'six'}: you take ${left} ${cardsEn(left)} and miss a turn — press "Take".` + (ok ? ` Or pass it on with a ${seven ? 'seven' : 'six'} of your own.` : ''))],
+      ['pass', myTurn && !v.pendingSix && v.drew && !ok, '#actions',
+        L('Карта не подошла — нажмите «Пас», ход перейдёт дальше.', 'The card does not fit — press "Pass" and the move goes on.')],
+      ['draw', myTurn && !v.pendingSix && !v.drew && !ok && v.canDraw, '#deck',
+        L('Положить нечего — нажмите на колоду и возьмите карту. Подойдёт — её можно сразу положить.', 'Nothing to play — tap the deck to draw a card. If it fits, you can play it right away.')],
+      ['queen', myTurn && !v.pendingSix && v.hand.some(c => c.ok && c.r === 12), '#myHand',
+        L('Даму можно положить на любую карту. Потом вы выберете масть, в которую ходят дальше.', 'A queen goes on any card. Then you choose the suit everyone plays next.')],
+      ['play', myTurn && !v.pendingSix && ok, '#myHand',
+        L('Ваш ход! Карты, которые можно положить, приподняты. Нажмите на карту, чтобы положить её.', 'Your move! The cards you can play are raised. Tap a card to play it.')],
+      ['ace', play && !!t && t.r === 14, '#pile', L('Туз: следующий игрок пропускает ход.', 'An ace: the next player misses a turn.')],
+      ['eight', play && v.long && !!t && t.r === 8, '#pile',
+        L('Восьмёрку кроет тот, кто её положил. Нечем — берёт из колоды до 3 карт.', 'An eight is covered by the one who played it. Nothing to cover with — draw up to 3 cards.')],
+      ['ten', play && v.long && !!t && t.r === 10, '#pile',
+        L('Десятка меняет направление игры — его показывают стрелки на столе.', 'A ten reverses the direction of play — the arrows on the table show it.')],
+      ['score', v.phase === 'roundEnd' && !!v.result, '',
+        L('Раунд окончен. Остальные получают очки за карты на руке. 102 очка и больше — выбываешь, ровно 101 — счёт обнуляется. Побеждает тот, кто остался последним.',
+          'The round is over. The others get points for the cards in their hands. 102 or more — you are out; exactly 101 — the score goes back to 0. The last one left wins.')]
+    ];
+  }
+  function coach(v, ev) {
+    if (ev && ev.type === 'play' && ev.pi === v.seat) coachMoved = true;    // my own move (not the round's opening card)
+    const tip = tutOn && v && !v.spec && v.seat >= 0 ? coachTips(v).find(x => x[1] && !tutSeen[x[0]]) : null;
+    coachShow(tip);
+  }
+  function coachShow(tip) {
+    let el = $('coach');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'coach';
+      el.innerHTML = '<div class="ct"></div><div class="cb"><button class="ok"></button><button class="off"></button></div>';
+      document.body.appendChild(el);
+      onTap(el.querySelector('.ok'), () => { if (coachKey) { tutSeen[coachKey] = 1; tutSave(); } coachKey = ''; coachShow(null); if (view) coach(view); return true; });
+      onTap(el.querySelector('.off'), () => {
+        tutOn = false; tutSave(); coachShow(null); tutBtn();
+        notifyUser(L('Подсказки выключены. Включить снова: ⚙ → «Подсказки»', 'Tips are off. To turn them back on: ⚙ → "Tips"'));
+        return true;
+      });
+    }
+    const key = tip ? tip[0] : '';
+    if (key !== coachKey && coachKey) { tutSeen[coachKey] = 1; tutSave(); }    // a tip that was on the screen and went away has been seen
+    coachKey = key;
+    if (coachTarget) { coachTarget.classList.remove('coachT'); coachTarget = null; }
+    el.classList.toggle('show', !!tip);
+    if (!tip) return;
+    el.querySelector('.ct').textContent = tip[3];
+    el.querySelector('.ok').textContent = L('Понятно', 'Got it');
+    el.querySelector('.off').textContent = L('Без подсказок', 'No tips');
+    coachTarget = tip[2] ? document.querySelector(tip[2]) : null;
+    if (coachTarget) coachTarget.classList.add('coachT');
+  }
+  function tutBtn() { const b = $('tutBtn'); if (b) b.className = 'vbtn ' + (tutOn ? 'on' : 'off'); }
 
   // Which cards in my hand were just taken from the deck. They stay marked until I make a move.
   function trackNewCards(v) {
@@ -2784,6 +2889,7 @@
 
   function leave() {
     document.body.classList.remove('myturn', 'waiting', 'watching');
+    coachShow(null);
     showSpecs(0, []);
     // one on one, the game is not finished: it is counted by points
     try {
@@ -3635,6 +3741,7 @@
   onTap($('specEye'), () => { if (specNames.length) notifyUser(L('Смотрят: ', 'Watching: ') + specNames.join(', ')); return true; });
   function drawWaiting(names) {
     showOnly(null);
+    coachShow(null);
     document.body.classList.remove('myturn');
     $('roundNo').textContent = '—';
     $('roomTag').innerHTML = (lobbyRoom && lobbyRoom.name ? ' · ' + esc(lobbyRoom.name) : '') + '<span class="vtag"> · v' + VERSION + '</span>';
@@ -4071,6 +4178,13 @@
     $('sfxBtn').className = 'vbtn ' + (sfxOn ? 'on' : 'off');
     if (sfxOn) { const c = sGet(); if (c) c.resume().then(() => sfx('play')).catch(() => {}); }
   };
+  tutBtn();
+  $('tutBtn').onclick = () => {
+    tutOn = !tutOn;
+    if (tutOn) { tutSeen = {}; coachMoved = false; }       // turned on again: the tips start from the beginning
+    tutSave(); tutBtn();
+    if (view) coach(view);
+  };
   $('vibBtn').style.display = canVib ? '' : 'none';
   $('vibBtn').className = 'vbtn ' + (vibOn ? 'on' : 'off');
   $('vibBtn').onclick = () => {
@@ -4458,7 +4572,7 @@
     'Колода:': 'Deck:', 'Сброс:': 'Pile:', 'Масть': 'Suit', 'Ваш ход': 'Your move', 'Сортировать карты': 'Sort cards',
     'колода': 'deck', 'Колода: 36 или 52 карты': 'Deck: 36 or 52 cards', 'Правила': 'Rules', 'Имя': 'Name',
     'Как вас зовут': 'Your name', 'Открытые игры': 'Open games', 'Создать игру': 'Create game', 'Друзья': 'Friends',
-    'С ботами': 'With bots', 'карт': 'cards', 'в руке': 'in hand', 'Мик': 'Mic', 'Звук': 'Sound', 'Голос': 'Voice', 'Звуки': 'Sounds', 'Вибро': 'Vibrate',
+    'С ботами': 'With bots', 'карт': 'cards', 'в руке': 'in hand', 'Мик': 'Mic', 'Звук': 'Sound', 'Голос': 'Voice', 'Звуки': 'Sounds', 'Подсказки': 'Tips', 'Вибро': 'Vibrate',
     'Политика конфиденциальности': 'Privacy policy', 'Проверить связь': 'Test connection', 'Играть': 'Play', 'Позвать друга': 'Invite a friend', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
     'Вернуть кнопки и окно масти на место': 'Put buttons and the suit window back', 'Фон стола': 'Table background',
     'Закрыть': 'Close', 'Понятно': 'Got it', 'Зрители': 'Spectators', 'Компания': 'Group', 'Войти': 'Join', 'Удалить': 'Delete', 'Отмена': 'Cancel',
