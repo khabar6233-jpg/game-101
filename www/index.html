@@ -114,7 +114,7 @@
   .spread .card:last-child { box-shadow: 0 0 0 2px var(--gold), 0 2px 6px rgba(0,0,0,.35); }
   .actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-height: 46px; }
   /* right under the cards on the table: "your move" in the middle, the buttons to the right of it */
-  .below { position: absolute; left: 0; right: 0; top: calc(50% + var(--ch) / 2 + 70px); display: grid; grid-template-columns: 1fr auto 1fr;
+  .below { position: absolute; left: 0; right: 0; top: min(calc(50% + var(--ch) / 2 + 70px), calc(100% - 52px)); display: grid;   /* never down on the line */ grid-template-columns: 1fr auto 1fr;
     align-items: center; gap: 8px; min-height: 46px; }
   .below .actions { grid-column: 3; min-height: 0; }
   #turnNote { grid-column: 2; visibility: hidden; color: var(--gold); font-weight: 800; font-size: 17px; }
@@ -436,6 +436,21 @@
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
   .room .gearB { flex: none; border: 0; background: none; color: var(--muted); padding: 6px; display: flex; align-items: center; }
   .privLink { display: block; text-align: center; color: var(--muted); font-size: 13px; margin: 4px 0 2px; }
+  /* the list of tables: "Играть" (gathering players) and "Смотреть" (already playing); a tap or a swipe switches */
+  .roomTabs { position: relative; display: flex; flex: none; padding: 3px; border-radius: 12px; background: rgba(0,0,0,.25); }
+  .roomTabs button { flex: 1; position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: none;
+    padding: 7px 0; color: var(--muted); font: inherit; font-size: 14px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; transition: color .25s; }
+  .roomTabs button.on { color: #fff; }
+  .roomTabs button b { min-width: 20px; padding: 0 6px; border-radius: 9px; background: rgba(255,255,255,.14); font-size: 12px; line-height: 18px; }
+  .roomTabs button b:empty { display: none; }
+  .roomTabs i { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 9px; transition: transform .28s ease;
+    background: linear-gradient(rgba(255,255,255,.26), rgba(255,255,255,.1)), var(--felt); box-shadow: 0 2px 0 var(--felt-dark); }
+  .roomTabs.watch i { transform: translateX(100%); }
+  .panel.games #rooms { touch-action: pan-y; }
+  #rooms.inL { animation: roomsInL .26s ease; }
+  #rooms.inR { animation: roomsInR .26s ease; }
+  @keyframes roomsInL { from { transform: translateX(40px); opacity: 0; } }
+  @keyframes roomsInR { from { transform: translateX(-40px); opacity: 0; } }
   .roomsH { margin: 10px 4px 2px; font-size: 13px; font-weight: 700; color: var(--muted); text-align: left; text-transform: uppercase; letter-spacing: .04em; }
   .roomsH:first-child { margin-top: 0; }
   .room .gearB svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; pointer-events: none; }
@@ -678,7 +693,7 @@
     <div class="hint bad" id="nameHint"></div>
 
     <section class="panel games">
-      <h3>Открытые игры</h3>
+      <div class="roomTabs" id="roomTabs"><i></i><button data-tab="play">Играть<b></b></button><button data-tab="watch">Смотреть<b></b></button></div>
       <div id="rooms"></div>
       <div class="msg" id="netMsg"></div>
     </section>
@@ -918,7 +933,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 114;              // keep in sync with www/version.txt
+  const VERSION = 115;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -3147,15 +3162,51 @@
     const el = $('rooms');
     let html;
     if (roomList === null) html = '<p class="none">' + (roomListErr > 1 ? L('Нет связи с сервером игры: список не загрузился.', 'No connection to the game server: the list did not load.') : L('Загружаем список игр…', 'Loading games…')) + '</p>';
-    else if (!roomList.length) html = '<p class="none">' + L('Открытых игр сейчас нет. Создайте свою — её увидят все.', 'No open games right now. Create one — everyone will see it.') + '</p>';
     else {
-      // tables still gathering players first, then the ones already playing
-      const part = (list, title) => list.length ? `<h4 class="roomsH">${title}</h4>` + list.map(roomRow).join('') : '';
-      html = part(roomList.filter(r => !r.started), L('Набор игроков', 'Gathering players')) + part(roomList.filter(r => r.started), L('Идёт игра', 'Playing now'))
+      // "Играть": tables gathering players; "Смотреть": tables already playing
+      const list = roomList.filter(r => !!r.started === (roomTab === 'watch'));
+      html = (list.length ? list.map(roomRow).join('') : '<p class="none">' + (roomTab === 'watch'
+          ? L('Сейчас никто не играет.', 'Nobody is playing right now.')
+          : L('Свободных столов нет. Создайте свою игру — её увидят все.', 'No tables waiting for players. Create a game — everyone will see it.')) + '</p>')
         + (roomListErr > 2 ? '<p class="none">' + L('Нет связи с сервером игры: список может быть устаревшим.', 'No connection to the game server: the list may be out of date.') + '</p>' : '');
     }
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+    drawRoomTabs();
     return;
+  }
+  // which half of the list is shown: remembered on this device
+  var roomTab = 'play';
+  try { if (localStorage.getItem('g101-rtab') === 'watch') roomTab = 'watch'; } catch {}
+  function drawRoomTabs() {
+    const t = $('roomTabs'), n = x => (roomList || []).filter(r => !!r.started === x).length;
+    t.classList.toggle('watch', roomTab === 'watch');
+    t.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('on', b.dataset.tab === roomTab);
+      const k = roomList ? n(b.dataset.tab === 'watch') : 0;
+      b.querySelector('b').textContent = k ? k : '';
+    });
+  }
+  function setRoomTab(tab) {
+    if (tab === roomTab) return;
+    roomTab = tab;
+    try { localStorage.setItem('g101-rtab', tab); } catch {}
+    const el = $('rooms');
+    el.classList.remove('inL', 'inR'); void el.offsetWidth;
+    el.classList.add(tab === 'watch' ? 'inL' : 'inR');
+    el.scrollTop = 0;
+    drawRooms();
+  }
+  $('roomTabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) setRoomTab(b.dataset.tab); };
+  // a swipe across the list: to the left "Смотреть", to the right "Играть"
+  {
+    let x0 = null, y0 = 0;
+    $('rooms').addEventListener('touchstart', e => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; }, { passive: true });
+    $('rooms').addEventListener('touchend', e => {
+      if (x0 == null) return;
+      const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      x0 = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) setRoomTab(dx < 0 ? 'watch' : 'play');
+    }, { passive: true });
   }
   function drawRoomsOld() {
     const el = $('rooms');
@@ -4188,7 +4239,7 @@
     'колода': 'deck', 'Колода: 36 или 52 карты': 'Deck: 36 or 52 cards', 'Правила': 'Rules', 'Имя': 'Name',
     'Как вас зовут': 'Your name', 'Открытые игры': 'Open games', 'Создать игру': 'Create game', 'Друзья': 'Friends',
     'С ботами': 'With bots', 'карт': 'cards', 'в руке': 'in hand', 'Мик': 'Mic', 'Звук': 'Sound', 'Вибро': 'Vibrate',
-    'Политика конфиденциальности': 'Privacy policy', 'Проверить связь': 'Test connection', 'Позвать друга': 'Invite a friend', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
+    'Политика конфиденциальности': 'Privacy policy', 'Проверить связь': 'Test connection', 'Играть': 'Play', 'Позвать друга': 'Invite a friend', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
     'Вернуть кнопки и окно масти на место': 'Put buttons and the suit window back', 'Фон стола': 'Table background',
     'Закрыть': 'Close', 'Понятно': 'Got it', 'Зрители': 'Spectators', 'Компания': 'Group', 'Войти': 'Join', 'Удалить': 'Delete', 'Отмена': 'Cancel',
     'Название': 'Name', 'Как назвать стол': 'Table name', 'Карт в колоде': 'Cards in deck', 'Мест за столом': 'Seats at the table',
