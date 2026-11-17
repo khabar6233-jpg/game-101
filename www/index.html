@@ -435,7 +435,9 @@
   .room .meta i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--muted); }
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
   .room .gearB { flex: none; border: 0; background: none; color: var(--muted); padding: 6px; display: flex; align-items: center; }
-  body.ya .privLink, body.ya #micBtn, body.ya #spkBtn { display: none !important; }
+  body.embed .privLink, body.embed #micBtn, body.embed #spkBtn { display: none !important; }
+  /* VK's mobile apps put their own buttons in the top right corner: ours step aside */
+  body.vkcap #app > .bar, body.vkcap .home .brand { padding-right: 96px; }
   .privLink { display: block; text-align: center; color: var(--muted); font-size: 13px; margin: 4px 0 2px; }
   /* the list of tables: "Играть" (gathering players) and "Смотреть" (already playing); a tap or a swipe switches */
   .roomTabs { position: relative; display: flex; flex: none; padding: 3px; border-radius: 12px; background: rgba(0,0,0,.25); }
@@ -925,6 +927,9 @@
   // the same page runs on the game's site, in the Android app and on Yandex Games (an archive made by yandex/build.mjs):
   // there the platform's rules apply — no links out, the language from the platform, no voice chat
   const YA = window.PLATFORM_101 === 'yandex';
+  // VK Games open the game's own site inside VK, with VK's launch parameters in the address
+  const VK = !YA && /(^|[?&])(vk_app_id|api_id)=/.test(location.search);
+  const EMBED = YA || VK;          // inside another platform: its rules — no links out, no voice chat, no notifications
   let lang = 'ru';
   try {
     lang = localStorage.getItem('g101-lang') ||
@@ -937,7 +942,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 116;              // keep in sync with www/version.txt
+  const VERSION = 117;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -2738,8 +2743,8 @@
     return !!x && Date.now() - x.t < 12000 && !vDirect(id) && ((IOS && x.ios) || Date.now() - x.t0 > 8000);
   };
   let vMic = false, vSpk = false, vStream = null, vHello = null, vAuto = false;
-  let spkPref = !YA;               // the sound of the others: this device's choice, kept between games (no voice on Yandex Games)
-  try { if (!YA) spkPref = localStorage.getItem('g101-spk') !== '0'; } catch {}
+  let spkPref = !EMBED;               // the sound of the others: this device's choice, kept between games (no voice on Yandex Games)
+  try { if (!EMBED) spkPref = localStorage.getItem('g101-spk') !== '0'; } catch {}
   const saveSpk = () => { try { localStorage.setItem('g101-spk', spkPref ? '1' : '0'); } catch {} };
   const vOn = () => vMic || vSpk;
   const vSend = (to, kind, data) => { if (peer && roomCode) peer.send(TOPIC + roomCode + '/v', { t: 'v', to, kind, data }); };
@@ -3123,13 +3128,13 @@
     toastT = setTimeout(() => el.classList.remove('show'), 8000);
     try {
       if (window.App101 && window.App101.note) { if (document.hidden) window.App101.note('101', text); else buzz(120); }
-      else if (!YA && document.hidden && window.Notification && Notification.permission === 'granted') new Notification('101', { body: text, icon: 'icon-192.png' });
+      else if (!EMBED && document.hidden && window.Notification && Notification.permission === 'granted') new Notification('101', { body: text, icon: 'icon-192.png' });
     } catch {}
   }
   function askNotify() {
     try {
       if (window.App101 && window.App101.askNotify) window.App101.askNotify();
-      else if (!YA && window.Notification && Notification.permission === 'default') Notification.requestPermission();
+      else if (!EMBED && window.Notification && Notification.permission === 'default') Notification.requestPermission();
     } catch {}
   }
 
@@ -3288,7 +3293,7 @@
   function inviteText() {
     const r = lobbyRoom || {}, name = $('nick').value.trim().slice(0, 12) || L('Друг', 'Friend');
     const long = mode === 'guest' && view ? !!view.long : !!lobbyLong;
-    const url = YA ? yaLink(name) : SITE_URL + '?join=' + roomCode + (roomInv ? '&i=' + encodeURIComponent(roomInv) : '') +
+    const url = YA ? yaLink(name) : VK ? vkLink(name) : SITE_URL + '?join=' + roomCode + (roomInv ? '&i=' + encodeURIComponent(roomInv) : '') +
       '&f=' + encodeURIComponent(myPid) + '&n=' + encodeURIComponent(name);
     const table = r.name || roomCode, seats = r.seats || MAX_PLAYERS;
     return L(`${name} зовёт сыграть в 101 — стол «${table}», ${long ? '52 карты' : '36 карт'}, мест: ${seats}. Садись: ${url}`,
@@ -3298,6 +3303,10 @@
     if (mode !== 'guest' || !roomCode) return;
     const text = inviteText();
     if (window.App101 && window.App101.share) { window.App101.share(text); return; }      // the Android app: its own "Share"
+    if (VK && window.vkBridge) {                              // VK: VK's own "share" (a message to a friend, a post)
+      try { await window.vkBridge.send('VKWebAppShare', { link: vkLink($('nick').value.trim().slice(0, 12) || L('Друг', 'Friend')) }); } catch {}
+      return;
+    }
     if (navigator.share) {
       try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
     }
@@ -4193,6 +4202,7 @@
     const payload = [roomCode, roomInv, myPid, b64u(name)].join('.');
     return base + (base.includes('?') ? '&' : '?') + 'payload=' + payload;
   }
+  if (EMBED) document.body.classList.add('embed');
   if (YA) {
     document.body.classList.add('ya');
     // a long press on the table never opens the browser's menu (the platform's rule); typing a name still can
@@ -4215,8 +4225,26 @@
       if (pl.length >= 3) openInvite(pl[0], pl[1], pl[2], unb64u(pl[3] || ''));
     })();
   }
+  // ----- VK Games: VK Bridge, the language VK says, an invitation after "#" in the game's VK address -----
+  const vkq = new URLSearchParams(location.search);
+  function vkLink() {
+    return 'https://vk.com/app' + (vkq.get('vk_app_id') || vkq.get('api_id') || '') + '#' + [roomCode, roomInv, myPid, b64u($('nick').value.trim().slice(0, 12) || L('Друг', 'Friend'))].join('.');
+  }
+  if (VK) {
+    document.body.classList.add('vk');
+    if (/^mobile_(android|iphone|ipad)/.test(vkq.get('vk_platform') || '')) document.body.classList.add('vkcap');
+    document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
+    const vl = vkq.get('vk_language') || vkq.get('language') || '';
+    if (vl) setTimeout(() => setLang(/^(ru|uk|be|kk|0|1|2|114)$/.test(vl) ? 'ru' : 'en'), 0);   // old VK sends numbers: 0 ru, 1 uk, 114 be
+    const sc = document.createElement('script');
+    sc.src = 'vk-bridge.js';
+    sc.onload = () => { try { window.vkBridge.send('VKWebAppInit', {}); } catch (e) { console.error(e); } };
+    document.head.appendChild(sc);
+    const pl = decodeURIComponent(location.hash.slice(1)).split('.');
+    if (pl.length >= 3) openInvite(pl[0], pl[1], pl[2], unb64u(pl[3] || ''));
+  }
   // a link to the game's site: ...?join=123456&i=<key>&f=<who sent it>&n=<their name>
-  if (!YA) {
+  if (!EMBED) {
     const q = new URLSearchParams(location.search), j = q.get('join');
     if (ROOM_RE.test(j || '')) {
       const go = () => {
@@ -4370,7 +4398,7 @@
   // ----- version: shown on the start screen; an old cached page reloads itself -----
   $('ver').textContent = L('версия ', 'version ') + VERSION;
   function checkVersion() {
-    if (YA) return;                                           // Yandex Games keeps its own copy and updates it itself
+    if (EMBED) return;      // Yandex keeps its own copy; in VK a reload would lose VK's launch parameters
     fetch(SITE + 'version.txt?' + Date.now(), { cache: 'no-store' })
       .then(r => (r.ok ? r.text() : ''))
       .then(t => {

@@ -6,7 +6,7 @@ import io, os, re, zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WWW = os.path.join(ROOT, 'www')
 OUT = os.path.join(ROOT, 'yandex', '101-yandex.zip')
-SKIP = {'101.apk', 'privacy.html', 'version.txt'}           # nothing that leads away from the platform
+SKIP = {'101.apk', 'privacy.html', 'version.txt', 'vk-bridge.js'}           # nothing that leads away from the platform
 
 html = io.open(os.path.join(WWW, 'index.html'), encoding='utf-8').read()
 # link previews for messengers point at the game's site: not needed there
