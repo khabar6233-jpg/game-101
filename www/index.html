@@ -952,7 +952,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 119;              // keep in sync with www/version.txt
+  const VERSION = 120;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -3082,10 +3082,14 @@
 
 
   // a new room: the game's server opens a table with the settings this phone chose, and the phone sits down first
-  async function createRoom() {
+  async function createRoom(instant) {
     if (needName()) return;
     netMsg(L('Создаём комнату…', 'Creating the room…'));
     takeRoomPicks();
+    if (instant) {                     // a party of friends starts together: a private table with the usual settings
+      roomName = (L('Стол ', 'Table ') + myName()).slice(0, 30); roomSeats = 4; roomPriv = true;
+      roomPw = [...crypto.getRandomValues(new Uint8Array(6))].map(x => 'abcdefghjkmnpqrstuvwxyz23456789'[x % 31]).join('');
+    }
     const r = await srv('/table', { pid: myPid, name: roomName, seats: roomSeats, hand: roomHand, long: longPick, priv: roomPriv, pw: roomPw, lang });
     if (!r || !r.ok || !ROOM_RE.test(r.code || '')) {
       netMsg(L('Нет связи с сервером игры. Проверьте интернет.', 'No connection to the game server. Check your internet.'));
@@ -4266,7 +4270,20 @@
       if (sdk.environment !== 'crazygames' && sdk.environment !== 'local') return;   // elsewhere their SDK only throws
       cgSdk = sdk;
       const join = (get) => openInvite(get('room'), get('i'), get('f'), get('n'));
-      try { if (sdk.game.getInviteParam('room')) join(k => sdk.game.getInviteParam(k)); } catch {}
+      let invited = false;
+      try { if (sdk.game.getInviteParam('room')) { invited = true; join(k => sdk.game.getInviteParam(k)); } } catch {}
+      // "instant multiplayer": a party leader goes straight to a new private table; friends come by its invitation
+      try {
+        if (!invited && sdk.game.isInstantMultiplayer) {
+          if (!$('nick').value.trim()) {
+            let u = null;
+            try { u = await sdk.user.getUser(); } catch {}
+            const nm = String((u && u.username) || '').replace(/[^A-Za-z]/g, '').slice(0, 12) || 'Player';
+            $('nick').value = nm; $('nick').dispatchEvent(new Event('input'));
+          }
+          setTimeout(() => { if (mode === 'solo' && !peer && phase === 'setup') createRoom(true); }, 300);
+        }
+      } catch (e) { console.error(e); }
       try { sdk.game.addJoinRoomListener(p => p && join(k => p[k])); } catch {}
       // tell them when a game is being played, and which table the player sits at (friends can join it)
       let was = false, roomWas = '';
