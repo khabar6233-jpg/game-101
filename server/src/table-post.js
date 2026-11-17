@@ -113,9 +113,12 @@ function checkFill() {
   restartMatch();                                          // the people who waited take the bots' places
   announce(true);
 }
-// after a round (or a game) somebody has left and no bot holds the seat: the room goes back to waiting for a player
+// Somebody left: the others play the game to its end with their points. When the game is over and the people left
+// (with those in line) do not fill the room, it goes back to waiting for players instead of starting a smaller game.
 function roomNext() {
-  if (!started || players.some(p => p.isBot && !p.removed) || !players.some(p => p.removed)) return false;
+  if (!started || !result || !result.gameOver) return false;
+  if (players.some(p => p.isBot && !p.removed) || !players.some(p => p.removed)) return false;
+  if (people().length + sitters().length >= roomSeats) return false;
   toLobby();
   return true;
 }

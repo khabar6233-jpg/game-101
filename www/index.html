@@ -353,7 +353,9 @@
   .opps.many .opp .pts .sep { margin: 0 2px; }
   .opps.many .opp .pts b, .opps.many .opp .pts .cnt { font-size: 12px; }
   @media (max-width: 359px) { .opps.many .opp .pts i.w:first-of-type { display: none; } }   /* six at a 320 px table: "0 · 6 карт" */
-  .opp .minis.open { flex-wrap: wrap; height: auto; gap: 1px; }
+  .opp .minis.open { flex-wrap: wrap; height: auto; gap: 2px; align-content: flex-start; }
+  .opps .opp .minis.open .mini { margin-left: 0; transform: none; rotate: none; translate: none; }
+  .opps { align-items: stretch; }
   .mini.f { margin-left: 0; background: #fff; border: 1px solid #bbb; color: #1b1b1b; font-size: 10px; line-height: 1.15; font-weight: 800; padding-top: 3px; }
   .mini.f.red { color: #c8232c; }
   #asks:empty { display: none; }
@@ -794,7 +796,7 @@
         <div class="testMsg" id="testMsg"></div>
       </div>
       <button class="btn" id="gearRoom" style="display:none">Настройки комнаты</button>
-      <button class="btn" id="gearInvite" style="display:none">Позвать друга</button>
+      <button class="btn" id="gearInvite" style="display:none">Пригласить друга</button>
       <button class="btn" id="newGameBtn">Новая игра</button>
       <button class="btn plain" id="gearFriends">Друзья</button>
       <button class="btn plain" id="btnReset" style="font-size:14px;min-height:38px">Вернуть кнопки и окно масти на место</button>
@@ -997,7 +999,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 125;              // keep in sync with www/version.txt
+  const VERSION = 126;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -1140,22 +1142,14 @@
     src.connect(flt); flt.connect(g); g.connect(c.destination);
     src.start(at, Math.random() * 0.4); src.stop(at + dur + 0.02);
   }
-  function sTone(at, freq, dur, vol, type = 'sine') {
-    const c = sCtx, o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(vol, at + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    o.connect(g); g.connect(c.destination);
-    o.start(at); o.stop(at + dur + 0.02);
-  }
   function sfx(kind, n = 1) {
     if (!sfxOn || sfxMuted || document.hidden) return;
     const c = sGet();
     if (!c || c.state !== 'running') return;
     const t = c.currentTime + 0.01, r = () => 0.9 + Math.random() * 0.2;
-    if (kind === 'play') {                 // a card put on the pile: one soft tap
-      sTap(t, { f: 600 * r(), dur: 0.045, vol: 0.2 });
+    if (kind === 'play') {                 // a card put on the pile: one soft tap, never quite the same twice
+      const v = () => 0.88 + Math.random() * 0.24;
+      sTap(t, { f: 600 * v() * v(), dur: 0.045 * v(), vol: 0.2 * (0.9 + Math.random() * 0.2) });
     } else if (kind === 'draw') {          // cards taken from the deck: a lighter tap each
       for (let k = 0; k < Math.min(n, 4); k++) sTap(t + k * 0.09, { f: 900 * r(), dur: 0.025, vol: 0.09 });
     } else if (kind === 'shuffle') {       // the deck shuffled: a few quick uneven taps
@@ -1163,10 +1157,6 @@
     } else if (kind === 'deal' || kind === 'dealt') {   // the deal: the shuffle (unless it was just heard), then a light tap per card
       if (kind === 'deal') sfx('shuffle');
       for (let k = 0; k < Math.min(n, 8); k++) sTap(t + 0.3 + k * 0.07, { f: 800 * r(), dur: 0.022, vol: 0.07 });
-    } else if (kind === 'win') {
-      [523, 659, 784].forEach((f, k) => sTone(t + k * 0.1, f / 2, 0.22, 0.045, 'sine'));
-    } else if (kind === 'lose') {
-      [392, 330, 262].forEach((f, k) => sTone(t + k * 0.12, f / 2, 0.25, 0.04, 'sine'));
     }
   }
   function buzz(ms) {
@@ -1792,7 +1782,7 @@
       : v.proto > PROTO ? L('У вас старая версия игры. Выйдите и обновите её.', 'Your version of the game is old. Leave and update it.')
       : L('Сервер игры обновляется. Подождите минуту и войдите снова.', 'The game server is being updated. Wait a minute and come in again.');
 
-    if (pendingPlay && (!v.hand.some(c => c.id === pendingPlay.id) || Date.now() - pendingPlay.t > 2500)) {
+    if (pendingPlay && (!v.hand.some(c => c.id === pendingPlay.id) || Date.now() - pendingPlay.t > 8000)) {
       pendingPlay.ghost.remove();
       pendingPlay = null;
     }
@@ -1974,7 +1964,7 @@
     prevDeckCount = v.deckCount;
     prevPileCount = v.pileCount;
 
-    if (ev && ev.type === 'play' && v.top) sfx('play');
+    if (ev && ev.type === 'play' && v.top && !(ev.pi === v.seat && Date.now() - mySfxAt < 9000)) sfx('play');   // my own card was heard already
     else if (ev && ev.type === 'draw' && ev.pi !== v.seat) sfx('draw', ev.k || 1);
     if (ev && ev.type === 'play' && v.top) {
       // the played card flies to the pile from my hand or from the opponent's panel
@@ -2220,7 +2210,27 @@
     if (c.r === 12 && v.hand.length > 1) { localQueen = id; draw(v); return 'picker'; }
     dropFrom = from || null;
     action({ t: 'play', id });
+    if (mode === 'guest' && !from) sendAhead(c);
     return 'sent';
+  }
+  // the game's server may answer a moment later: the card is put on the pile at once and lies there until the answer
+  let mySfxAt = 0;
+  function sendAhead(c) {
+    const el = $('myHand').querySelector(`[data-id="${c.id}"]`), top = $('pile').lastElementChild || $('pile');
+    if (!el || !top) return;
+    const r = el.getBoundingClientRect(), t = top.getBoundingClientRect();
+    const ghost = cardEl(c);
+    ghost.style.cssText += `;position:fixed;left:${r.left}px;top:${r.top}px;margin:0;z-index:6;pointer-events:none;` +
+      `transition:left .34s cubic-bezier(.2,.7,.3,1),top .34s cubic-bezier(.2,.7,.3,1),transform .34s;transform:rotate(${rotOf(el)}deg)`;
+    document.body.appendChild(ghost);
+    const x = t.left + (t.width - r.width) / 2 + 12, y = t.top + (t.height - r.height) / 2 - 4;
+    requestAnimationFrame(() => { ghost.style.left = x + 'px'; ghost.style.top = y + 'px'; ghost.style.transform = 'rotate(5deg)'; });
+    dropFrom = { left: x, top: y };
+    if (pendingPlay) pendingPlay.ghost.remove();
+    pendingPlay = { id: c.id, ghost, t: Date.now() };
+    el.style.opacity = '0';
+    mySfxAt = Date.now(); sfx('play');
+    setTimeout(() => { if (pendingPlay && pendingPlay.ghost === ghost) { ghost.remove(); pendingPlay = null; dropFrom = null; if (view) draw(view); } }, 8000);
   }
 
   // Looking through a big hand: while a finger is held on the hand or slides along it, a wave runs under the
@@ -2241,15 +2251,16 @@
     const left = els.map(el => off + el.offsetLeft), cw = els[0].offsetWidth, ch = els[0].offsetHeight;
     const step = els.length > 1 ? Math.max(8, left[1] - left[0]) : cw, n = els.length;
     const x = Math.max(left[0] + step / 2, Math.min(left[n - 1] + step / 2, wave.cx));    // the end cards rise fully too
-    const S = Math.max(5, Math.min(cw - step, cw * .42) * .62) * wave.amp, L = ch * .17 * wave.amp;      // a slight lift, the neighbours step aside
+    const S = Math.max(8, Math.min(cw - step, cw * .5) * .95) * wave.amp, L = ch * .15 * wave.amp;      // a lift, the neighbours step well aside
     let top = 0, best = 1e9;
+    els.forEach((el, k) => { const d = Math.abs((left[k] + step / 2 - x) / step); if (d < best) { best = d; top = k; } });
     els.forEach((el, k) => {
       const d = (left[k] + step / 2 - x) / step, ty = +el.dataset.ty || 0;       // distance from the finger, in cards
-      if (Math.abs(d) < best) { best = Math.abs(d); top = k; }
+      const pick = k === top ? ch * .16 * wave.amp : 0;                            // the chosen card: well above the rest
       let sh = S * 1.65 * d * Math.exp(-d * d / 2);                                // 0 under the finger, most one card away
       // nothing leaves the screen
       sh = sh > 0 ? Math.max(0, Math.min(sh, box.right - 4 - (left[k] + cw))) : -Math.max(0, Math.min(-sh, left[k] - box.left - 4));
-      el.style.translate = `${sh.toFixed(1)}px ${(ty - L * Math.exp(-d * d / .9)).toFixed(1)}px`;
+      el.style.translate = `${sh.toFixed(1)}px ${(ty - L * Math.exp(-d * d / .9) - pick).toFixed(1)}px`;
     });
     wave.idx = top;
     els.forEach((el, k) => { el.style.zIndex = k === top && wave.amp > .15 ? 3 : ''; });
@@ -2266,7 +2277,7 @@
     waveApply();
     requestAnimationFrame(waveTick);
   }
-  function handDown(e) {
+  function handDown(e, resumed) {
     if (e.button > 0) return;
     if (handAbort) handAbort();                              // the previous touch never ended: forget it
     const el0 = e.target.closest('[data-id]');
@@ -2281,6 +2292,7 @@
       else { wave = { x: lastX, cx: lastX, amp: 0, on: true, idx: 0 }; requestAnimationFrame(waveTick); }
     };
     let holdT = setTimeout(startWave, 260);
+    if (resumed) startWave();                                // back from a swipe: looking through the hand, lifting the finger plays nothing
     const off = () => {
       clearTimeout(holdT); holdT = null;
       if (handAbort === abort) handAbort = null;
@@ -2345,6 +2357,19 @@
         document.body.appendChild(ghost);
         el.style.opacity = '.25';
       }
+      // brought back down into the hand: the card returns and the finger goes on looking through the hand
+      if (ev.clientY > $('myHand').parentElement.getBoundingClientRect().top + 16) {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', end);
+        window.removeEventListener('pointercancel', end);
+        clearTimeout(idleT);
+        if (dragAbort === abort) dragAbort = null;
+        ghost.remove();
+        const back = $('myHand').querySelector(`[data-id="${c.id}"]`);
+        if (back) back.style.opacity = '';
+        handDown({ button: 0, target: back || el, pointerId: e.pointerId, clientX: ev.clientX, clientY: ev.clientY }, true);
+        return;
+      }
       ghost.style.transform = `translate(${dx}px,${dy}px) rotate(${dx / 20}deg)`;
       clearTimeout(idleT); idleT = setTimeout(abort, 6000);    // nobody holds a card still this long
       if (ev.cancelable) ev.preventDefault();
@@ -2384,7 +2409,8 @@
         if (cur) cur.style.opacity = '0';
         setTimeout(() => {
           if (pendingPlay && pendingPlay.id === id && pendingPlay.ghost === ghost) { ghost.remove(); pendingPlay = null; if (view) draw(view); }
-        }, 2500);
+        }, 8000);
+        mySfxAt = Date.now(); sfx('play');
       } else if (sent === 'sent') ghost.remove();
       else restore();
     };
@@ -2462,8 +2488,6 @@
     overSeen = over;
     const show = !!r && v.phase === 'roundEnd' && (r.gameOver || !r.hands);
     if (!show) resHide = false;
-    const fin = !!r && v.phase === 'roundEnd';
-    if (fin && resSfxRev !== v.roundNo && !v.spec) { resSfxRev = v.roundNo; sfx(r.w === v.seat || r.champion === v.seat ? 'win' : 'lose'); }
     $('result').classList.toggle('show', show && !resHide);
     if (!show) return;
     const name = i => (i === v.seat ? L('Вы', 'You') : esc(v.players[i].name));
@@ -2774,7 +2798,7 @@
   // The link starts plain and turns to bursts by itself when the plain connection freezes.
   const SRV_WS = SRV.replace(/^http/, 'ws');
   let srvBurst = false;
-  try { srvBurst = Date.now() - (+localStorage.getItem('g101-burst') || 0) < 3 * 86400000; } catch {}
+  try { srvBurst = Date.now() - (+localStorage.getItem('g101-burst2') || 0) < 86400000; } catch {}
   function srvPlain(subs, onMessage, onStall) {
     let ws = null, alive = true, up = false, lastIn = 0, pingT = null;
     const put = x => { try { if (up && ws.readyState === 1) ws.send(JSON.stringify(x)); } catch {} };
@@ -2801,8 +2825,12 @@
       open();
     }
     open();
+    let tickAt = Date.now();
     pingT = setInterval(() => {
       if (!alive) return;
+      const slept = Date.now() - tickAt > 7000 || document.hidden;      // the phone was asleep or the game in the background
+      tickAt = Date.now();
+      if (slept && Date.now() - lastIn > 9000) { lastIn = Date.now(); restart(); return; }
       if (Date.now() - lastIn > 9000) { if (up) onStall(); if (alive) restart(); return; }     // it opened and then went silent
       try { if (up && ws.readyState === 1) ws.send('ping'); } catch {}
     }, 3000);
@@ -2897,7 +2925,7 @@
     const toBursts = () => {
       if (!alive || (l && l.b)) return;
       srvBurst = true;
-      try { localStorage.setItem('g101-burst', Date.now()); } catch {}
+      try { localStorage.setItem('g101-burst2', Date.now()); } catch {}
       if (l) l.close();
       l = srvBursts(subs, onMessage); l.b = true;
     };
@@ -3730,7 +3758,7 @@
     // no password in it: the invitation goes through public relays (a friend asks for the password of a private room)
     if (watch) watch.send(TOPIC + 'u/' + id + '/in', { t: 'invite', name, room: roomCode, pid: myPid });
     // the phone opens "Share" only right after a tap: after making a new table the player taps "Позвать" there
-    if (fresh) notifyUser(L(`${friends[id]} увидит приглашение в игре. Чтобы послать ссылку, нажмите «Позвать»`, `${friends[id]} will see the invitation in the game. To send a link, tap "Invite"`));
+    if (fresh) notifyUser(L(`${friends[id]} увидит приглашение в игре. Чтобы послать ссылку, нажмите «Пригласить»`, `${friends[id]} will see the invitation in the game. To send a link, tap "Invite"`));
     else { notifyUser(L(`Приглашение отправлено: ${friends[id]}`, `Invitation sent: ${friends[id]}`)); shareInvite(); }
   }
 
@@ -3966,8 +3994,8 @@
     if (lobbyCtl) {
       add(L('Начать', 'Start'), names.length >= 2, () => tell({ t: 'start' }));
       add(L('+ бот', '+ bot'), names.length < seats, () => tell({ t: 'addbot' }));
-      add(L('Позвать', 'Invite'), names.length < seats, shareInvite);
-    } else if (!lobbySpec) add(L('Позвать', 'Invite'), names.length < seats, shareInvite);
+      add(L('Пригласить', 'Invite'), names.length < seats, shareInvite);
+    } else if (!lobbySpec) add(L('Пригласить', 'Invite'), names.length < seats, shareInvite);
     else if (lobbySpec && names.length < seats) add(L('Сесть за стол', 'Sit down'), true, () => tell({ t: 'seat' }));
     if (window.placeActions) window.placeActions();
   }
@@ -4768,7 +4796,7 @@
     'колода': 'deck', 'Колода: 36 или 52 карты': 'Deck: 36 or 52 cards', 'Правила': 'Rules', 'Имя': 'Name',
     'Как вас зовут': 'Your name', 'Открытые игры': 'Open games', 'Создать игру': 'Create game', 'Друзья': 'Friends',
     'С ботами': 'With bots', 'карт': 'cards', 'в руке': 'in hand', 'Мик': 'Mic', 'Звук': 'Sound', 'Голос': 'Voice', 'Звуки': 'Sounds', 'Подсказки': 'Tips', 'Вибро': 'Vibrate',
-    'Политика конфиденциальности': 'Privacy policy', 'Проверить связь': 'Test connection', 'Играть': 'Play', 'Позвать друга': 'Invite a friend', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
+    'Политика конфиденциальности': 'Privacy policy', 'Проверить связь': 'Test connection', 'Играть': 'Play', 'Пригласить друга': 'Invite a friend', 'Настройки комнаты': 'Room settings', 'Новая игра': 'New game',
     'Вернуть кнопки и окно масти на место': 'Put buttons and the suit window back', 'Фон стола': 'Table background',
     'Закрыть': 'Close', 'Понятно': 'Got it', 'Зрители': 'Spectators', 'Компания': 'Group', 'Войти': 'Join', 'Удалить': 'Delete', 'Отмена': 'Cancel',
     'Название': 'Name', 'Как назвать стол': 'Table name', 'Карт в колоде': 'Cards in deck', 'Мест за столом': 'Seats at the table',

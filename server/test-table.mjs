@@ -195,7 +195,7 @@ for (const long of [false, true]) for (const n of [2, 3, 4, 6]) for (const hand 
   runUntil(() => r.t.dump().players[who1].slow > 0);           // nobody moves: the clock runs out
   st = r.t.dump();
   if (st.players[who1].slow !== 1) bad('the clock did not count', st.players[who1]);
-  if (st.turn === who1 && st.phase === 'play' && !st.busy) bad('after the time out the move did not pass on', { who1, six1, turn: st.turn, drew: st.drew, busy: st.busy, log: r.last('c0', 'view').v.log });
+  if (st.turn === who1 && st.phase === 'play' && !st.pend) bad('after the time out the move did not pass on', { who1, six1, turn: st.turn, drew: st.drew, busy: st.busy, log: r.last('c0', 'view').v.log });
   if (st.players[who1].hand.length < hand1 && !st.pendingSix) bad('the late player did not draw', { hand1, now: st.players[who1].hand.length });
   runUntil(() => r.t.dump().players[who1].removed || r.t.dump().phase === 'roundEnd');
   st = r.t.dump();
@@ -243,9 +243,14 @@ for (const long of [false, true]) for (const n of [2, 3, 4, 6]) for (const hand 
     else { const c = v.hand.find(x => x.ok); r.say(mover, c ? { t: 'play', id: c.id, s: '♠︎' } : { t: v.pendingSix ? 'take' : v.drew ? 'pass' : 'draw' }); }
     run();
   }
-  run(200000, 60000);                                          // the opened cards, then the room goes back to waiting
+  run(200000, 60000);                                          // the opened cards, then the next round
   st = r.t.dump();
-  if (st.started || st.lobby.length !== 2 || r.state.gone) bad('the room did not go back to waiting for a player', { started: st.started, lobby: st.lobby.map(x => x.name), gone: r.state.gone });
+  if (!st.started || st.roundNo < 2 || st.players.filter(p => !p.removed).length !== 2) bad('the two who stayed do not play on', { started: st.started, roundNo: st.roundNo });
+  // the game is over: two people cannot fill three seats, so the room waits for a player
+  r.say('c0', { t: 'restart' });
+  run();
+  st = r.t.dump();
+  if (st.started || st.lobby.length !== 2 || r.state.gone) bad('after the game the room did not wait for a player', { started: st.started, lobby: st.lobby.map(x => x.name), gone: r.state.gone });
   r.say('c3', { t: 'join', name: 'Гена', pid: 'p3' });
   run();
   st = r.t.dump();
