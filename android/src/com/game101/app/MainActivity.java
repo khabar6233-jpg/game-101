@@ -101,7 +101,25 @@ public class MainActivity extends Activity {
         root.addView(web, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
-        web.loadUrl(SITE);
+        web.loadUrl(SITE + joinQuery(getIntent()));
+    }
+
+    /** An invitation link opened the app: "?join=...&i=...&f=...&n=..." for the game page, or nothing. */
+    private static String joinQuery(android.content.Intent i) {
+        if (i == null || i.getData() == null) return "";
+        android.net.Uri u = i.getData();
+        if (!"game101".equals(u.getScheme()) || u.getEncodedQuery() == null) return "";
+        String q = u.getEncodedQuery();
+        return q.contains("join=") ? "?" + q : "";
+    }
+
+    /** The app was already open and a new invitation link came: go to that table. */
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String q = joinQuery(intent);
+        if (!q.isEmpty() && web != null) web.loadUrl(SITE + q);
     }
 
     @Override
@@ -129,7 +147,25 @@ public class MainActivity extends Activity {
 
     /** Lets the page buzz the phone: "your move". */
     public class Bridge {
-        /** The page asks to open a link outside the game (Telegram). */
+        /** The page shares an invitation: Android's own "Share" (any messenger). */
+        @android.webkit.JavascriptInterface
+        public void share(final String text) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        android.content.Intent s = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                        s.setType("text/plain");
+                        s.putExtra(android.content.Intent.EXTRA_TEXT, text);
+                        startActivity(android.content.Intent.createChooser(s, "101"));
+                    } catch (Exception e) {
+                        // nothing on the phone can share text
+                    }
+                }
+            });
+        }
+
+        /** The page asks to open a link outside the game (a messenger, the browser). */
         @android.webkit.JavascriptInterface
         public void open(final String url) {
             runOnUiThread(new Runnable() {

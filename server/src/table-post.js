@@ -9,6 +9,8 @@ let lobby = [];                   // before the game: { name, conn, isBot, pid }
 const banned = new Set();
 const kicked = new Map();         // connection id -> when it was removed (it keeps being told for a while)
 let vk = init.vk || '';            // the key the voice chat of this room is sealed with (only members get it)
+// the room's invitation key: a player puts it into the link they send, and the link lets in without the password
+let inv = init.inv || [...crypto.getRandomValues(new Uint8Array(9))].map(x => 'abcdefghijkmnpqrstuvwxyz23456789'[x % 32]).join('');
 let lastWord = Date.now(), closed = false, saveT = null, tickT = null, annAt = 0;
 const born = Date.now();
 let humansAt = Date.now();        // the last moment somebody (not a bot) was at the table
@@ -35,7 +37,7 @@ function viewOf(seat, sp, ctl) {
   const v = viewFor(seat, sp);
   v.canControl = seat >= 0 && seat === ctl;
   v.sitters = v.canControl ? [...specs.values()].filter(x => x.sit).map(x => x.name) : [];
-  v.vk = vk; v.srv = 1; v.ver = VERSION; v.proto = PROTO;
+  v.vk = vk; v.inv = seat >= 0 ? inv : ''; v.srv = 1; v.ver = VERSION; v.proto = PROTO;
   return v;
 }
 function render() {
@@ -61,7 +63,7 @@ const roomInfo = () => ({ name: roomName, seats: roomSeats, hand: roomHand, priv
 function lobbyMsg(i, ctl) {
   return { t: 'lobby', code: roomCode, names: lobby.map(x => x.name), bots: lobby.map(x => !!x.isBot), me: i, ctl: i >= 0 && i === ctl, spec: i < 0,
     specN: specs.size, specNames: [...specs.values()].map(x => x.name),
-    long: longPick, room: roomInfo(), pw: i >= 0 && i === ctl ? roomPw : '', vk, ver: VERSION, proto: PROTO, srv: 1 };
+    long: longPick, room: roomInfo(), pw: i >= 0 && i === ctl ? roomPw : '', vk, inv: i >= 0 ? inv : '', ver: VERSION, proto: PROTO, srv: 1 };
 }
 function drawLobby() {
   if (closed) return;
@@ -161,7 +163,7 @@ function onJoin(conn, d) {
   const name = String(d.name || L('Игрок', 'Player')).slice(0, 12);
   const known = pid && (pid === ownerPid || lobby.some(x => x.pid === pid) || players.some(x => x.pid === pid && !x.isBot && !x.removed) ||
     [...specs.values()].some(x => x.pid === pid));
-  if (roomPw && String(d.pw || '') !== roomPw && !known) { conn.send({ t: 'badpw' }); return; }
+  if (roomPw && String(d.pw || '') !== roomPw && String(d.inv || '') !== inv && !known) { conn.send({ t: 'badpw' }); return; }
   if (started) {
     // the same phone comes back (a reloaded page): it takes its old seat, not a second one
     const p = pid ? players.find(x => x.pid === pid && !x.isBot && !x.removed) : null;
@@ -351,7 +353,7 @@ function save() {
 function dump() {
   const cid = c => (c && !c.left ? c.id : null);
   return {
-    owner: ownerPid, lang, vk, lastWord, started, term, roomName, roomSeats, roomHand, roomPriv, roomPw, longPick,
+    owner: ownerPid, lang, vk, inv, lastWord, started, term, roomName, roomSeats, roomHand, roomPriv, roomPw, longPick,
     lobby: lobby.map(s => ({ name: s.name, isBot: s.isBot, pid: s.pid, cid: cid(s.conn) })),
     conns: [...conns.values()].filter(c => !c.left).map(c => ({ id: c.id, pid: c.pid, last: c.last, rev: c.rev })),
     specs: [...specs.values()].map(({ conn, ...x }) => ({ ...x, cid: cid(conn) })),
@@ -365,7 +367,7 @@ function dump() {
   };
 }
 function load(st) {
-  ownerPid = st.owner || ownerPid; lang = st.lang === 'en' ? 'en' : 'ru'; vk = st.vk || vk; lastWord = st.lastWord || Date.now();
+  ownerPid = st.owner || ownerPid; lang = st.lang === 'en' ? 'en' : 'ru'; vk = st.vk || vk; inv = st.inv || inv; lastWord = st.lastWord || Date.now();
   started = !!st.started; term = st.term || 1;
   roomName = st.roomName || ''; roomSeats = st.roomSeats || MAX_PLAYERS; roomHand = st.roomHand || HAND_SIZE;
   roomPriv = !!st.roomPriv; roomPw = st.roomPw || ''; longPick = !!st.longPick;

@@ -1,8 +1,5 @@
 // The server of the card game "101".
 //   POST /hello      the game says "I am here": the list of players
-//   GET  /tg/chat    has this player pressed Start in the Telegram bot?
-//   POST /tg/say     the bot sends a friend's invitation (the server writes the text; a few per minute at most)
-//   POST /tg/hook/…  Telegram tells the bot what people wrote to it
 //   GET  /ws         the relay of game messages (see relay.js)
 //   GET  /rpc        any of the requests above as one question and one answer over a fresh WebSocket
 //   GET  /rooms      the open rooms; POST /rooms: a table tells about its room
@@ -27,11 +24,6 @@ async function sha(text) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
-const tgSend = (env, chat, text) => fetch(`https://api.telegram.org/bot${env.TG_TOKEN}/sendMessage`, {
-  method: 'POST', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
-}).then(r => r.json()).catch(() => null);
-
 async function hello(env, d) {
   const pid = str(d.pid, 40);
   if (!PID.test(pid)) return json({ ok: false }, 400);
@@ -45,47 +37,8 @@ async function hello(env, d) {
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10, ?11, ?12, ?13, ?14)
      ON CONFLICT(pid) DO UPDATE SET name = CASE WHEN ?2 = '' THEN name ELSE ?2 END, names = ?3, dev = ?4, ver = ?5, grp = ?6,
        mode = ?7, tg = ?8, last = ?9, visits = visits + ?10, games = games + ?11, room = ?12, kind = ?13, host = ?14`
-  ).bind(pid, name, JSON.stringify(names), str(d.dev, 12), +d.ver || 0, str(d.group, 16), str(d.mode, 8), d.tg ? 1 : 0, now,
+  ).bind(pid, name, JSON.stringify(names), str(d.dev, 12), +d.ver || 0, str(d.group, 16), str(d.mode, 8), 0, now,
     d.start ? 1 : 0, d.game ? 1 : 0, str(d.room, 12), str(d.kind, 6), d.host ? 1 : 0).run();
-  return json({ ok: true });
-}
-
-// An invitation to a friend's Telegram: the game names the friend, the room and itself; the text is written here,
-// so nobody can make the bot send anything else. A few invitations a minute from one player, a few in ten minutes to one.
-async function invite(env, d) {
-  const to = str(d.to, 40), from = str(d.from, 40), room = str(d.room, 10), en = d.lang === 'en';
-  const name = str(d.name, 12).replace(/[^\p{L}\p{N} _-]/gu, '').trim() || (en ? 'A friend' : 'Друг');
-  if (!PID.test(to) || !PID.test(from) || to === from || !/^\d{4,10}$/.test(room)) return json({ ok: false }, 400);
-  const now = Date.now();
-  const n = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM tgsent WHERE fr = ?1 AND at > ?3) AS a, (SELECT COUNT(*) FROM tgsent WHERE tp = ?2 AND at > ?4) AS b')
-    .bind(from, to, now - 60000, now - 600000).first();
-  if (n && (n.a >= 5 || n.b >= 5)) return json({ ok: false, why: 'often' }, 429);
-  const r = await env.DB.prepare('SELECT chat FROM tg WHERE pid = ?').bind(to).first();
-  if (!r) return json({ ok: false, why: 'nochat' });
-  await env.DB.prepare('INSERT INTO tgsent (fr, tp, at) VALUES (?, ?, ?)').bind(from, to, now).run();
-  if (Math.random() < 0.05) await env.DB.prepare('DELETE FROM tgsent WHERE at < ?').bind(now - 86400000).run();
-  const link = 'https://khabar6233-jpg.github.io/game-101/?join=' + room;
-  const res = await tgSend(env, r.chat, en ? `${name} invites you to play "101". Join the table: ${link}` : `${name} зовёт вас играть в «101». Войти за стол: ${link}`);
-  return json({ ok: !!(res && res.ok) });
-}
-
-// Telegram: somebody wrote to the bot
-async function hook(env, request) {
-  const u = await body(request), m = u.message;
-  if (m && m.chat && typeof m.text === 'string') {
-    // "/start <pid>" from the game; "--en" at the end: the game is in English
-    const hit = /^\/start(?:@\w+)?\s+([A-Za-z0-9_-]{4,40}?)(--en)?$/.exec(m.text.trim());
-    const en = hit ? !!hit[2] : !/^(ru|uk|be|kk)/i.test((m.from && m.from.language_code) || 'ru');
-    if (hit) {
-      await env.DB.prepare('INSERT INTO tg (pid, chat, at) VALUES (?1, ?2, ?3) ON CONFLICT(pid) DO UPDATE SET chat = ?2, at = ?3')
-        .bind(hit[1], m.chat.id, Date.now()).run();
-      await tgSend(env, m.chat.id, en ? 'Done! Invitations from your friends to the game "101" will come here. Go back to the game.'
-        : 'Готово! Сюда будут приходить приглашения друзей в игру «101». Вернитесь в игру.');
-    } else if (/^\/start/.test(m.text)) {
-      await tgSend(env, m.chat.id, en ? 'To get notifications, open the game "101" → Friends → "Connect Telegram".'
-        : 'Чтобы подключить уведомления, откройте игру «101» → Друзья → «Подключить Telegram».');
-    }
-  }
   return json({ ok: true });
 }
 
@@ -104,13 +57,6 @@ async function admin(env, request, url) {
   if (url.pathname === '/admin/data') {
     const r = await env.DB.prepare('SELECT * FROM players ORDER BY last DESC LIMIT 2000').all();
     return json({ ok: true, now: Date.now(), players: r.results });
-  }
-  if (url.pathname === '/admin/tghook' && request.method === 'POST') {       // after a new bot token: point Telegram at this server again
-    const hook = new URL(request.url).origin + '/tg/hook/' + env.TG_HOOK;
-    const r = await fetch(`https://api.telegram.org/bot${env.TG_TOKEN}/setWebhook`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: hook, secret_token: env.TG_HOOK, allowed_updates: ['message'] }) }).then(x => x.json()).catch(() => null);
-    const me = await fetch(`https://api.telegram.org/bot${env.TG_TOKEN}/getMe`).then(x => x.json()).catch(() => null);
-    return json({ ok: !!(r && r.ok), bot: me && me.result ? me.result.username : '', why: r && r.description });
   }
   if (url.pathname === '/admin/drop' && request.method === 'POST') {         // remove a test or junk record
     const pid = str((await body(request)).pid, 40);
@@ -156,17 +102,6 @@ async function route(request, env) {
       if (p === '/rooms') return env.RELAY.get(env.RELAY.idFromName('rooms')).fetch(request);  // the list of open rooms (an instance of its own)
       if (p === '/table' || p === '/table/say') return env.RELAY.get(env.RELAY.idFromName('main')).fetch(request);    // a new room; a word to a table
       if (p === '/hello' && request.method === 'POST') return await hello(env, await body(request));
-      if (p === '/tg/chat') {
-        const pid = url.searchParams.get('pid') || '';
-        if (!PID.test(pid)) return json({ ok: false }, 400);
-        const r = await env.DB.prepare('SELECT chat FROM tg WHERE pid = ?').bind(pid).first();
-        return json({ ok: true, chat: r ? 1 : 0 });                         // only "linked or not": a chat number is nobody's business
-      }
-      if (p === '/tg/say' && request.method === 'POST') return await invite(env, await body(request));
-      if (p === '/tg/hook/' + env.TG_HOOK && request.method === 'POST') {
-        if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TG_HOOK) return json({ ok: false }, 403);
-        return await hook(env, request);
-      }
       // measuring the network (see probe.js)
       if (p === '/probe') return new Response(PROBE_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
       if (p === '/probe/ws') return probeSocket(url);

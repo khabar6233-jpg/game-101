@@ -64,7 +64,6 @@
   <h2>Все игроки</h2>
   <div class="bar"><input id="q" placeholder="Поиск: имя, код компании, устройство"><button id="re">Обновить</button></div>
   <div id="list"></div>
-  <button class="out" id="tghook">Привязать Telegram-бота к серверу (после смены ключа бота)</button>
   <button class="out" id="out">Выйти и забыть пароль на этом устройстве</button>
 </div>
 <script>
@@ -135,8 +134,7 @@
       const live = now - p.last < 150000;
       return `<div class="p"><div class="top"><span class="dot${live ? ' on' : ''}"></span><span class="name">${esc(p.name || 'без имени')}</span>` +
         `<span class="when">${live ? esc(MODE[p.mode] || 'в сети') + (live && p.mode === 'table' ? ' «' + esc(p.grp || p.room) + '»' : '') : ago(now, p.last)}</span></div>` +
-        `<div class="row">${esc(DEV[p.dev] || p.dev || 'устройство неизвестно')} · версия <b>${p.ver}</b> · компания <b>${esc(p.grp || 'нет')}</b>` +
-        ` · Telegram <b>${p.tg ? 'да' : 'нет'}</b></div>` +
+        `<div class="row">${esc(DEV[p.dev] || p.dev || 'устройство неизвестно')} · версия <b>${p.ver}</b> · компания <b>${esc(p.grp || 'нет')}</b>` + '</div>' +
         `<div class="row">заходил <b>${p.visits}</b> раз · партий <b>${p.games}</b> · впервые ${day(p.first)}` +
         (names.length ? ` · другие имена: ${esc(names.join(', '))}` : '') + `</div>` +
         `<div class="row">${esc(p.pid)} <button class="del" data-pid="${esc(p.pid)}">удалить запись</button></div></div>`;
@@ -180,10 +178,6 @@
     if (!b || !confirm('Удалить эту запись? Если игрок зайдёт снова, она появится заново.')) return;
     await api('/admin/drop', { method: 'POST', body: JSON.stringify({ pid: b.dataset.pid }) });
     load();
-  };
-  $('tghook').onclick = async () => {
-    const r = await api('/admin/tghook', { method: 'POST', body: '{}' });
-    alert(r && r.ok ? 'Готово: бот @' + r.bot + ' присылает сообщения на этот сервер.' : 'Не получилось: ' + ((r && r.why) || 'нет ответа сервера'));
   };
   setInterval(() => { if (data && !document.hidden) load(); }, 10000);
   if (key) load(); else gate();

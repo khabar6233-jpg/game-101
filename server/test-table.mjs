@@ -41,6 +41,15 @@ function room(opts) {
   r.say('cB2', { t: 'join', name: 'Боря', pid: 'pidB', pw: 'kot' });
   const lb = r.last('cB2', 'lobby');
   if (!lb || lb.ctl || lb.names.join() !== 'Аня,Боря' || lb.pw) bad('guest lobby wrong', lb);
+  // an invitation link: the room's key lets in without the password; a wrong key does not
+  const inv = r.last('cA', 'lobby').inv;
+  if (!inv || lb.inv !== inv) bad('no invitation key for the players', lb);
+  r.say('cI', { t: 'join', name: 'Ира', pid: 'pidI', inv: 'wrong' });
+  if (!r.last('cI') || r.last('cI').t !== 'badpw') bad('a wrong invitation key let in', r.last('cI'));
+  r.say('cI2', { t: 'join', name: 'Ира', pid: 'pidI', inv, want: 'watch' });
+  const li = r.last('cI2', 'lobby');
+  if (!li || !li.spec || li.inv) bad('the invitation key did not let in, or a spectator got the key', li);
+  r.say('cI2', { t: 'bye' });
   r.say('cB2', { t: 'addbot' });                              // not the owner: nothing happens
   if (r.last('cA', 'lobby').names.length !== 2) bad('a guest added a bot');
   r.say('cA', { t: 'addbot' });
