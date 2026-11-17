@@ -954,7 +954,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 121;              // keep in sync with www/version.txt
+  const VERSION = 122;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -3321,6 +3321,8 @@
     if (window.App101 && window.App101.share) { window.App101.share(text); return; }      // the Android app: its own "Share"
     if (CG) {                                                 // CrazyGames: their invitation link, copied for any messenger
       try { await navigator.clipboard.writeText(text); notifyUser(L('Приглашение скопировано — вставьте его в мессенджер', 'Invitation copied — paste it into a messenger')); return; } catch {}
+      notifyUser(text);                                       // no clipboard in their frame: the link is shown (their "Invite friends" button works too)
+      return;
     }
     if (VK && window.vkBridge) {                              // VK: VK's own "share" (a message to a friend, a post)
       try { await window.vkBridge.send('VKWebAppShare', { link: vkLink($('nick').value.trim().slice(0, 12) || L('Друг', 'Friend')) }); } catch {}

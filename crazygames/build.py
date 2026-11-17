@@ -11,6 +11,8 @@ SKIP = {'101.apk', 'privacy.html', 'version.txt', 'vk-bridge.js'}
 html = io.open(os.path.join(WWW, 'index.html'), encoding='utf-8').read()
 html = re.sub(r'<meta property="og:[^"]+" content="[^"]*">\n', '', html)
 assert '</head>' in html
+# all files in one folder (their uploader takes plain files): cards/x.png -> cards_x.png, backs/x.jpg -> backs_x.jpg
+html = html.replace('cards/', 'cards_').replace('backs/', 'backs_')
 html = html.replace('</head>', '<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>\n'
                     '<script>window.PLATFORM_101 = \'crazygames\';</script>\n</head>', 1)
 ver = re.search(r'const VERSION = (\d+)', html).group(1)
@@ -23,6 +25,6 @@ with zipfile.ZipFile(OUT, 'w', zipfile.ZIP_DEFLATED) as z:
             if rel in SKIP or rel == 'index.html':
                 continue
             assert re.fullmatch(r'[A-Za-z0-9_./-]+', rel), rel
-            z.write(os.path.join(base, f), rel)
+            z.write(os.path.join(base, f), rel.replace('/', '_'))
 infos = zipfile.ZipFile(OUT).infolist()
 print(f'OK: {OUT} (version {ver}, {len(infos)} files, {sum(i.file_size for i in infos) // 1024} KB unpacked)')
