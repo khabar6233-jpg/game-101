@@ -64,8 +64,8 @@
       <p>Микрофон включается только по вашему нажатию. Голос идёт напрямую между телефонами игроков одной комнаты (WebRTC) и нигде не записывается. Для установки связи телефоны обмениваются служебными сообщениями через публичные MQTT-серверы (EMQX, HiveMQ, Mosquitto); эти сообщения зашифрованы ключом комнаты. Чтобы найти друг друга в сети, телефоны обращаются к STUN-серверам (Google, Cloudflare и др.), которые видят IP-адрес устройства, но не голос.</p>
     </section>
     <section>
-      <h2>Telegram</h2>
-      <p>Если вы сами откроете бота игры в Telegram и нажмёте «Старт», сервер сохранит номер чата Telegram, чтобы присылать вам приглашения от друзей. Также сервер на сутки запоминает, кто кого пригласил, — только для защиты от спама. Если не подключать Telegram, эти данные не появляются. Отключиться можно, заблокировав бота.</p>
+      <h2>Приглашения</h2>
+      <p>Чтобы позвать друга, игра составляет текст со ссылкой, а отправляете его вы сами — через любой мессенджер или скопировав. В ссылке есть номер стола, ключ входа за этот стол, ваш номер игрока и имя в игре: по ним друг попадает за стол, и вы становитесь друзьями в игре. Сама игра сообщения не отправляет и ваши контакты не видит.</p>
     </section>
     <section>
       <h2>Что видят другие игроки</h2>
@@ -73,7 +73,7 @@
     </section>
     <section>
       <h2>Зачем это нужно и сколько хранится</h2>
-      <p>Данные используются только чтобы игра работала (комнаты, столы, друзья, приглашения) и чтобы разработчик видел, на каких устройствах и версиях играют, и исправлял ошибки. Запись игрока хранится, пока игра работает, или пока вы не попросите её удалить.</p>
+      <p>Данные используются только чтобы игра работала (комнаты, столы, друзья) и чтобы разработчик видел, на каких устройствах и версиях играют, и исправлял ошибки. Запись игрока хранится, пока игра работает, или пока вы не попросите её удалить.</p>
     </section>
     <section>
       <h2>Дети</h2>
@@ -115,8 +115,8 @@
       <p>The microphone turns on only when you tap it. Voice goes directly between the phones in one room (WebRTC) and is never recorded. To set up the call, phones exchange technical messages through public MQTT servers (EMQX, HiveMQ, Mosquitto); these messages are encrypted with the room key. To find each other on the network, phones contact STUN servers (Google, Cloudflare and others), which see the device's IP address but not the voice.</p>
     </section>
     <section>
-      <h2>Telegram</h2>
-      <p>If you open the game's Telegram bot yourself and press Start, the server stores your Telegram chat number so friends' invitations can reach you. The server also remembers for one day who invited whom, only to prevent spam. If you never connect Telegram, none of this exists. To disconnect, block the bot.</p>
+      <h2>Invitations</h2>
+      <p>To invite a friend, the game writes a message with a link, and you send it yourself — through any messenger or by copying it. The link holds the table number, a key to that table, your player number and in-game name: with them your friend gets to the table and you become friends in the game. The game itself sends no messages and never sees your contacts.</p>
     </section>
     <section>
       <h2>What other players see</h2>
@@ -124,7 +124,7 @@
     </section>
     <section>
       <h2>Why and for how long</h2>
-      <p>Data is used only to run the game (rooms, tables, friends, invitations) and to let the developer see which devices and versions are in use and fix bugs. A player record is kept while the game runs, or until you ask to delete it.</p>
+      <p>Data is used only to run the game (rooms, tables, friends) and to let the developer see which devices and versions are in use and fix bugs. A player record is kept while the game runs, or until you ask to delete it.</p>
     </section>
     <section>
       <h2>Children</h2>
