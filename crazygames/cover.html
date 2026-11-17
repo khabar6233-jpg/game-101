@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- CrazyGames covers: 1920x1080, 800x1200, 800x800 (open with ?w=..&h=.., rendered to PNG by a headless browser
+     from a folder that has cards/ next to it). Only the title as text, no borders, no logos. -->
+<html><head><meta charset="utf-8"><style>
+  html, body { margin: 0; width: 100vw; height: 100vh; overflow: hidden; }
+  body { background: radial-gradient(circle at 30% 35%, #1f7a49, #0b3f25 78%); font-family: system-ui, "Segoe UI", sans-serif; position: relative;
+    display: flex; align-items: center; justify-content: center; gap: 4vmin; }
+  body::before { content: ''; position: absolute; inset: 0; opacity: .13;
+    background: repeating-linear-gradient(45deg, #fff 0 1px, transparent 1px 1.1vmin), repeating-linear-gradient(-45deg, #fff 0 1px, transparent 1px 1.1vmin); }
+  body.tall { flex-direction: column; }
+  .left { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4vmin; }
+  .title { color: #fff; font-weight: 900; font-size: 30vmin; line-height: .9; letter-spacing: -1vmin;
+    text-shadow: 0 1vmin 0 #0a3a22, 0 2.4vmin 5vmin rgba(0,0,0,.45); }
+  .title i { font-style: normal; color: #f2c14e; }
+  .suits { display: flex; gap: 2.4vmin; font-size: 6vmin; }
+  .suits span { width: 9vmin; height: 9vmin; border-radius: 2.2vmin; background: #fbfaf4; display: grid; place-items: center; box-shadow: 0 1vmin 2vmin rgba(0,0,0,.35); }
+  .r { color: #c8202f; } .b { color: #111; }
+  .fan { position: relative; width: 62vmin; height: 62vmin; }
+  .fan img { position: absolute; left: 18vmin; top: 6vmin; width: 27vmin; border-radius: 1.8vmin; box-shadow: 0 1.6vmin 4vmin rgba(0,0,0,.45);
+    transform-origin: 50% 120%; background: #fff; }
+</style></head><body>
+  <div class="left">
+    <div class="title">1<i>0</i>1</div>
+    <div class="suits"><span class="b">♠</span><span class="r">♥</span><span class="b">♣</span><span class="r">♦</span></div>
+  </div>
+  <div class="fan">
+    <img src="cards/11_2.png" style="transform: rotate(-28deg)">
+    <img src="cards/13_0.png" style="transform: rotate(-9deg)">
+    <img src="cards/12_3.png" style="transform: rotate(10deg)">
+    <img src="cards/12_0.png" style="transform: rotate(28deg)">
+  </div>
+  <script>
+    if (innerHeight >= innerWidth * .95) document.body.classList.add('tall');
+    if (Math.abs(innerHeight - innerWidth) < 20) document.body.classList.add('square');
+  </script>
+  <style>
+    body.square { gap: 1vmin; }
+    body.square .title { font-size: 24vmin; }
+    body.square .suits { display: none; }
+    body.square .fan { width: 52vmin; height: 52vmin; transform: scale(.85); }
+  </style>
+</body></html>
