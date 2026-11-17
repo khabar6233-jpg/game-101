@@ -6,3 +6,5 @@ server/node_modules/
 server/src/engine.gen.js
 server/.wrangler/
 server/.tg-hook.txt
+yandex/test/
+yandex/101-yandex.zip

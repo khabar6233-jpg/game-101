@@ -435,6 +435,7 @@
   .room .meta i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--muted); }
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
   .room .gearB { flex: none; border: 0; background: none; color: var(--muted); padding: 6px; display: flex; align-items: center; }
+  body.ya .privLink, body.ya #micBtn, body.ya #spkBtn { display: none !important; }
   .privLink { display: block; text-align: center; color: var(--muted); font-size: 13px; margin: 4px 0 2px; }
   /* the list of tables: "Играть" (gathering players) and "Смотреть" (already playing); a tap or a swipe switches */
   .roomTabs { position: relative; display: flex; flex: none; padding: 3px; border-radius: 12px; background: rgba(0,0,0,.25); }
@@ -921,6 +922,9 @@
   const RANK_NAME = { 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'В', 12: 'Д', 13: 'К', 14: 'Т' };
   // ----- language: Russian or English, kept on this device. Who played before keeps Russian;
   // a new device takes the phone's language. L('по-русски', 'in English') picks one.
+  // the same page runs on the game's site, in the Android app and on Yandex Games (an archive made by yandex/build.mjs):
+  // there the platform's rules apply — no links out, the language from the platform, no voice chat
+  const YA = window.PLATFORM_101 === 'yandex';
   let lang = 'ru';
   try {
     lang = localStorage.getItem('g101-lang') ||
@@ -933,7 +937,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 115;              // keep in sync with www/version.txt
+  const VERSION = 116;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -2734,8 +2738,8 @@
     return !!x && Date.now() - x.t < 12000 && !vDirect(id) && ((IOS && x.ios) || Date.now() - x.t0 > 8000);
   };
   let vMic = false, vSpk = false, vStream = null, vHello = null, vAuto = false;
-  let spkPref = true;              // the sound of the others: this device's choice, kept between games
-  try { spkPref = localStorage.getItem('g101-spk') !== '0'; } catch {}
+  let spkPref = !YA;               // the sound of the others: this device's choice, kept between games (no voice on Yandex Games)
+  try { if (!YA) spkPref = localStorage.getItem('g101-spk') !== '0'; } catch {}
   const saveSpk = () => { try { localStorage.setItem('g101-spk', spkPref ? '1' : '0'); } catch {} };
   const vOn = () => vMic || vSpk;
   const vSend = (to, kind, data) => { if (peer && roomCode) peer.send(TOPIC + roomCode + '/v', { t: 'v', to, kind, data }); };
@@ -3119,13 +3123,13 @@
     toastT = setTimeout(() => el.classList.remove('show'), 8000);
     try {
       if (window.App101 && window.App101.note) { if (document.hidden) window.App101.note('101', text); else buzz(120); }
-      else if (document.hidden && window.Notification && Notification.permission === 'granted') new Notification('101', { body: text, icon: 'icon-192.png' });
+      else if (!YA && document.hidden && window.Notification && Notification.permission === 'granted') new Notification('101', { body: text, icon: 'icon-192.png' });
     } catch {}
   }
   function askNotify() {
     try {
       if (window.App101 && window.App101.askNotify) window.App101.askNotify();
-      else if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
+      else if (!YA && window.Notification && Notification.permission === 'default') Notification.requestPermission();
     } catch {}
   }
 
@@ -3284,7 +3288,7 @@
   function inviteText() {
     const r = lobbyRoom || {}, name = $('nick').value.trim().slice(0, 12) || L('Друг', 'Friend');
     const long = mode === 'guest' && view ? !!view.long : !!lobbyLong;
-    const url = SITE_URL + '?join=' + roomCode + (roomInv ? '&i=' + encodeURIComponent(roomInv) : '') +
+    const url = YA ? yaLink(name) : SITE_URL + '?join=' + roomCode + (roomInv ? '&i=' + encodeURIComponent(roomInv) : '') +
       '&f=' + encodeURIComponent(myPid) + '&n=' + encodeURIComponent(name);
     const table = r.name || roomCode, seats = r.seats || MAX_PLAYERS;
     return L(`${name} зовёт сыграть в 101 — стол «${table}», ${long ? '52 карты' : '36 карт'}, мест: ${seats}. Садись: ${url}`,
@@ -4167,19 +4171,57 @@
   };
   drawFriends();
   startWatch();
-  // an invitation link: ...?join=123456&i=<key>&f=<who sent it>&n=<their name> goes straight to that table
-  {
+  // an invitation: straight to that table, and the one who sent it becomes a friend
+  function openInvite(j, inv, f, fn) {
+    if (!ROOM_RE.test(j || '')) return;
+    inv = String(inv || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24); f = String(f || ''); fn = String(fn || '').slice(0, 12);
+    setTimeout(() => {
+      if (mode !== 'solo' || peer) return;
+      $('codeIn').value = j; joinWant = 'seat'; joinPw = ''; joinInv = inv;
+      joinFrom = /^[A-Za-z0-9_-]{4,40}$/.test(f) && f !== myPid ? { pid: f, name: fn } : null;
+      joinRoom();
+    }, 300);
+  }
+  // ----- Yandex Games: the SDK, the language it says, "ready", an invitation in the address ("payload") -----
+  // payload: <table>.<key>.<who sent it>.<their name in base64url>
+  let ysdk = null, yaGameUrl = '';
+  const b64u = t => btoa(String.fromCharCode(...new TextEncoder().encode(t))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64u = t => { try { return new TextDecoder().decode(Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))); } catch { return ''; } };
+  function yaLink(name) {
+    const id = ysdk && ysdk.environment && ysdk.environment.app ? ysdk.environment.app.id : '';
+    const base = yaGameUrl || 'https://yandex.ru/games/app/' + id;
+    const payload = [roomCode, roomInv, myPid, b64u(name)].join('.');
+    return base + (base.includes('?') ? '&' : '?') + 'payload=' + payload;
+  }
+  if (YA) {
+    document.body.classList.add('ya');
+    // a long press on the table never opens the browser's menu (the platform's rule); typing a name still can
+    document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
+    (async () => {
+      for (let k = 0; k < 100 && !window.YaGames; k++) await pause(100);
+      try { ysdk = await window.YaGames.init(); } catch (e) { console.error(e); }
+      if (!ysdk) return;
+      try {
+        const yl = String(ysdk.environment.i18n.lang || 'ru');
+        setLang(/^(ru|uk|be|kk|uz|ky|tg|az|hy|ka)$/.test(yl) ? 'ru' : 'en');   // the platform says the language
+      } catch {}
+      try { if (ysdk.features.LoadingAPI) ysdk.features.LoadingAPI.ready(); } catch {}
+      try {
+        const id = ysdk.environment.app.id;
+        const r = await ysdk.features.GamesAPI.getGameByID(+id || id);   // the game's own address, as the rules ask
+        if (r && r.game && r.game.url) yaGameUrl = r.game.url;
+      } catch {}
+      const pl = String(ysdk.environment.payload || '').split('.');
+      if (pl.length >= 3) openInvite(pl[0], pl[1], pl[2], unb64u(pl[3] || ''));
+    })();
+  }
+  // a link to the game's site: ...?join=123456&i=<key>&f=<who sent it>&n=<their name>
+  if (!YA) {
     const q = new URLSearchParams(location.search), j = q.get('join');
     if (ROOM_RE.test(j || '')) {
-      const inv = (q.get('i') || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24), f = q.get('f') || '', fn = (q.get('n') || '').slice(0, 12);
       const go = () => {
         try { history.replaceState(null, '', location.pathname); } catch {}
-        setTimeout(() => {
-          if (mode !== 'solo' || peer) return;
-          $('codeIn').value = j; joinWant = 'seat'; joinPw = ''; joinInv = inv;
-          joinFrom = /^[A-Za-z0-9_-]{4,40}$/.test(f) && f !== myPid ? { pid: f, name: fn } : null;
-          joinRoom();
-        }, 300);
+        openInvite(j, q.get('i'), q.get('f'), q.get('n'));
       };
       // Android: when the game's app is on the phone, it takes the link; without it the game opens right here.
       // (a browser inside another app, "; wv)", may not know such links: the game opens there)
@@ -4328,6 +4370,7 @@
   // ----- version: shown on the start screen; an old cached page reloads itself -----
   $('ver').textContent = L('версия ', 'version ') + VERSION;
   function checkVersion() {
+    if (YA) return;                                           // Yandex Games keeps its own copy and updates it itself
     fetch(SITE + 'version.txt?' + Date.now(), { cache: 'no-store' })
       .then(r => (r.ok ? r.text() : ''))
       .then(t => {
