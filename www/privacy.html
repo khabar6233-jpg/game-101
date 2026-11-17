@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>101 — Политика конфиденциальности / Privacy Policy</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root { --bg: #0f3d24; --card: rgba(255,255,255,.07); --text: #eaf5ee; --muted: #a9cbb6; --accent: #f2c14e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(circle at 50% 0, #1d6b40, var(--bg) 70%) fixed; background-color: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 16px; line-height: 1.55; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header img { width: 48px; height: 48px; border-radius: 12px; }
+  header h1 { flex: 1; min-width: 200px; margin: 0; font-size: 22px; }
+  .langs { display: flex; gap: 6px; }
+  .langs button { border: 1.5px solid rgba(255,255,255,.35); background: none; color: var(--text); border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+  .langs button.on { background: rgba(255,255,255,.16); border-color: var(--accent); }
+  .date { color: var(--muted); font-size: 14px; margin: 6px 0 18px; }
+  section { background: var(--card); border-radius: 14px; padding: 4px 18px 10px; margin: 0 0 12px; }
+  h2 { font-size: 17px; color: var(--accent); margin: 14px 0 6px; }
+  p, li { margin: 6px 0; }
+  ul { padding-left: 20px; margin: 6px 0; }
+  a { color: var(--accent); }
+  [data-l] { display: none; }
+  html[lang="ru"] [data-l="ru"], html[lang="en"] [data-l="en"] { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icon-192.png" alt="">
+    <h1><span data-l="ru" style="display:inline">101 — политика конфиденциальности</span><span data-l="en">101 — Privacy Policy</span></h1>
+    <div class="langs"><button data-set="ru">Русский</button><button data-set="en">English</button></div>
+  </header>
+
+  <!-- ===================== RU ===================== -->
+  <div data-l="ru">
+    <p class="date">Действует с 17 ноября 2026 г.</p>
+    <section>
+      <h2>Коротко</h2>
+      <p>«101» — бесплатная карточная игра. В ней нет рекламы, покупок, регистрации и сторонней аналитики. Мы не просим и не храним электронную почту, телефон, местоположение, контакты и фотографии. Игра хранит только то, что нужно для сетевой игры, и никому эти данные не продаёт и не передаёт.</p>
+    </section>
+    <section>
+      <h2>Что хранится на вашем устройстве</h2>
+      <p>В памяти браузера или приложения (localStorage) лежат: ваше имя в игре, случайный номер игрока, список друзей, итоги игр один на один, выбранные настройки (язык, фон, колода, звук и т. п.). Эти данные никуда не отправляются, кроме случаев ниже. Их можно удалить, очистив данные сайта в браузере или удалив приложение.</p>
+    </section>
+    <section>
+      <h2>Что получает сервер игры</h2>
+      <p>Сервер игры работает на Cloudflare. Чтобы работали комнаты, список столов и друзья, он получает и хранит:</p>
+      <ul>
+        <li>случайный номер игрока (создаётся при первом запуске, не связан с вашей личностью);</li>
+        <li>имя в игре и прежние имена, которые вы вводили;</li>
+        <li>тип устройства (iPhone, Android, приложение, компьютер) и версию игры;</li>
+        <li>когда вы впервые и в последний раз открывали игру, число заходов и сыгранных партий;</li>
+        <li>в какой комнате вы сейчас и какой режим выбран.</li>
+      </ul>
+      <p>Во время сетевой партии сервер ведёт стол: знает карты, ходы и имена игроков этой комнаты. Состояние стола удаляется, когда комната закрывается. Пароль приватной комнаты хранится только пока комната открыта.</p>
+      <p>Сервер не сохраняет ваш IP-адрес в базе игры. Cloudflare как хостинг может временно обрабатывать IP-адреса и технические журналы для доставки и защиты от атак — по <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">своей политике</a>.</p>
+    </section>
+    <section>
+      <h2>Голосовой чат</h2>
+      <p>Микрофон включается только по вашему нажатию. Голос идёт напрямую между телефонами игроков одной комнаты (WebRTC) и нигде не записывается. Для установки связи телефоны обмениваются служебными сообщениями через публичные MQTT-серверы (EMQX, HiveMQ, Mosquitto); эти сообщения зашифрованы ключом комнаты. Чтобы найти друг друга в сети, телефоны обращаются к STUN-серверам (Google, Cloudflare и др.), которые видят IP-адрес устройства, но не голос.</p>
+    </section>
+    <section>
+      <h2>Telegram</h2>
+      <p>Если вы сами откроете бота игры в Telegram и нажмёте «Старт», сервер сохранит номер чата Telegram, чтобы присылать вам приглашения от друзей. Также сервер на сутки запоминает, кто кого пригласил, — только для защиты от спама. Если не подключать Telegram, эти данные не появляются. Отключиться можно, заблокировав бота.</p>
+    </section>
+    <section>
+      <h2>Что видят другие игроки</h2>
+      <p>Ваше имя в игре видят игроки и зрители вашей комнаты, а также все в списке открытых столов. Не используйте в имени настоящие фамилии и другие личные данные.</p>
+    </section>
+    <section>
+      <h2>Зачем это нужно и сколько хранится</h2>
+      <p>Данные используются только чтобы игра работала (комнаты, столы, друзья, приглашения) и чтобы разработчик видел, на каких устройствах и версиях играют, и исправлял ошибки. Запись игрока хранится, пока игра работает, или пока вы не попросите её удалить.</p>
+    </section>
+    <section>
+      <h2>Дети</h2>
+      <p>Игра не предназначена специально для детей младше 13 лет и сознательно не собирает данные о них. Если вы считаете, что ребёнок передал нам данные, напишите — мы их удалим.</p>
+    </section>
+    <section>
+      <h2>Ваши права и связь</h2>
+      <p>Вы можете попросить показать или удалить данные, связанные с вашим номером игрока (он виден в настройках браузера как значение «g101-pid»). Пишите через <a href="https://github.com/khabar6233-jpg/game-101/issues" target="_blank" rel="noopener">страницу обращений на GitHub</a>.</p>
+      <p>Если политика изменится, новая версия появится на этой странице с новой датой.</p>
+    </section>
+  </div>
+
+  <!-- ===================== EN ===================== -->
+  <div data-l="en">
+    <p class="date">Effective November 17, 2026</p>
+    <section>
+      <h2>In short</h2>
+      <p>“101” is a free card game. It has no ads, no purchases, no sign-up and no third-party analytics. We do not ask for or store your email, phone number, location, contacts or photos. The game keeps only what online play needs, and never sells or shares it.</p>
+    </section>
+    <section>
+      <h2>What stays on your device</h2>
+      <p>Browser or app storage (localStorage) holds your in-game name, a random player number, your friends list, one-on-one results and your settings (language, background, deck, sound, etc.). These are not sent anywhere except as described below. Clear the site data or uninstall the app to remove them.</p>
+    </section>
+    <section>
+      <h2>What the game server receives</h2>
+      <p>The game server runs on Cloudflare. To make rooms, the table list and friends work, it receives and stores:</p>
+      <ul>
+        <li>a random player number (created on first launch, not tied to your identity);</li>
+        <li>your in-game name and earlier names you entered;</li>
+        <li>device type (iPhone, Android, app, computer) and game version;</li>
+        <li>when you first and last opened the game, number of visits and games played;</li>
+        <li>which room you are in now and the chosen mode.</li>
+      </ul>
+      <p>During an online game the server runs the table: it knows the cards, moves and player names of that room. The table state is deleted when the room closes. A private room's password is kept only while the room is open.</p>
+      <p>The server does not store your IP address in the game database. Cloudflare, as the host, may process IP addresses and technical logs briefly for delivery and attack protection under <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">its own policy</a>.</p>
+    </section>
+    <section>
+      <h2>Voice chat</h2>
+      <p>The microphone turns on only when you tap it. Voice goes directly between the phones in one room (WebRTC) and is never recorded. To set up the call, phones exchange technical messages through public MQTT servers (EMQX, HiveMQ, Mosquitto); these messages are encrypted with the room key. To find each other on the network, phones contact STUN servers (Google, Cloudflare and others), which see the device's IP address but not the voice.</p>
+    </section>
+    <section>
+      <h2>Telegram</h2>
+      <p>If you open the game's Telegram bot yourself and press Start, the server stores your Telegram chat number so friends' invitations can reach you. The server also remembers for one day who invited whom, only to prevent spam. If you never connect Telegram, none of this exists. To disconnect, block the bot.</p>
+    </section>
+    <section>
+      <h2>What other players see</h2>
+      <p>Your in-game name is visible to players and spectators in your room and to everyone in the list of open tables. Do not use real surnames or other personal details in your name.</p>
+    </section>
+    <section>
+      <h2>Why and for how long</h2>
+      <p>Data is used only to run the game (rooms, tables, friends, invitations) and to let the developer see which devices and versions are in use and fix bugs. A player record is kept while the game runs, or until you ask to delete it.</p>
+    </section>
+    <section>
+      <h2>Children</h2>
+      <p>The game is not directed at children under 13 and does not knowingly collect their data. If you believe a child has given us data, contact us and we will delete it.</p>
+    </section>
+    <section>
+      <h2>Your rights and contact</h2>
+      <p>You can ask to see or delete the data linked to your player number (visible in browser storage as “g101-pid”). Contact us via the <a href="https://github.com/khabar6233-jpg/game-101/issues" target="_blank" rel="noopener">GitHub issues page</a>.</p>
+      <p>If this policy changes, the new version will appear on this page with a new date.</p>
+    </section>
+  </div>
+</main>
+<script>
+  (function () {
+    var q = new URLSearchParams(location.search).get('lang');
+    var saved = null; try { saved = localStorage.getItem('g101-lang'); } catch (e) {}
+    var lang = q || saved || ((navigator.language || 'ru').slice(0, 2) === 'ru' ? 'ru' : 'en');
+    function set(l) {
+      lang = l === 'en' ? 'en' : 'ru';
+      document.documentElement.lang = lang;
+      document.title = lang === 'en' ? '101 — Privacy Policy' : '101 — Политика конфиденциальности';
+      document.querySelectorAll('[data-set]').forEach(function (b) { b.classList.toggle('on', b.dataset.set === lang); });
+      document.querySelectorAll('h1 [data-l]').forEach(function (s) { s.style.display = s.dataset.l === lang ? 'inline' : 'none'; });
+    }
+    document.querySelectorAll('[data-set]').forEach(function (b) { b.onclick = function () { set(b.dataset.set); }; });
+    set(lang);
+  })();
+</script>
+</body>
+</html>
