@@ -22,8 +22,10 @@ function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed" } }
 & "$bt\aapt2.exe" compile --dir "$root\android\res" -o "$out\res.zip"
 Check 'aapt2 compile'
 
+# the app's version follows the game's: VERSION in www/index.html (stores want it to grow with every release)
+$ver = [int]([regex]::Match((Get-Content "$root\www\index.html" -Raw -Encoding UTF8), 'const VERSION = (\d+)').Groups[1].Value)
 & "$bt\aapt2.exe" link -o "$out\base.apk" -I $jar --manifest "$root\android\AndroidManifest.xml" -A "$out\assets" "$out\res.zip" `
-    --min-sdk-version 24 --target-sdk-version 35 --version-code 2 --version-name 2.0
+    --min-sdk-version 24 --target-sdk-version 35 --version-code $ver --version-name "1.$ver"
 Check 'aapt2'
 
 & "$jbr\bin\javac.exe" -source 11 -target 11 -nowarn -classpath $jar -d "$out\classes" "$root\android\src\com\game101\app\MainActivity.java"
@@ -41,9 +43,17 @@ Check 'jar'
 & "$bt\zipalign.exe" -f -p 4 "$out\base.apk" "$out\aligned.apk"
 Check 'zipalign'
 
-# signed with the standard Android debug key: fine for installing by hand, not for Google Play
-& "$bt\apksigner.bat" sign --ks "$env:USERPROFILE\.android\debug.keystore" --ks-pass pass:android --key-pass pass:android `
-    --out "$root\101.apk" "$out\aligned.apk"
+# signed with the game's own key (Desktop\101-keys, never in git): the stores know the app by it.
+# Without that folder: the standard Android debug key, fine only for installing by hand.
+$keys = Join-Path (Split-Path $root -Parent) '101-keys'
+if (Test-Path "$keys\game101-release.jks") {
+    $pw = (Get-Content "$keys\password.txt" -Raw).Trim()
+    & "$bt\apksigner.bat" sign --ks "$keys\game101-release.jks" --ks-key-alias game101 --ks-pass "pass:$pw" --key-pass "pass:$pw" `
+        --out "$root\101.apk" "$out\aligned.apk"
+} else {
+    & "$bt\apksigner.bat" sign --ks "$env:USERPROFILE\.android\debug.keystore" --ks-pass pass:android --key-pass pass:android `
+        --out "$root\101.apk" "$out\aligned.apk"
+}
 Check 'apksigner'
 
 & "$bt\apksigner.bat" verify "$root\101.apk"

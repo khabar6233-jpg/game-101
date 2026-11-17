@@ -6,7 +6,7 @@
 - `www/index.html` — вся игра в одном файле (один IIFE). `const VERSION = N` и `www/version.txt` всегда совпадают; каждая выкладка +1. `const PROTO` — язык телефон↔сервер для комнат: поднимать только при несовместимом изменении сообщений.
 - `server/` — Cloudflare Worker «game-101» (https://game-101.game-101-server.workers.dev): `src/index.js` маршруты, `src/relay.js` Durable Object (пересылка + столы комнат), `src/admin.html` страница разработчика, D1 база `game101`.
 - Сетевые комнаты (с v110) играются на сервере: телефон только показывает свой вид и шлёт нажатия. Стол = `server/src/table-pre.js` + правила + `server/src/table-post.js`. Правила НЕ копируются: `server/build-engine.mjs` вырезает их из `www/index.html` между метками `@engine-begin/@engine-end` в `src/engine.gen.js` (сам, перед каждым `wrangler deploy`). Игра с ботами — на телефоне, тем же кодом правил.
-- `android/` — APK-обёртка; сборка `build-apk.ps1`. Иконки: `android/icon.svg` → `android/make-icon.ps1`.
+- `android/` — APK-обёртка; сборка `build-apk.ps1` (versionCode = VERSION; подпись ключом из `Desktop/101-keys`, не в git — без него отладочный ключ). Пакет для RuStore: `Desktop/101-rustore`. Иконки: `android/icon.svg` → `android/make-icon.ps1`.
 - Резервная копия v109 (до переноса на сервер): тег `backup-v109`, папка `Desktop/101-backup-v109`.
 
 ## Режимы
