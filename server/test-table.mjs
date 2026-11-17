@@ -11,12 +11,17 @@ const { makeTable } = await import('./src/engine.gen.js');
 
 const problems = [];
 const bad = (what, x) => { if (problems.length < 30) problems.push(what + ' ' + JSON.stringify(x || {}).slice(0, 300)); };
-function run(limit = 200000) {
+function runUntil(pred, limit = 100000) {
   let n = 0;
-  while (Q.length && n++ < limit) { Q.sort((a, b) => a.at - b.at); const t = Q.shift(); now = Math.max(now, t.at); t.f(); }
+  while (Q.length && n++ < limit && !pred()) { Q.sort((a, b) => a.at - b.at); const t = Q.shift(); now = Math.max(now, t.at); t.f(); }
+}
+// timers further away than "far" wait (the 30 seconds of a person's move do not run out while the test plays for them)
+function run(limit = 200000, far = 20000) {
+  let n = 0;
+  while (Q.length && n++ < limit) { Q.sort((a, b) => a.at - b.at); if (Q[0].at - now > far) break; const t = Q.shift(); now = Math.max(now, t.at); t.f(); }
 }
 
-function room(opts) {
+function room(opts, turnMs = 1e9) {
   const inbox = new Map(), state = { saved: null, gone: false, listed: null };
   const H = {
     send: (id, d) => { if (!inbox.has(id)) inbox.set(id, []); inbox.get(id).push(JSON.parse(JSON.stringify(d))); },
@@ -24,7 +29,7 @@ function room(opts) {
     save: st => { state.saved = JSON.parse(JSON.stringify(st)); },
     drop: () => { state.gone = true; }
   };
-  const t = makeTable(H, { code: '123456', owner: 'own1', lang: 'ru', vk: 'K', room: opts });
+  const t = makeTable(H, { code: '123456', owner: 'own1', lang: 'ru', vk: 'K', room: opts, turnMs });
   let q = 0;
   const say = (id, d) => t.onMessage(id, ++q, d);
   const last = (id, type) => { const m = (inbox.get(id) || []).filter(x => !type || x.t === type); return m[m.length - 1]; };
@@ -173,6 +178,78 @@ for (const long of [false, true]) for (const n of [2, 3, 4, 6]) for (const hand 
   r.say('c0', { t: 'restart' });
   run();
   if (r.t.dump().roundNo !== 1) bad('"new game" did not start a new game', { roundNo: r.t.dump().roundNo });
+}
+
+// ----- 5. 30 seconds for a move: the first time out takes a card and passes, the second makes a spectator -----
+{
+  const r = room({ name: 'Часы', seats: 3, hand: 5, long: false, priv: false }, 30000);
+  r.say('c0', { t: 'join', name: 'Аня', pid: 'own1' });
+  r.say('c1', { t: 'join', name: 'Боря', pid: 'p1' });
+  r.say('c2', { t: 'join', name: 'Вика', pid: 'p2' });       // the third seat: the game starts by itself
+  run();
+  if (!r.t.dump().started) bad('a full room did not start by itself');
+  let st = r.t.dump();
+  const v0 = r.last('c' + st.turn, 'view');
+  if (!v0 || v0.v.ts !== st.turn || !(v0.v.tl > 0)) bad('no clock for the move', v0 && { ts: v0.v.ts, tl: v0.v.tl });
+  const who1 = st.turn, hand1 = st.players[who1].hand.length, six1 = st.pendingSix;
+  runUntil(() => r.t.dump().players[who1].slow > 0);           // nobody moves: the clock runs out
+  st = r.t.dump();
+  if (st.players[who1].slow !== 1) bad('the clock did not count', st.players[who1]);
+  if (st.turn === who1 && st.phase === 'play' && !st.busy) bad('after the time out the move did not pass on', { who1, six1, turn: st.turn, drew: st.drew, busy: st.busy, log: r.last('c0', 'view').v.log });
+  if (st.players[who1].hand.length < hand1 && !st.pendingSix) bad('the late player did not draw', { hand1, now: st.players[who1].hand.length });
+  runUntil(() => r.t.dump().players[who1].removed || r.t.dump().phase === 'roundEnd');
+  st = r.t.dump();
+  if (!st.players[who1].removed && st.phase !== 'roundEnd') bad('the second time out did not take the seat', st.players[who1]);
+  else if (st.players[who1].removed) {
+    const sv = r.last('c' + who1, 'view');
+    if (!sv || !sv.v.spec) bad('the late player is not a spectator', sv && sv.v.seat);
+  }
+}
+
+// ----- 6. a game with a bot: people who come wait; a full room of people starts a new game -----
+{
+  const r = room({ name: 'Боты', seats: 3, hand: 5, long: false, priv: false });
+  r.say('c0', { t: 'join', name: 'Аня', pid: 'own1' });
+  r.say('c0', { t: 'addbot' });
+  r.say('c0', { t: 'start' });
+  run();
+  r.say('c1', { t: 'join', name: 'Боря', pid: 'p1' });
+  run();
+  const w = r.last('c1', 'view');
+  if (!w || !w.v.spec || !w.v.sit || w.v.need !== 1) bad('a waiting player does not know they wait for a seat', w && { spec: w.v.spec, sit: w.v.sit, need: w.v.need });
+  if (!r.state.listed || r.state.listed.open !== 1) bad('the room with a bot is not listed as taking players', r.state.listed);
+  r.say('c2', { t: 'join', name: 'Вика', pid: 'p2' });
+  run();
+  const st = r.t.dump();
+  if (st.players.some(p => p.isBot) || st.players.length !== 3 || st.roundNo !== 1) bad('a full room of people did not start a game of people', st.players.map(p => p.name));
+}
+
+// ----- 7. somebody leaves a game of people: after the round the room waits for a new player -----
+{
+  const r = room({ name: 'Уход', seats: 3, hand: 5, long: false, priv: false });
+  r.say('c0', { t: 'join', name: 'Аня', pid: 'own1' });
+  r.say('c1', { t: 'join', name: 'Боря', pid: 'p1' });
+  r.say('c2', { t: 'join', name: 'Вика', pid: 'p2' });
+  run();
+  r.say('c2', { t: 'bye' });
+  run();
+  let st = r.t.dump();
+  if (!st.players[2].removed) bad('a player who left kept the seat');
+  for (let k = 0; k < 3000 && r.t.dump().started && r.t.dump().phase !== 'roundEnd'; k++) {
+    const mover = ['c0', 'c1'].find(id => { const v = r.last(id, 'view'); return v && ((v.v.phase === 'play' && v.v.turn === v.v.seat && !v.v.busy) || v.v.choose); });
+    if (!mover) { run(); continue; }
+    const v = r.last(mover, 'view').v;
+    if (v.choose) r.say(mover, { t: 'suit', s: '♠︎' });
+    else { const c = v.hand.find(x => x.ok); r.say(mover, c ? { t: 'play', id: c.id, s: '♠︎' } : { t: v.pendingSix ? 'take' : v.drew ? 'pass' : 'draw' }); }
+    run();
+  }
+  run(200000, 60000);                                          // the opened cards, then the room goes back to waiting
+  st = r.t.dump();
+  if (st.started || st.lobby.length !== 2 || r.state.gone) bad('the room did not go back to waiting for a player', { started: st.started, lobby: st.lobby.map(x => x.name), gone: r.state.gone });
+  r.say('c3', { t: 'join', name: 'Гена', pid: 'p3' });
+  run();
+  st = r.t.dump();
+  if (!st.started || st.players.length !== 3) bad('the new player did not start a new game', { started: st.started });
 }
 
 console.log(`games ${games}, rounds ${rounds}`);

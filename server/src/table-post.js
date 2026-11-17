@@ -38,10 +38,104 @@ function viewOf(seat, sp, ctl) {
   v.canControl = seat >= 0 && seat === ctl;
   v.sitters = v.canControl ? [...specs.values()].filter(x => x.sit).map(x => x.name) : [];
   v.vk = vk; v.inv = seat >= 0 ? inv : ''; v.srv = 1; v.ver = VERSION; v.proto = PROTO;
+  // the move's 30 seconds: who is on the clock and how much is left
+  v.ts = tAt ? tSeat : -1; v.tl = tAt ? Math.max(0, tAt - Date.now()) : 0; v.tt = TURN_MS;
+  // those who wait for a seat: how many more people the room needs before a game of people starts
+  v.need = seatsNeed(); v.bots = players.some(p => p.isBot && !p.removed);
   return v;
+}
+
+// ---------- 30 seconds for a move when people play together ----------
+// Time out once: the player takes a card and passes (or takes the stacked cards). Twice in one game: they leave
+// the game and watch. With one person and bots there is no clock.
+const TURN_MS = +init.turnMs || 30000;
+let tAt = 0, tSeat = -1, tKey = '', tT = null;
+const people = () => players.filter(p => !p.isBot && !p.removed);
+function clockSeat() {
+  if (!started) return -1;
+  if (phase === 'choose' && pendingQueen) return pendingQueen.pi;
+  if (phase === 'play' && !busy) return turn;
+  return -1;
+}
+function armClock() {
+  const s = clockSeat(), p = players[s];
+  const on = !!p && !p.isBot && !p.out && players.filter(x => !x.isBot && !x.out).length >= 2;
+  const key = on ? gameId + ':' + roundNo + ':' + s + ':' + phase : '';
+  if (key === tKey) return;
+  tKey = key;
+  clearTimeout(tT); tT = null;
+  if (!on) { tAt = 0; tSeat = -1; return; }
+  tSeat = s; tAt = Date.now() + TURN_MS;
+  const g = gameId;
+  tT = setTimeout(() => { tT = null; if (g === gameId && tKey === key && !closed) timeUp(s); }, TURN_MS + 300);
+}
+function timeUp(s) {
+  const p = players[s];
+  if (!p || p.isBot || p.removed) return;
+  tKey = ''; tAt = 0;
+  p.slow = (p.slow || 0) + 1;
+  if (p.slow >= 2) {
+    say(LL(`${p.name} второй раз не успел сходить и теперь смотрит игру`, `${p.name} ran out of time twice and now watches the game`));
+    removePlayer(s, 'bench');
+    return;
+  }
+  if (phase === 'choose' && pendingQueen && pendingQueen.pi === s) act(s, { t: 'suit', s: botSuit(p) });
+  else if (phase === 'play' && turn === s && !busy) {
+    if (pendingSix) takePenalty();
+    else {
+      if (!drew) act(s, { t: 'draw' });
+      if (phase === 'play' && turn === s && !busy) pass();
+    }
+  }
+  // said last, so it is the line everybody reads
+  say(who(s, 'не успели сходить за 30 секунд. Второй раз — выход из игры', 'не успел сходить за 30 секунд',
+    'ran out of the 30 seconds. The second time you leave the game', 'ran out of the 30 seconds'));
+  render();
+}
+
+// ---------- seats ----------
+const sitters = () => [...specs.values()].filter(x => x.sit);
+// how many more people the room needs (a game with bots goes on until then; a game of people waits for a free seat)
+function seatsNeed() { return started ? Math.max(0, roomSeats - people().length - sitters().length) : Math.max(0, roomSeats - lobby.length); }
+// every seat is taken: the game starts by itself
+let startT = null;
+function maybeStart() {
+  clearTimeout(startT);
+  if (started || lobby.length < roomSeats || !lobby.some(x => !x.isBot)) return;
+  startT = setTimeout(() => { startT = null; if (!closed && !started && lobby.length >= roomSeats) CMD.start(); }, 1200);
+}
+// a game with bots: once enough people wait for seats, it stops and a game of people only starts
+function checkFill() {
+  if (!started || closed) return;
+  if (!players.some(p => p.isBot && !p.removed) || !sitters().length) return;
+  if (people().length + sitters().length < roomSeats) return;
+  say(LL('Все места заняты людьми: начинается новая игра', 'Every seat is taken by people: a new game starts'));
+  restartMatch();                                          // the people who waited take the bots' places
+  announce(true);
+}
+// after a round (or a game) somebody has left and no bot holds the seat: the room goes back to waiting for a player
+function roomNext() {
+  if (!started || players.some(p => p.isBot && !p.removed) || !players.some(p => p.removed)) return false;
+  toLobby();
+  return true;
+}
+function toLobby() {
+  gameId++; busy = false; pend = null; pendingQueen = null; result = null; phase = 'setup'; started = false;
+  log = []; roundNo = 0;
+  clearTimeout(tT); tT = null; tKey = ''; tAt = 0;
+  lobby = people().filter(p => p.conn && !p.conn.left).map(p => ({ name: p.name, conn: p.conn, isBot: false, pid: p.pid }));
+  sitters().forEach(sp => {                               // those who waited for a seat sit down
+    if (lobby.length >= roomSeats) return;
+    lobby.push({ name: sp.name, conn: sp.conn, isBot: false, pid: sp.pid || '' });
+    specs.delete(sp.id);
+  });
+  players = [];
+  if (!lobby.some(x => !x.isBot)) { closeTable(); return; }
+  drawLobby();
 }
 function render() {
   if (closed) return;
+  armClock();
   if (started && players.length) {
     const ctl = controller();
     players.forEach((p, i) => {
@@ -72,6 +166,7 @@ function drawLobby() {
   specs.forEach(sp => { if (sp.conn && sp.conn.open) sp.conn.send(lobbyMsg(-1, ctl)); });
   announce(true);
   save();
+  maybeStart();
 }
 // the list of games on the start screen
 function announce(now) {
@@ -81,7 +176,7 @@ function announce(now) {
   const seated = started ? players.filter(p => !p.removed) : lobby;
   H.announce({ code: roomCode, name: roomName, host: ownerPid, names: seated.map(p => p.name), pids: seated.map(p => p.pid || '').filter(Boolean),
     seats: roomSeats, hand: started ? handN : roomHand, long: started ? deckLong : longPick, priv: roomPriv, started: !!started,
-    spec: specs.size, open: started ? players.filter(x => x.isBot && !x.removed && !x.out).length : 0, ver: VERSION });
+    spec: specs.size, open: started ? seatsNeed() : 0, bots: started && players.some(p => p.isBot && !p.removed), ver: VERSION });
 }
 
 // send a phone the current state again (answers every ping, so a lost message heals itself)
@@ -150,7 +245,7 @@ function onMessage(from, q, d) {
     sp.asked = roundNo;
     sp.wait = players.map((p, i) => (!p.out && !p.isBot ? i : -1)).filter(i => i >= 0);
     render();
-  } else if (d.t === 'sit') { sp.sit = !!d.on; render(); }
+  } else if (d.t === 'sit') { sp.sit = !!d.on; render(); checkFill(); announce(true); }
 }
 
 function onJoin(conn, d) {
@@ -173,6 +268,7 @@ function onJoin(conn, d) {
     specs.set(conn.id, { id: conn.id, pid, name: String(d.name || L('Зритель', 'Spectator')).slice(0, 12), conn,
       asked: old ? old.asked : 0, sit: old ? old.sit : d.want !== 'watch', open: old ? old.open : {}, wait: old ? old.wait : [] });
     render();
+    checkFill();
     announce(true);
     return;
   }
@@ -194,8 +290,6 @@ function onJoin(conn, d) {
 // a phone said "Выйти": in the lobby it just goes, in a game the player is marked as gone; the owner closes the room
 function onGone(conn) {
   retire(conn);
-  const mine = (started ? players : lobby).find(x => x.conn === conn);
-  if (mine && mine.pid === ownerPid) { closeTable(); return; }
   if (!started) {
     if (specs.delete(conn.id)) { drawLobby(); return; }
     lobby = lobby.filter(x => x.conn !== conn);
@@ -204,8 +298,8 @@ function onGone(conn) {
     return;
   }
   if (specs.delete(conn.id)) { render(); announce(true); return; }
-  const p = players.find(x => x.conn === conn);
-  if (p) { p.lost = true; duelAbort(); render(); }          // one on one: leaving ends the game
+  const i = players.findIndex(x => x.conn === conn);
+  if (i >= 0) { duelAbort(); removePlayer(i, 'left'); }   // the others play on; after the round the room waits for a new player
   if (!players.some(x => !x.isBot && !x.removed && x.conn && !x.conn.left)) closeTable();
 }
 
@@ -262,19 +356,23 @@ function replaceWithBot(i) {
   else render();
 }
 // a player or a bot leaves the game: their cards go back into the deck and the others play on
-function removePlayer(i) {
+function removePlayer(i, how = 'kick') {
   const p = players[i];
-  if (!started || !p || p.out || i === controller()) return;
-  if (p.conn) {
+  if (!started || !p || p.removed || (how === 'kick' && (p.out || i === controller()))) return;
+  if (how === 'bench' && p.conn && !p.conn.left)
+    specs.set(p.conn.id, { id: p.conn.id, pid: p.pid, name: p.name, conn: p.conn, asked: 0, sit: false, open: {}, wait: [] });
+  else if (how === 'kick' && p.conn) {
     try { p.conn.send({ t: 'kicked', term }); } catch {}
     kicked.set(p.conn.id, Date.now());
-    retire(p.conn); p.conn = null;
+    retire(p.conn);
   }
-  if (p.pid) banned.add(p.pid);
+  p.conn = null;
+  if (how === 'kick' && p.pid) banned.add(p.pid);
   p.out = true; p.removed = true; p.isBot = true; p.lost = false; p.pid = '';
   deck = shuffle(deck.concat(p.hand));
   p.hand = [];
-  say(LL(p.name + ' удалён из игры', p.name + ' was removed from the game'));
+  if (how === 'kick') say(LL(p.name + ' удалён из игры', p.name + ' was removed from the game'));
+  else if (how === 'left') say(LL(p.name + ' вышел из игры', p.name + ' left the game'));
   const left = active();
   if (phase === 'roundEnd') {
     if (result && left.length < 2) { result.gameOver = true; result.champion = left.length ? players.indexOf(left[0]) : -1; }
@@ -316,7 +414,7 @@ function tick() {
   if (started) {
     // every person at the table has been gone for ten minutes: nobody is going to finish this game
     if (players.some(p => !p.isBot && !p.removed && p.conn && !p.lost)) humansAt = now;
-    else if (now - humansAt > 10 * 60000) { closeTable(); return; }
+    else if (now - humansAt > 30 * 60000) { closeTable(); return; }
     let changed = false;
     specs.forEach((sp, id) => { if (sp.conn.left || now - sp.conn.last > LOST_MS) { specs.delete(id); changed = true; } });
     players.forEach(p => {
@@ -359,7 +457,7 @@ function dump() {
     specs: [...specs.values()].map(({ conn, ...x }) => ({ ...x, cid: cid(conn) })),
     banned: [...banned], kicked: [...kicked], pidLang: [...pidLang],
     players: players.map(p => ({ name: p.name, isBot: p.isBot, pid: p.pid || '', hand: p.hand, score: p.score, out: p.out, got: !!p.got,
-      removed: !!p.removed, lost: !!p.lost, emptySince: p.emptySince || 0, cid: cid(p.conn) })),
+      removed: !!p.removed, lost: !!p.lost, emptySince: p.emptySince || 0, slow: p.slow || 0, cid: cid(p.conn) })),
     deck, pile, suit, turn, drew, sixRun, pendingSix, emptySeq, passStreak, starter, roundNo, phase, pend, handN, deckLong, dir, fourBy, fourDraw,
     queen: pendingQueen ? { pi: pendingQueen.pi, id: pendingQueen.card.id } : null,
     result, evSeq, lastEv, viewRev, backNo, matchId, duel, hint,
@@ -391,6 +489,7 @@ function load(st) {
   // the timer that was about to move goes again
   if (started && phase === 'play' && pend) later(pend.k, pend.a, PLAY_PAUSE);
   else if (started && phase === 'play') step();
+  else if (started && phase === 'roundEnd' && result && !result.gameOver) nextLater();
 }
 
 if (init.saved) load(init.saved);

@@ -376,14 +376,43 @@
   #coach { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 52px); z-index: 30; display: none;
     width: min(340px, calc(100vw - 32px)); background: #fffaf0; color: #222; border-radius: 14px; padding: 12px 14px 10px;
     box-shadow: 0 8px 28px rgba(0,0,0,.5); font-size: 15px; line-height: 1.35; text-align: left; }
-  #coach.show { display: block; animation: coachIn .3s ease; }
+  #coach.show { display: block; animation: coachIn .3s ease, coachPulse 2.63s ease-in-out .3s infinite; }
+  @keyframes coachPulse { 0%, 88.6%, 100% { box-shadow: 0 8px 28px rgba(0,0,0,.5), 0 0 0 2px rgba(242,193,78,.15); }
+    44.3% { box-shadow: 0 8px 28px rgba(0,0,0,.5), 0 0 0 2px rgba(242,193,78,.95), 0 0 16px rgba(242,193,78,.5); } }
   #coach .cb { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 10px; }
   #coach button { border: 0; font: inherit; cursor: pointer; }
   #coach .ok { background: var(--felt); color: #fff; font-weight: 700; border-radius: 10px; padding: 7px 16px; }
   #coach .off { background: none; color: #777; font-size: 13px; text-decoration: underline; padding: 6px 0; }
+  #coach.mid { top: 50%; translate: 0 -50%; }
   @keyframes coachIn { from { opacity: 0; translate: 0 10px; } }
-  .coachT { outline: 3px solid var(--gold); outline-offset: 5px; border-radius: 10px; animation: coachGlow 1.3s ease-in-out infinite; }
-  @keyframes coachGlow { 50% { outline-color: transparent; } }
+  .zone-line::after { left: var(--tcut, 0); right: var(--tcut, 0); }
+  body.clock .zone-line::after { animation: clockLine 2.63s ease-in-out infinite; height: 2px; top: -1.5px; }
+  @keyframes clockLine { 0%, 88.6%, 100% { opacity: .55; } 44.3% { opacity: 1; } }
+  .opp svg.clk { position: absolute; inset: -3px; width: calc(100% + 6px); height: calc(100% + 6px); pointer-events: none; overflow: visible; }
+  .opp svg.clk rect { fill: none; stroke: var(--gold); stroke-width: 2.5; stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(242,193,78,.6)); }
+  /* the end of a round: everybody's cards are open, the points float over them */
+  .me-bar .queue { color: var(--gold); font-weight: 700; animation: turnPulse 2.63s ease-in-out infinite; }
+  .gain { position: absolute; left: 50%; top: -11px; translate: -50% 0; z-index: 2; white-space: nowrap; background: var(--gold); color: #222;
+    font-weight: 800; font-size: 14px; border-radius: 10px; padding: 1px 9px; box-shadow: 0 3px 10px rgba(0,0,0,.4); animation: gainIn .45s ease; }
+  .gain.win { background: #fff; }
+  .me-bar .gain { position: static; translate: none; display: inline-block; margin-left: 8px; vertical-align: 1px; }
+  @keyframes gainIn { from { opacity: 0; scale: .6; } }
+  #deck.shuf { animation: deckShuf .9s ease-in-out; }
+  @keyframes deckShuf { 15% { transform: translateX(-7px) rotate(-5deg); } 35% { transform: translateX(7px) rotate(5deg); }
+    55% { transform: translateX(-5px) rotate(-3deg); } 75% { transform: translateX(5px) rotate(3deg); } }
+  .coachT { outline: 2px solid var(--gold); outline-offset: 5px; border-radius: 10px; animation: coachGlow 2.63s ease-in-out infinite; }
+  @keyframes coachGlow { 0%, 88.6%, 100% { outline-color: rgba(242,193,78,.15); } 44.3% { outline-color: rgba(242,193,78,1); } }
+  .filtRow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 2px -4px; min-height: 30px; }
+  .filtRow .fchip { display: inline-flex; align-items: center; height: 24px; line-height: 1; background: rgba(242,193,78,.16); color: var(--gold);
+    border: 1px solid rgba(242,193,78,.45); border-radius: 12px; padding: 0 9px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .filtRow .fchip.all { background: rgba(255,255,255,.06); color: var(--muted); border-color: rgba(255,255,255,.14); font-weight: 600; }
+  .fbtn { margin-left: auto; width: 34px; height: 30px; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; background: rgba(0,0,0,.2);
+    color: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+  .fbtn svg { width: 20px; height: 20px; }
+  .fbtn.on { color: var(--gold); border-color: rgba(242,193,78,.6); }
+  #filtDlg .fpick { display: flex; flex-wrap: wrap; gap: 6px; }
+  #filtDlg .fpick button { flex: 1; min-width: 44px; }
+  #filtDlg .fnote { font-size: 12px; color: #888; margin: 4px 0 2px; }
   #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60; max-width: 92vw; display: none;
     background: #fff; color: #222; border-radius: 12px; padding: 10px 16px; font-size: 15px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
   #toast.show { display: block; animation: toastIn .35s ease; touch-action: none; }
@@ -716,6 +745,7 @@
     <div class="field"><span>Имя</span><input id="nick" maxlength="12" placeholder="Как вас зовут" autocomplete="off" autocapitalize="words" lang="ru"></div>
     <div class="hint bad" id="nameHint"></div>
 
+    <div class="filtRow" id="filtRow"></div>
     <section class="panel games">
       <div class="roomTabs" id="roomTabs"><i></i><button data-tab="play">Играть<b></b></button><button data-tab="watch">Смотреть<b></b></button></div>
       <div id="rooms"></div>
@@ -967,7 +997,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 124;              // keep in sync with www/version.txt
+  const VERSION = 125;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -1099,43 +1129,16 @@
   document.addEventListener('visibilitychange', () => (document.hidden ? sPause() : sWake()));
   addEventListener('blur', sPause);
   addEventListener('focus', sWake);
-  // a card sliding: a breath of noise through a band filter that glides from f to f2
-  function sSwish(at, { f = 1400, f2 = 900, q = 0.9, dur = 0.12, vol = 0.25, att = 0.02 } = {}) {
+  // a card touching the table: a very short, low, soft tap (noise through a low filter)
+  function sTap(at, { f = 520, dur = 0.035, vol = 0.18 } = {}) {
     const c = sCtx, src = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
     src.buffer = sNoise;
-    flt.type = 'bandpass'; flt.Q.value = q;
-    flt.frequency.setValueAtTime(f, at); flt.frequency.exponentialRampToValueAtTime(f2, at + dur);
+    flt.type = 'lowpass'; flt.frequency.value = f; flt.Q.value = 0.5;
     g.gain.setValueAtTime(0.0001, at);
-    g.gain.linearRampToValueAtTime(vol, at + att);
+    g.gain.linearRampToValueAtTime(vol, at + 0.003);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     src.connect(flt); flt.connect(g); g.connect(c.destination);
-    src.start(at, Math.random() * 0.3); src.stop(at + dur + 0.03);
-  }
-  // a card landing on the table: a short soft knock, low
-  function sThud(at, vol = 0.4) {
-    const c = sCtx, src = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
-    src.buffer = sNoise;
-    flt.type = 'lowpass'; flt.frequency.value = 420; flt.Q.value = 0.6;
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.linearRampToValueAtTime(vol, at + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.08);
-    src.connect(flt); flt.connect(g); g.connect(c.destination);
-    src.start(at, Math.random() * 0.3); src.stop(at + 0.1);
-  }
-  // a riffle: one stream of paper noise whose loudness flutters unevenly (an even beat sounds like a ratchet)
-  function sRiffle(at, len = 0.55, vol = 0.22) {
-    const c = sCtx, src = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
-    src.buffer = sNoise; src.loop = true;
-    flt.type = 'bandpass'; flt.frequency.value = 1300; flt.Q.value = 0.7;
-    g.gain.setValueAtTime(0.0001, at);
-    for (let x = 0.01; x < len; x += 0.006 + Math.random() * 0.012) {
-      const env = Math.sin(Math.PI * x / len) ** 0.6;
-      g.gain.linearRampToValueAtTime(vol * env * (0.25 + Math.random() * 0.75), at + x);
-    }
-    g.gain.linearRampToValueAtTime(0.0001, at + len + 0.02);
-    flt.frequency.setValueAtTime(1500, at); flt.frequency.linearRampToValueAtTime(1000, at + len);
-    src.connect(flt); flt.connect(g); g.connect(c.destination);
-    src.start(at); src.stop(at + len + 0.05);
+    src.start(at, Math.random() * 0.4); src.stop(at + dur + 0.02);
   }
   function sTone(at, freq, dur, vol, type = 'sine') {
     const c = sCtx, o = c.createOscillator(), g = c.createGain();
@@ -1151,21 +1154,19 @@
     const c = sGet();
     if (!c || c.state !== 'running') return;
     const t = c.currentTime + 0.01, r = () => 0.9 + Math.random() * 0.2;
-    if (kind === 'play') {                 // a card put on the pile: a slide and a soft knock
-      sSwish(t, { f: 1500 * r(), f2: 700, dur: 0.11, vol: 0.2 });
-      sThud(t + 0.09, 0.45);
-    } else if (kind === 'draw') {          // cards taken from the deck: a quick slide each
-      for (let k = 0; k < Math.min(n, 6); k++) sSwish(t + k * 0.15, { f: 900 * r(), f2: 1500, dur: 0.14, vol: 0.18, att: 0.04 });
-    } else if (kind === 'shuffle') {       // a riffle, then the deck squared up
-      sRiffle(t);
-      sThud(t + 0.62, 0.35); sThud(t + 0.7, 0.25);
-    } else if (kind === 'deal') {          // the deal: a shuffle, then the cards go round
-      sfx('shuffle');
-      for (let k = 0; k < Math.min(n, 12); k++) sSwish(t + 0.9 + k * 0.11, { f: 1300 * r(), f2: 800, dur: 0.08, vol: 0.15, att: 0.012 });
+    if (kind === 'play') {                 // a card put on the pile: one soft tap
+      sTap(t, { f: 600 * r(), dur: 0.045, vol: 0.2 });
+    } else if (kind === 'draw') {          // cards taken from the deck: a lighter tap each
+      for (let k = 0; k < Math.min(n, 4); k++) sTap(t + k * 0.09, { f: 900 * r(), dur: 0.025, vol: 0.09 });
+    } else if (kind === 'shuffle') {       // the deck shuffled: a few quick uneven taps
+      for (let k = 0, x = 0; k < 6; k++, x += 0.035 + Math.random() * 0.03) sTap(t + x, { f: 700 * r(), dur: 0.025, vol: 0.08 });
+    } else if (kind === 'deal' || kind === 'dealt') {   // the deal: the shuffle (unless it was just heard), then a light tap per card
+      if (kind === 'deal') sfx('shuffle');
+      for (let k = 0; k < Math.min(n, 8); k++) sTap(t + 0.3 + k * 0.07, { f: 800 * r(), dur: 0.022, vol: 0.07 });
     } else if (kind === 'win') {
-      [523, 659, 784].forEach((f, k) => sTone(t + k * 0.11, f / 2, 0.35, 0.09, 'triangle'));
+      [523, 659, 784].forEach((f, k) => sTone(t + k * 0.1, f / 2, 0.22, 0.045, 'sine'));
     } else if (kind === 'lose') {
-      [392, 330, 262].forEach((f, k) => sTone(t + k * 0.14, f / 2, 0.4, 0.08, 'triangle'));
+      [392, 330, 262].forEach((f, k) => sTone(t + k * 0.12, f / 2, 0.25, 0.04, 'sine'));
     }
   }
   function buzz(ms) {
@@ -1246,6 +1247,7 @@
     dir = 1; fourBy = -1; fourDraw = 0;
     players.forEach(p => { p.hand = []; });
     for (let k = 0; k < handN; k++) active().forEach(p => { if (deck.length) p.hand.push(deck.pop()); });
+    if (mode === 'solo' && roundNo === 1 && rigWanted()) rigDeal();
     phase = 'play';
     turn = starter;
     // the starter keeps all but one card; that one is opened as their move
@@ -1577,13 +1579,25 @@
       if (w >= 0) starter = w;
       if (players[starter].out) starter = nextIdx(starter);
     }
-    result = { w, rows, gameOver, champion: left.length === 1 ? players.indexOf(left[0]) : -1 };
+    result = { w, rows, gameOver, champion: left.length === 1 ? players.indexOf(left[0]) : -1,
+      hands: players.map((p, i) => (rows.some(x => x.pi === i) ? p.hand.map(face) : null)) };    // everybody's cards are opened
     if (gameOver && result.champion >= 0 && duelists().length === 2) {
       const win = players[result.champion], lose = duelists().find(x => x !== win);
       // one on one "всухую": the winner has not taken a single point the whole game (a reset at 101 does not help)
       if (lose) { duel = { id: matchId, wk: duelK(win), lk: duelK(lose), dry: !win.got }; result.dry = !win.got; }
     }
     render();
+    if (!gameOver) nextLater();
+  }
+  // the opened cards and the points stay on the table for a while, then the cards go back, are shuffled and dealt again
+  const ROUND_SHOW = 7000;
+  function nextLater(ms = ROUND_SHOW) {
+    const g = gameId, r = roundNo;
+    setTimeout(() => {
+      if (g !== gameId || r !== roundNo || phase !== 'roundEnd' || !result || result.gameOver) return;
+      if (typeof holdNext === 'function' && holdNext()) { nextLater(1000); return; }    // a tip about the points is still being read
+      afterResult();
+    }, ms);
   }
 
   // stop the game right now and start a new one (spectators who asked for a seat sit down)
@@ -1598,6 +1612,7 @@
 
   function afterResult() {
     if (!result) return;
+    if (typeof roomNext === 'function' && roomNext()) return;     // the game's server: somebody left, the room waits for a new player
     if (!result.gameOver) { startRound(); return; }
     if (mode === 'solo') { leave(); return; }
     // same room, fresh match
@@ -1614,7 +1629,7 @@
       specs.delete(id);
     });
     mySeat = Math.max(players.indexOf(meP), 0);
-    players.forEach(p => { p.score = 0; p.out = false; p.got = false; });
+    players.forEach(p => { p.score = 0; p.out = false; p.got = false; p.slow = 0; });
     if (active().length < 2) { leave(); return; }             // everybody else was removed
     starter = Math.floor(Math.random() * players.length);
     roundNo = 0; log = [];
@@ -1803,7 +1818,9 @@
     o.className = 'opps' + (v.players.length - (v.spec ? 0 : 1) > 3 ? ' many' : '');
     for (let k = v.spec ? 0 : 1; k < v.players.length; k++) {
       const i = (Math.max(v.seat, 0) + k) % v.players.length, p = v.players[i];
-      const open = v.open && v.open[i];
+      const RE = v.phase === 'roundEnd' && v.result && v.result.hands ? v.result : null;
+      const open = (RE && RE.hands[i]) || (v.open && v.open[i]);
+      const row = RE && RE.rows.find(x => x.pi === i);
       const d = document.createElement('div');
       d.dataset.i = i;
       d.className = 'opp' + (v.turn === i && v.phase !== 'roundEnd' && !p.out ? ' turn' : '') + (p.out ? ' out' : '');
@@ -1814,7 +1831,8 @@
         (open ? `<div class="minis open">${open.map(c => `<div class="mini f${RED.has(c.s) ? ' red' : ''}">${rankName(c.r)}<br>${c.s}</div>`).join('')}</div>`
           : `<div class="minis fan">${Array.from({ length: shown }, (_, k) => `<div class="mini" ${fan(k)}></div>`).join('')}</div>`) +
         `<div class="pts">${p.gone ? L('удалён', 'removed') : p.out ? L('выбыл', 'out') : `<b>${p.score}</b><i class="w"> ${L('оч.', 'pts')}</i>`}<span class="sep">·</span><span class="cnt">${p.count}</span><i class="w"> ${L('карт', 'cards')}</i></div>` +
-        (p.lost ? `<div class="lost">${L('нет связи', 'offline')}</div>` : '');
+        (p.lost ? `<div class="lost">${L('нет связи', 'offline')}</div>` : '') +
+        (row ? `<div class="gain${row.win ? ' win' : ''}">${gainText(row)}</div>` : '');
       o.appendChild(d);
     }
 
@@ -1855,13 +1873,29 @@
     (v.hist || tail).forEach(c => hc.appendChild(cardEl(c)));
 
     const mb = $('meBar');
+    const myRow = v.phase === 'roundEnd' && v.result && v.result.hands && !v.spec ? v.result.rows.find(x => x.pi === v.seat) : null;
+    if (v.phase === 'roundEnd' && v.result && v.result.hands && !v.result.gameOver && collectRound !== v.roundNo) {
+      collectRound = v.roundNo;
+      const r0 = v.roundNo;
+      setTimeout(() => { if (view && view.roundNo === r0 && view.phase === 'roundEnd') collectCards(); }, 4900);
+    }
     const hint = me.out ? L(' · вы выбыли', ' · you are out')
       : !v.hand.length && v.phase === 'play' ? (myTurn ? L(' · карт нет — возьмите карту из колоды', ' · no cards — draw one from the deck') : L(' · карт нет: ждём своего хода', ' · no cards: waiting for your move'))
       : !myTurn ? ''
       : v.pendingSix ? (hasMove ? L(' · подкиньте шестёрку или берите карты', ' · pass on a six or take the cards') : L(' · нажмите «Беру»', ' · press "Take"'))
       : hasMove ? '' : v.drew ? L(' · карта не подошла — нажмите «Пас»', ' · no match — press "Pass"') : L(' · нет карты — нажмите на стол, чтобы взять', ' · nothing to play — tap the table to draw');
-    mb.innerHTML = v.spec ? esc(v.sit ? L('Вы за столом: ждём новую игру', 'You are seated: waiting for a new game') : L('Вы зритель', 'You are watching'))
-      : `<span class="me-pts">${L('Вы', 'You')} · <b>${me.score}</b> ${L(pointsWord(me.score), me.score === 1 ? 'point' : 'points')}</span>`;
+    // in line for a seat (not just watching): said once in a message, and all the time in the line under the table
+    if (v.spec && v.sit && !queueSaid) {
+      queueSaid = true;
+      notifyUser(v.bots ? L('Вы в очереди за стол. Когда соберутся все игроки, начнётся новая игра — уже без ботов.', 'You are in line for a seat. When all the players are here, a new game starts — without bots.')
+        : L('Вы в очереди за стол. Сядете, когда освободится место.', 'You are in line for a seat. You sit down when a seat is free.'));
+    }
+    if (!v.spec) queueSaid = false;
+    mb.innerHTML = v.spec ? (v.sit ? '<span class="queue">' + esc(v.bots && v.need > 0 ? L(`В очереди за стол · ждём ещё ${v.need}`, `In line for a seat · ${v.need} more to come`)
+          : L('В очереди за стол', 'In line for a seat')) + '</span>'
+        : esc(L('Вы зритель', 'You are watching')))
+      : `<span class="me-pts">${L('Вы', 'You')} · <b>${me.score}</b> ${L(pointsWord(me.score), me.score === 1 ? 'point' : 'points')}</span>` +
+        (myRow ? `<span class="gain${myRow.win ? ' win' : ''}">${gainText(myRow)}</span>` : '');
     mb.className = 'me-bar' + (v.turn === v.seat && v.phase === 'play' ? ' turn' : '');
 
     // The compass needle turns to the player who is to move. While a six is waiting to be taken or
@@ -1923,7 +1957,7 @@
     const deckRect = $('deck').getBoundingClientRect();
     if (roundChanged) {
       // the deal: my cards and a few card backs for every opponent fly out of the deck
-      sfx('deal', v.hand.length + 3 * Math.max(0, v.players.length - 1));
+      sfx(Date.now() - collectedAt < 4000 ? 'dealt' : 'deal', v.hand.length + 3 * Math.max(0, v.players.length - 1));
       flyFromDeck(v.hand.map(c => c.id), v, false, 90);
       v.players.forEach((p, i) => {
         const box = i !== v.seat && !p.out && oppBox(i);
@@ -1966,6 +2000,9 @@
       if (box) for (let k = 0; k < Math.min(ev.k, 4); k++) fly(backEl(), deckRect, cardBoxAt(box), { delay: k * 150, s1: 0.4, r1: jitter(10) });
     }
 
+    // the move's clock (the game's server sends how much is left): drawn every frame until it runs out
+    clk = v.ts >= 0 && v.tl > 0 && v.phase !== 'roundEnd' ? { seat: v.ts, end: performance.now() + v.tl, total: v.tt || 30000 } : null;
+    clockFrame();
     $('turnNote').className = myTurn ? 'on' : '';
     document.body.classList.toggle('myturn', myTurn);
     const a = $('actions'); a.innerHTML = '';
@@ -1990,7 +2027,7 @@
         a.appendChild(b);
       };
       add(v.canAsk ? L('Попросить открыть карты', 'Ask to show cards') : L('Карты уже просили', 'Cards already asked'), { t: 'ask' }, v.canAsk);
-      add(v.sit ? L('Не садиться', 'Don\'t sit down') : L('Сесть в новой игре', 'Sit in the next game'), { t: 'sit', on: !v.sit }, true);
+      add(v.sit ? L('Выйти из очереди', 'Leave the line') : L('Встать в очередь за стол', 'Get in line for a seat'), { t: 'sit', on: !v.sit }, true);
     }
 
     if (window.placeActions) window.placeActions();
@@ -2001,6 +2038,39 @@
     drawResult(v);
     coach(v, ev);
   }
+
+  // ----- the very first game with bots: its first round is dealt on purpose -----
+  // The player moves right after the opening card and holds a card of the same suit, one of the same rank, a queen and
+  // an ace (in the long game also a ten and an eight); the bot before them holds sixes, so a six soon comes their way.
+  let rigDone = false;
+  try { rigDone = !!localStorage.getItem('g101-rigged'); } catch {}
+  function rigWanted() {
+    if (rigDone || !tutOn) return false;
+    rigDone = true;
+    try { localStorage.setItem('g101-rigged', '1'); } catch {}
+    return true;
+  }
+  function rigDeal() {
+    const [S, C, D, H] = SUITS, n = players.length, st = n - 1;
+    const want = [
+      [st, [[9, H], [6, H], [6, D], [6, C], [14, S], [14, D]]],
+      [0, deckLong ? [[13, H], [9, S], [12, C], [14, H], [10, H], [8, S]] : [[13, H], [9, S], [12, C], [14, H], [7, C], [8, D]]]
+    ];
+    const where = c => { for (const p of players) { const i = p.hand.indexOf(c); if (i >= 0) return [p.hand, i]; } return [deck, deck.indexOf(c)]; };
+    want.forEach(([pi, list]) => {
+      const hand = players[pi].hand, need = list.slice(0, hand.length);
+      need.forEach(([r, su], k) => {
+        const c = [...deck, ...players.flatMap(p => p.hand)].find(x => x.r === r && x.s === su);
+        if (!c || hand[k] === c) return;
+        const [arr, i] = where(c);
+        [arr[i], hand[k]] = [hand[k], arr[i]];
+      });
+    });
+    starter = st;
+    // the opening card is the nine: the bot's other cards are the ones a round never opens with
+    players[st].hand.sort((a, b) => (b.r === 9 && b.s === H) - (a.r === 9 && a.s === H));
+  }
+  const holdNext = () => coachKey === 'score';
 
   // ----- tips for the first game: one short hint at a time, each shown once; off in ⚙ "Подсказки" -----
   let tutOn = true, tutSeen = {};
@@ -2061,6 +2131,7 @@
     if (coachTarget) { coachTarget.classList.remove('coachT'); coachTarget = null; }
     el.classList.toggle('show', !!tip);
     if (!tip) return;
+    el.classList.toggle('mid', key === 'score');          // at the end of a round the opened cards are above and below
     el.querySelector('.ct').textContent = tip[3];
     el.querySelector('.ok').textContent = L('Понятно', 'Got it');
     el.querySelector('.off').textContent = L('Без подсказок', 'No tips');
@@ -2069,7 +2140,62 @@
   }
   function tutBtn() { const b = $('tutBtn'); if (b) b.className = 'vbtn ' + (tutOn ? 'on' : 'off'); }
 
+  // ----- the move's clock: no numbers, the gold line over my cards (or the gold outline of the player) gets shorter -----
+  let clk = null, clkRaf = 0;
+  function clockFrame() {
+    cancelAnimationFrame(clkRaf);
+    const line = document.querySelector('.zone-line');
+    const v = view, f = clk && v ? Math.max(0, Math.min(1, (clk.end - performance.now()) / clk.total)) : 1;
+    const mine = !!clk && !!v && clk.seat === v.seat;
+    document.body.classList.toggle('clock', mine);
+    line.style.setProperty('--tcut', mine ? (1 - f) * 50 + '%' : '0');
+    document.querySelectorAll('#opps svg.clk').forEach(x => { if (!clk || x.parentElement.dataset.i !== String(clk.seat)) x.remove(); });
+    if (clk && !mine) {
+      const box = $('opps').querySelector(`.opp[data-i="${clk.seat}"]`);
+      if (box) {
+        let svg = box.querySelector('svg.clk');
+        if (!svg) {
+          svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('class', 'clk');
+          svg.innerHTML = '<rect pathLength="100"/>';
+          box.appendChild(svg);
+        }
+        const w = box.offsetWidth + 3, h = box.offsetHeight + 3, rx = Math.min(parseFloat(getComputedStyle(box).borderTopLeftRadius) || 16, h / 2) + 1.5;
+        const rc = svg.firstChild;
+        rc.setAttribute('x', 1.5); rc.setAttribute('y', 1.5); rc.setAttribute('width', w); rc.setAttribute('height', h); rc.setAttribute('rx', rx);
+        // the visible part is centred on the top edge and shrinks towards it from both ends
+        const P = 2 * (w + h) - (8 - 2 * Math.PI) * rx, u0 = (w / 2 - rx) / P * 100, L = f * 100;
+        rc.style.strokeDasharray = `${L} ${100 - L}`;
+        rc.style.strokeDashoffset = String(-(u0 - L / 2));
+      }
+    }
+    if (clk && f > 0) clkRaf = requestAnimationFrame(clockFrame);
+  }
+
+  // ----- the end of a round: the open cards lie for a while, then all cards go back to the deck and are shuffled -----
+  let collectRound = -1, collectedAt = 0, queueSaid = false;
+  function collectCards() {
+    const d = $('deck'), to = d.getBoundingClientRect();
+    let k = 0;
+    const send = (el, s0) => {
+      const r = el.getBoundingClientRect();
+      if (!r.width) return;
+      fly(backEl(), { left: r.left + r.width / 2 - to.width / 2, top: r.top + r.height / 2 - to.height / 2 }, to, { delay: (k++ % 14) * 45, s0, dur: 480 });
+      el.style.visibility = 'hidden';
+    };
+    document.querySelectorAll('#opps .minis .mini').forEach(el => send(el, 0.4));
+    document.querySelectorAll('#myHand .card').forEach(el => send(el, 1));
+    document.querySelectorAll('#pile .card').forEach(el => send(el, 1));
+    setTimeout(() => {
+      d.classList.remove('shuf'); void d.offsetWidth; d.classList.add('shuf');
+      sfx('shuffle');
+      collectedAt = Date.now();
+    }, 700 + Math.min(k, 14) * 45);
+  }
+
   // Which cards in my hand were just taken from the deck. They stay marked until I make a move.
+  const gainText = x => (x.win ? '★ 0' : '+' + x.add) +
+    (x.note === 'reset' ? L(' · ровно 101 → 0', ' · exactly 101 → 0') : x.note === 'out' ? L(' · выбыл', ' · out') : '');
   function trackNewCards(v) {
     const ids = v.hand.map(c => c.id);
     let fresh = [];
@@ -2334,9 +2460,10 @@
     const over = !!r && r.gameOver && (r.champion >= 0 || r.w >= 0);
     if (over && !overSeen && !v.spec) hello({ game: 1 });   // a finished game is counted once
     overSeen = over;
-    const show = !!r && v.phase === 'roundEnd';
+    const show = !!r && v.phase === 'roundEnd' && (r.gameOver || !r.hands);
     if (!show) resHide = false;
-    if (show && resSfxRev !== v.roundNo && !v.spec) { resSfxRev = v.roundNo; sfx(r.w === v.seat || r.champion === v.seat ? 'win' : 'lose'); }
+    const fin = !!r && v.phase === 'roundEnd';
+    if (fin && resSfxRev !== v.roundNo && !v.spec) { resSfxRev = v.roundNo; sfx(r.w === v.seat || r.champion === v.seat ? 'win' : 'lose'); }
     $('result').classList.toggle('show', show && !resHide);
     if (!show) return;
     const name = i => (i === v.seat ? L('Вы', 'You') : esc(v.players[i].name));
@@ -2472,7 +2599,7 @@
       out[0] = head; out.set(len, 1); out.set(body, 1 + len.length);
       return out;
     };
-    const sendSub = t => { pid = pid % 65000 + 1; ws.send(packet(0x82, [pid >> 8, pid & 255, ...str(t), 0])); };
+    const sendSub = t => { if (!ws || ws.readyState !== 1) return; pid = pid % 65000 + 1; ws.send(packet(0x82, [pid >> 8, pid & 255, ...str(t), 0])); };
 
     function parse() {
       for (;;) {
@@ -2909,6 +3036,7 @@
       try { peer.close(); } catch {}
     }
     vAuto = false;
+    try { localStorage.removeItem('g101-inroom'); } catch {}
     waiting = false; $('compass').style.display = '';
     conns.clear(); kicked.clear(); specs.clear(); banned.clear(); roomGroup = ''; gJoined = false; gSnap = null; term = 1; ownerId = '';
     lobbyRoom = null; roomPw = ''; roomVk = ''; lobbyCtl = false; roomInv = '';
@@ -3250,6 +3378,7 @@
         return;
       }
       const silent = Date.now() - gHeard;
+      try { localStorage.setItem('g101-inroom', JSON.stringify({ c: code, t: Date.now() })); } catch {}   // see "back to the table" below
       hostConn.send({ t: 'ping', rev: gRev, term: gTerm });
       if (silent < TAKE_MS / 2) { if ($('warn').dataset.lost) { $('warn').textContent = ''; delete $('warn').dataset.lost; } return; }
       $('warn').textContent = L('Нет связи с сервером игры. Пробуем восстановить…', 'No connection to the game server. Reconnecting…');
@@ -3354,7 +3483,8 @@
   const EYE_SVG = '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
   function roomRow(r) {
     const n = r.names.length, full = n >= r.seats;
-    const status = r.started ? L('идёт игра', 'playing') + (r.spec ? L(' · зрителей ', ' · watching ') + r.spec : '') : full ? L('мест нет', 'full') : L('ждут игроков', 'waiting for players');
+    const status = r.started && r.open > 0 ? (r.bots ? L('играют с ботами · ждут ещё ', 'playing with bots · waiting for ') : L('ждут ещё ', 'waiting for ')) + r.open
+      : r.started ? L('идёт игра', 'playing') + (r.spec ? L(' · зрителей ', ' · watching ') + r.spec : '') : full ? L('мест нет', 'full') : L('ждут игроков', 'waiting for players');
     return `<div class="room${isFriendRoom(r) ? ' fr' : ''}" data-code="${esc(r.code)}">` +
       `<div class="who"><b>${isFriendRoom(r) ? '★ ' : ''}${esc(r.name || r.names[0] || L('Стол', 'Table'))}${r.priv ? ' 🔒' : ''}</b>` +
       `<span class="${r.started ? '' : 'go'}">${esc(r.names.join(', '))} · ${status}</span></div>` +
@@ -3364,27 +3494,85 @@
         : `<button class="gearB" data-gear="${esc(r.code)}" aria-label="${L('Смотреть', 'Watch')}">${EYE_SVG}</button>`) + `</div>`;
   }
   const canSeat = r => r.started ? r.open > 0 : r.names.length < r.seats;
+  // "Играть": tables that take players (gathering, or playing with bots until people fill them); "Смотреть": the rest
+  const playRoom = r => !r.started || r.open > 0;
   function drawRooms() {
     const el = $('rooms');
     let html;
     if (roomList === null) html = '<p class="none">' + (roomListErr > 1 ? L('Нет связи с сервером игры: список не загрузился.', 'No connection to the game server: the list did not load.') : L('Загружаем список игр…', 'Loading games…')) + '</p>';
     else {
       // "Играть": tables gathering players; "Смотреть": tables already playing
-      const list = roomList.filter(r => !!r.started === (roomTab === 'watch'));
+      const list = roomList.filter(r => playRoom(r) === (roomTab === 'play') && filtOk(r));
       html = (list.length ? list.map(roomRow).join('') : '<p class="none">' + (roomTab === 'watch'
           ? L('Сейчас никто не играет.', 'Nobody is playing right now.')
-          : L('Свободных столов нет. Создайте свою игру — её увидят все.', 'No tables waiting for players. Create a game — everyone will see it.')) + '</p>')
+          : L('Свободных столов нет. Создайте свою игру — её увидят все.', 'No tables waiting for players. Create a game — everyone will see it.'))
+          + (filtOn() && roomList.some(r => !filtOk(r)) ? ' ' + L('Часть столов скрыта фильтром.', 'Some tables are hidden by the filter.') : '') + '</p>')
         + (roomListErr > 2 ? '<p class="none">' + L('Нет связи с сервером игры: список может быть устаревшим.', 'No connection to the game server: the list may be out of date.') + '</p>' : '');
     }
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     drawRoomTabs();
     return;
   }
+  // ----- filters: which tables the list shows (the deck, seats, cards in hand, open or private); a friend's table always -----
+  let filt = { deck: [], seats: [], hand: [], priv: [] };
+  try { filt = Object.assign(filt, JSON.parse(localStorage.getItem('g101-filt') || '{}')); } catch {}
+  const filtOn = () => Object.values(filt).some(a => a.length);
+  function filtOk(r) {
+    if (isFriendRoom(r)) return true;
+    const has = (a, x) => !a.length || a.includes(x);
+    return has(filt.deck, r.long ? 52 : 36) && has(filt.seats, r.seats) && has(filt.hand, r.hand) && has(filt.priv, r.priv ? 1 : 0);
+  }
+  const FILT_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="15" cy="7" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="17" r="2.3" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  function filtChips() {
+    const c = [];
+    filt.deck.forEach(x => c.push(L(`колода ${x}`, `deck ${x}`)));
+    if (filt.seats.length) c.push(L('мест ', 'seats ') + filt.seats.join(', '));
+    if (filt.hand.length) c.push(L('в руке ', 'in hand ') + filt.hand.join(', '));
+    filt.priv.forEach(x => c.push(x ? L('🔒 приватные', '🔒 private') : L('открытые', 'open')));
+    return c;
+  }
+  function drawFilt() {
+    const c = filtChips();
+    $('filtRow').innerHTML = (c.length ? c.map(x => `<span class="fchip">${esc(x)}</span>`).join('') : `<span class="fchip all">${L('Все столы', 'All tables')}</span>`) +
+      `<button class="fbtn${c.length ? ' on' : ''}" id="filtBtn" aria-label="${L('Фильтры', 'Filters')}">${FILT_SVG}</button>`;
+    $('filtBtn').onclick = openFilt;
+    $('filtRow').querySelectorAll('.fchip').forEach(x => { x.onclick = openFilt; });
+  }
+  function openFilt() {
+    let o = $('filtDlg');
+    if (!o) { o = document.createElement('div'); o.className = 'overlay'; o.id = 'filtDlg'; document.body.appendChild(o); }
+    const grp = (key, title, opts) => `<div class="gl">${title}</div><div class="pick fpick" data-k="${key}">` +
+      opts.map(([v, t]) => `<button data-v="${v}" class="${filt[key].includes(v) ? 'on' : ''}">${t}</button>`).join('') + '</div>';
+    o.innerHTML = `<div class="dialog"><h2>${L('Какие столы показывать', 'Which tables to show')}</h2><div class="col">` +
+      grp('deck', L('Карт в колоде', 'Cards in the deck'), [[36, '36'], [52, '52']]) +
+      grp('seats', L('Мест за столом', 'Seats at the table'), [2, 3, 4, 5, 6].map(x => [x, x])) +
+      grp('hand', L('Карт в руке', 'Cards in hand'), [4, 5, 6].map(x => [x, x])) +
+      grp('priv', L('Вход', 'Entry'), [[0, L('открытые', 'open')], [1, L('🔒 пароль', '🔒 password')]]) +
+      `<p class="fnote">${L('Ничего не выбрано — показываются все. Столы друзей видны всегда.', 'Nothing chosen — all are shown. Friends\' tables are always shown.')}</p>` +
+      `<div class="row"><button class="btn plain" id="filtClear">${L('Сбросить', 'Clear')}</button><button class="btn" id="filtDone">${L('Готово', 'Done')}</button></div></div></div>`;
+    o.classList.add('show');
+    o.querySelectorAll('.fpick').forEach(g => g.onclick = e => {
+      const b = e.target.closest('button[data-v]');
+      if (!b) return;
+      const a = filt[g.dataset.k], v = +b.dataset.v, i = a.indexOf(v);
+      if (i >= 0) a.splice(i, 1); else a.push(v);
+      a.sort((x, y) => x - y);
+      b.classList.toggle('on', i < 0);
+    });
+    const done = () => {
+      try { localStorage.setItem('g101-filt', JSON.stringify(filt)); } catch {}
+      o.classList.remove('show'); drawFilt(); drawRooms();
+    };
+    $('filtClear').onclick = () => { filt = { deck: [], seats: [], hand: [], priv: [] }; done(); };
+    $('filtDone').onclick = done;
+    o.onclick = e => { if (e.target === o) done(); };
+  }
+  drawFilt();
   // which half of the list is shown: remembered on this device
   var roomTab = 'play';
   try { if (localStorage.getItem('g101-rtab') === 'watch') roomTab = 'watch'; } catch {}
   function drawRoomTabs() {
-    const t = $('roomTabs'), n = x => (roomList || []).filter(r => !!r.started === x).length;
+    const t = $('roomTabs'), n = x => (roomList || []).filter(r => !playRoom(r) === x && filtOk(r)).length;
     t.classList.toggle('watch', roomTab === 'watch');
     t.querySelectorAll('button').forEach(b => {
       b.classList.toggle('on', b.dataset.tab === roomTab);
@@ -4531,6 +4719,13 @@
     leave();
   };
   try { $('nick').value = localStorage.getItem('g101-name') || ''; } catch {}
+  // Back to the table: a phone often reloads a page left in the background, and the game started again on the start
+  // screen. The room's table keeps the seat (by this device's mark), so the game goes straight back to it.
+  try {
+    const was = JSON.parse(localStorage.getItem('g101-inroom') || 'null');
+    if (was && ROOM_RE.test(was.c) && Date.now() - was.t < 25 * 60000 && $('nick').value.trim() && !new URLSearchParams(location.search).get('join'))
+      setTimeout(() => { if (mode === 'solo' && !roomCode && !players.length) { joinWant = 'seat'; joinPw = ''; joinInv = ''; joinFrom = null; $('codeIn').value = was.c; joinRoom(); } }, 400);
+  } catch {}
   // the start screen fits the screen: when the phone is too small for it, the whole screen is drawn smaller
   // (not while the keyboard is open: then the screen is short only for a moment)
   function fitHome() {
@@ -4625,6 +4820,7 @@
   const RU_TEXT = /[А-Яа-яЁё]/;
   function applyLang() {
     document.documentElement.lang = lang;
+    if (typeof drawFilt === 'function') try { drawFilt(); } catch {}
     $('nick').lang = lang;
     const tr = ru => { const k = ru.trim().replace(/\s+/g, ' '); return lang === 'en' && EN_PAGE[k] ? ru.replace(ru.trim(), EN_PAGE[k]) : ru; };
     const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
