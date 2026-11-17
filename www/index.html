@@ -431,6 +431,8 @@
   .room .meta i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--muted); }
   .room .meta .dk { border: 1.5px solid rgba(255,255,255,.55); border-radius: 5px; padding: 2px 3px; font-size: 12px; }
   .room .gearB { flex: none; border: 0; background: none; color: var(--muted); padding: 6px; display: flex; align-items: center; }
+  .roomsH { margin: 10px 4px 2px; font-size: 13px; font-weight: 700; color: var(--muted); text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+  .roomsH:first-child { margin-top: 0; }
   .room .gearB svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; pointer-events: none; }
   .botHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .botHead { flex-wrap: wrap; row-gap: 6px; }
@@ -907,7 +909,7 @@
   const RANK_EN = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
   const rankName = r => (lang === 'en' && RANK_EN[r]) || RANK_NAME[r];
   const POINTS = r => (r <= 10 ? r : { 11: 2, 12: 3, 13: 4, 14: 11 }[r]);
-  const VERSION = 111;              // keep in sync with www/version.txt
+  const VERSION = 112;              // keep in sync with www/version.txt
   const PROTO = 1;                  // the language phones and the game's server speak about a room: both sides must match
   const SITE = 'https://khabar6233-jpg.github.io/game-101/';
   const NEW_MS = 3500;                     // how long the frame of a newly drawn card takes to fade
@@ -3111,6 +3113,8 @@
     } else roomListErr++;
     drawRooms();
   }
+  const GEAR_SVG = '<svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_SVG = '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
   function roomRow(r) {
     const n = r.names.length, full = n >= r.seats;
     const status = r.started ? L('идёт игра', 'playing') + (r.spec ? L(' · зрителей ', ' · watching ') + r.spec : '') : full ? L('мест нет', 'full') : L('ждут игроков', 'waiting for players');
@@ -3118,14 +3122,22 @@
       `<div class="who"><b>${isFriendRoom(r) ? '★ ' : ''}${esc(r.name || r.names[0] || L('Стол', 'Table'))}${r.priv ? ' 🔒' : ''}</b>` +
       `<span class="${r.started ? '' : 'go'}">${esc(r.names.join(', '))} · ${status}</span></div>` +
       `<div class="meta"><span>${r.hand}<i>${L('в руке', 'in hand')}</i></span><span>${n}/${r.seats}<i>${L('мест', 'seats')}</i></span><span class="dk">${r.long ? 52 : 36}</span></div>` +
-      `<button class="gearB" data-gear="${esc(r.code)}" aria-label="${L('Настройки комнаты', 'Room settings')}"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/></svg></button></div>`;
+      // the gear opens the room's card; when all one can do there is watch, it is an eye instead
+      (canSeat(r) ? `<button class="gearB" data-gear="${esc(r.code)}" aria-label="${L('Настройки комнаты', 'Room settings')}">${GEAR_SVG}</button>`
+        : `<button class="gearB" data-gear="${esc(r.code)}" aria-label="${L('Смотреть', 'Watch')}">${EYE_SVG}</button>`) + `</div>`;
   }
+  const canSeat = r => r.started ? r.open > 0 : r.names.length < r.seats;
   function drawRooms() {
     const el = $('rooms');
     let html;
     if (roomList === null) html = '<p class="none">' + (roomListErr > 1 ? L('Нет связи с сервером игры: список не загрузился.', 'No connection to the game server: the list did not load.') : L('Загружаем список игр…', 'Loading games…')) + '</p>';
     else if (!roomList.length) html = '<p class="none">' + L('Открытых игр сейчас нет. Создайте свою — её увидят все.', 'No open games right now. Create one — everyone will see it.') + '</p>';
-    else html = roomList.map(roomRow).join('') + (roomListErr > 2 ? '<p class="none">' + L('Нет связи с сервером игры: список может быть устаревшим.', 'No connection to the game server: the list may be out of date.') + '</p>' : '');
+    else {
+      // tables still gathering players first, then the ones already playing
+      const part = (list, title) => list.length ? `<h4 class="roomsH">${title}</h4>` + list.map(roomRow).join('') : '';
+      html = part(roomList.filter(r => !r.started), L('Набор игроков', 'Gathering players')) + part(roomList.filter(r => r.started), L('Идёт игра', 'Playing now'))
+        + (roomListErr > 2 ? '<p class="none">' + L('Нет связи с сервером игры: список может быть устаревшим.', 'No connection to the game server: the list may be out of date.') + '</p>' : '');
+    }
     if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     return;
   }
@@ -4044,7 +4056,7 @@
       [L('Мест', 'Seats'), n + L(' из ', ' of ') + r.seats], [L('Комната', 'Room'), r.priv ? L('приватная, вход по паролю', 'private, password') : L('открытая', 'open')],
       [L('Сейчас', 'Now'), r.started ? L('идёт игра', 'playing') + (r.spec ? L(', зрителей ', ', watching ') + r.spec : '') : L('ждут игроков', 'waiting for players')]];
     $('riTable').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${esc(b)}</td></tr>`).join('');
-    $('riSeat').style.display = (!r.started && !full) || (r.started && r.open > 0) ? '' : 'none';
+    $('riSeat').style.display = canSeat(r) ? '' : 'none';
     $('riSeat').textContent = r.started ? L('Сесть вместо бота', 'Take a bot\'s seat') : L('Сесть за стол', 'Sit down');
     $('roomInfo').classList.add('show');
   }
